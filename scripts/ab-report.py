@@ -151,6 +151,12 @@ def main():
             new_vs_old = per_round("new-req", "old-req")
             lead_vs_rr = per_round("new-req", "rr")
             old_vs_rr = per_round("old-req", "rr")
+            # Everything accumulated since the published build, and how much of it is
+            # one new default rather than new code. Both are empty in a run that does
+            # not include those variants, and each is reported only when it has rows.
+            new_vs_base = per_round("new-req", "baseline")
+            nostat_vs_req = per_round("new-nostat", "new-req")
+            nostat_vs_base = per_round("new-nostat", "baseline")
             # The embedded runtime, against both warm servers. `franken` is not part
             # of the volucer story at all — it is the one arm that answers "what
             # does embedding buy you", so it is reported as its own pair of ratios
@@ -162,6 +168,9 @@ def main():
             for label, series in [
                 ("skipping the checksum (new-opt / new-req)", opt_vs_req),
                 ("the crc32c fix       (new-req / old-req)", new_vs_old),
+                ("everything since 91cc7b6 (new-req / baseline)", new_vs_base),
+                ("the static default   (new-req / new-nostat)", nostat_vs_req),
+                ("new code only        (new-nostat / baseline)", nostat_vs_base),
                 ("the lead over rr     (new-req / rr)      ", lead_vs_rr),
                 ("what the fix bought  (old-req / rr)      ", old_vs_rr),
                 ("frankenphp vs rr     (franken / rr)      ", franken_vs_rr),
