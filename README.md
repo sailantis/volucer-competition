@@ -369,6 +369,69 @@ two commits and both are reload commits:
 change under test rather than a window that happens to contain it. The only files in the window are
 the server crate, its tests, and documentation.
 
+## What the static layer costs a front-controller application, and what it hid
+
+The static-file layer became **on by default** after the published build (`b9d34c4`), on the
+reasoning that "every site has assets". For a site that serves files that is right. For a
+front-controller application it is a cost — and the cost is large enough to have consumed the
+whole of the throughput this project gained since `91cc7b6`, while reading as its opposite.
+
+Four arms interleaved inside nine rotating rounds: 288 cells, none failed, twelve workers. Every
+figure is a **within-round ratio**, so host drift charges every arm equally:
+
+| concurrency | `/` current vs `91cc7b6` | `/items` current vs `91cc7b6` | static layer off (both endpoints) | new code only (both endpoints) |
+|---|---|---|---|---|
+| 1 | **−4.3%** | +13.3% | **+14.1%** / +22.0% | +29.3% / +16.2% |
+| 8 | **−13.0%** | +8.6% | **+13.9%** / +17.6% | +22.6% / +2.1% |
+| 16 | **−18.3%** | −2.0% | **+13.3%** / +23.1% | +8.8% / −0.6% |
+| 32 | **−12.3%** | +10.7% | **+6.8%** / +26.1% | +19.1% / +10.2% |
+
+The four columns are four questions, and conflating them is how this measurement would have
+produced the wrong answer:
+
+- **current vs `91cc7b6`** — the sum of everything in fifty steps. Read alone: the project lost
+  4–18% on `/` and moved ±13% on `/items`.
+- **static layer off** — `new-nostat / new-req`: the *same binary* with
+  `[server.static_files] enabled = false`, so the difference can only be that one table.
+- **new code only** — `new-nostat / baseline`: the same comparison with that one default removed.
+  **The code added since the published build is faster in seven of eight cells, up to +29%.**
+
+**The regression is a constant, and it is a blocking-pool hop.** Per-request server cost at c=32
+is 30.3 µs on `/` and 47.3 µs on `/items`; turning the layer off gives 23.7 and 43.5. The
+difference is **6.5 µs and 3.8 µs**, and at c=16 it is 6.7 and 6.5 — a fixed toll, not a function
+of how much work the request does. That is what `tokio::task::spawn_blocking` costs: the layer is
+consulted before the route is dispatched and `respond()` returns `None` only *after* deciding
+there is no file, so every front-controller path pays a hop to the blocking pool and back to be
+told that a path naming nothing names nothing.
+
+**The `new-nostat` arm is the difference between a finding and a wrong conclusion.** Without it
+there is only "current is slower", and the natural reading is "the fifty new steps cost
+throughput" — pointing at reverting work that is in fact the fastest this project has been. One
+extra arm, one extra config table.
+
+Two falsifications ran before the numbers were believed. The layer really is on by default and
+really is off with the table: a real file in the document root answers **200 with its bytes** by
+default and **404** with `enabled = false`, while `/items` answers 200 in both — the table changes
+behaviour rather than merely parsing. And `/items` names no file, so the layer can only be finding
+nothing, which is what makes its cost a constant rather than a function of the request.
+
+**This is not an argument for turning the default off.** It is an argument that a fixed cost
+belongs on the path that asks for it: an application whose every route is a front-controller
+dispatch pays a blocking-pool round trip for an answer the route table already had, and
+`serve_only = "backend"` is how a deployment says so. What the measurement establishes is the size
+of the thing, which the default's rationale did not mention.
+
+Raw rows: `results/ab-perf-baseline.tsv`. Harness: `scripts/ab-perf.sh` with the `baseline` and
+`new-nostat` variants; report at `scripts/ab-report.py`; record at volucer `docs/plan.md` hazard
+85:
+
+```bash
+BIN=~/volucer-bench/target/release/volucer \
+BIN_BASE=~/volucer-bench-old/target/release/stokehold \
+ROUNDS=9 CONC=1,8,16,32 VARIANTS=new-req,new-nostat,baseline,rr \
+  ENDPOINTS=/,/items bash scripts/ab-perf.sh
+```
+
 ## Reproducing
 
 ```bash
