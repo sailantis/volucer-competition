@@ -396,13 +396,36 @@ produced the wrong answer:
 - **new code only** — `new-nostat / baseline`: the same comparison with that one default removed.
   **The code added since the published build is faster in seven of eight cells, up to +29%.**
 
-**The regression is a constant, and it is a blocking-pool hop.** Per-request server cost at c=32
-is 30.3 µs on `/` and 47.3 µs on `/items`; turning the layer off gives 23.7 and 43.5. The
-difference is **6.5 µs and 3.8 µs**, and at c=16 it is 6.7 and 6.5 — a fixed toll, not a function
-of how much work the request does. That is what `tokio::task::spawn_blocking` costs: the layer is
-consulted before the route is dispatched and `respond()` returns `None` only *after* deciding
-there is no file, so every front-controller path pays a hop to the blocking pool and back to be
-told that a path naming nothing names nothing.
+The absolute numbers, median rps over the nine rounds, because a ratio is not a throughput:
+
+| arm | `/` c=1 | c=8 | c=16 | c=32 | `/items` c=1 | c=8 | c=16 | c=32 |
+|---|---|---|---|---|---|---|---|---|
+| volucer `main`, static **off** | **3,849** | **24,852** | **35,640** | **42,142** | **2,327** | **14,451** | **18,932** | **23,011** |
+| volucer `main`, static on (the default) | 3,097 | 21,124 | 28,770 | 33,043 | 2,048 | 12,714 | 16,869 | 21,162 |
+| volucer `91cc7b6` | 3,255 | 24,132 | 35,110 | 37,966 | 1,828 | 11,750 | 17,369 | 19,078 |
+| RoadRunner 2025.1.15 | 3,105 | 20,162 | 34,343 | 36,081 | 1,786 | 11,189 | 17,622 | 18,054 |
+
+**The mechanism, counted rather than inferred.** `strace -f -c` over 300 requests, same binary, four
+workers:
+
+| | static off | static on | difference |
+|---|---|---|---|
+| `statx` | 0.04 /request | **2.05 /request** | **+2.0** |
+| `futex` | 14.11 /request | 20.00 /request | +5.9 |
+| `clock_gettime` | 50.40 /request | 61.58 /request | +11.2 |
+| all syscalls | 158.4 /request | 179.7 /request | **+21.3** |
+
+**Two stats where the path asks for one.** A path that names no file needs one `stat`, and
+`decide()` runs the whole `plan()` twice: once to learn there is no file, and again because
+`respond()` returns `None` and the caller's fall-through re-enters. The rest of the difference is
+the `spawn_blocking` hop — the `futex` and `clock_gettime` traffic of a task handed to another
+thread and awaited back.
+
+**The cost is flat per request, which is what identifies it.** Per-request service time for the
+same binary, layer on minus off: **63.0 µs at c=1, 7.1 at c=8, 6.7 at c=16, 6.5 at c=32** — a
+fixed toll, not a function of how much work the request does. The 63 µs at c=1 is the same
+overhead with no other work to hide behind: at 300 µs per request the hop and two stats are 20% of
+the total, because they are a wake-up rather than a computation.
 
 **The `new-nostat` arm is the difference between a finding and a wrong conclusion.** Without it
 there is only "current is slower", and the natural reading is "the fifty new steps cost
@@ -413,7 +436,7 @@ Two falsifications ran before the numbers were believed. The layer really is on 
 really is off with the table: a real file in the document root answers **200 with its bytes** by
 default and **404** with `enabled = false`, while `/items` answers 200 in both — the table changes
 behaviour rather than merely parsing. And `/items` names no file, so the layer can only be finding
-nothing, which is what makes its cost a constant rather than a function of the request.
+nothing — which is why the cost is the same regardless of what the request goes on to do.
 
 **This is not an argument for turning the default off.** It is an argument that a fixed cost
 belongs on the path that asks for it: an application whose every route is a front-controller
