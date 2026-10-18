@@ -21,6 +21,7 @@
 #   new-opt    current volucer, checksum = "optional"   (does skipping it help?)
 #   old-req    pre-crc32c-fix volucer, checksum = "required"  (what the fix bought)
 #   baseline   the published build 91cc7b6, checksum = "required"  (what everything since cost)
+#   new-nostat same binary as new-req, static layer off     (how much of that is the new default)
 #   rr         RoadRunner, resident worker                 (the control)
 #   franken    FrankenPHP, worker mode                     (embedded-runtime control)
 #
@@ -216,6 +217,21 @@ working_dir = "$ROOT"
 max_requests = 0
 checksum = "$(checksum_of "$variant")"
 EOF
+            # `-nostat` is the same *binary* as `new-req` with the static layer
+            # turned off. It exists so a delta against `baseline` can be attributed
+            # rather than merely detected: the static layer became on-by-default
+            # after the published build, it sits on the request path ahead of the
+            # backend, and it `stat`s before it dispatches. Comparing `baseline` to
+            # `new-req` alone would charge every accumulated change to "new
+            # features" as one lump; `new-nostat` costs one extra arm and says
+            # whether the lump is the new default or the new code.
+            if [ "$variant" = "new-nostat" ]; then
+                cat >> "$file" <<'EOF'
+
+[server.static_files]
+enabled = false
+EOF
+            fi
             ;;
     esac
 }
@@ -466,6 +482,7 @@ label_of() {
         new-opt) echo "volucer worker (checksum optional)" ;;
         old-req) echo "volucer worker (pre-crc32c-fix)" ;;
         baseline) echo "volucer worker (published build 91cc7b6)" ;;
+        new-nostat) echo "volucer worker (static layer off)" ;;
         rr) echo "roadrunner worker" ;;
         franken) echo "frankenphp worker (embedded php)" ;;
         *) echo "$1" ;;
