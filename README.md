@@ -393,6 +393,8 @@ produced the wrong answer:
   4–18% on `/` and moved ±13% on `/items`.
 - **static layer off** — `new-nostat / new-req`: the *same binary* with
   `[server.static_files] enabled = false`, so the difference can only be that one table.
+  **`/` loses 18–26% to the default** (1.220x, 1.176x, 1.231x, 1.261x, every per-round range clear
+  of 1.00); `/items` loses 7–14%, whose ranges span 1.00 at c=1 and c=8 and so are the weaker half.
 - **new code only** — `new-nostat / baseline`: the same comparison with that one default removed.
   **The code added since the published build is faster in seven of eight cells, up to +29%.**
 
@@ -429,8 +431,9 @@ asked two questions drops `GET /items` from 2.05 `statx` per request to 1.05 —
 range spanning 1.00. Two binaries, same config, seven rotating rounds, 168 cells, none failed
 (`results/ab-perf-statfix.tsv`). The stat was ~1.5 µs of the 6.5 µs; the hop is the rest.
 
-So the only thing that recovers the 14–22% is **not entering the layer at all**, which is
-`serve_only = "backend"` — or, for a deployment that has not written it, the warning below.
+So the only thing that recovers the 18–26% is **not entering the layer at all**, which is
+`serve_only = "backend"` — or, for a deployment that has not written it, the layer being turned
+off for it. Both now happen; the second is the one an existing deployment gets for free.
 
 **The cost is flat per request, which is what identifies it.** Per-request service time for the
 same binary, layer on minus off: **63.0 µs at c=1, 7.1 at c=8, 6.7 at c=16, 6.5 at c=32** — a
@@ -449,21 +452,34 @@ default and **404** with `enabled = false`, while `/items` answers 200 in both �
 behaviour rather than merely parsing. And `/items` names no file, so the layer can only be finding
 nothing — which is why the cost is the same regardless of what the request goes on to do.
 
-**So `volucer check` now says so.** When the layer is on, a front controller is configured, and
-the document root holds no asset, it warns and names `serve_only = "backend"` as the fix:
+**So the layer is now turned off for exactly those applications.** `Sites::from_config_with`
+decides it, which is the table `serve` actually serves from, so there is one answer rather than a
+warning that could disagree with the request path. Three conditions bound it:
+
+- **nobody asked for the layer.** A file that wrote `enabled = true` keeps it; only the default
+  nobody wrote down is switched off on the operator's behalf.
+- **the document root holds no asset** — any directory, or any non-script file, keeps the layer.
+  A `public/` deployment is therefore never affected, and neither is one whose assets appear at
+  build time as long as the directory is there.
+- **the layer could shadow something**: an HTTP listener exists and a backend does, so it is not
+  reachable-but-pointless or the whole application.
+
+Never silently, though. `check` prints it after the settings it overrides:
 
 ```
-- server.static_files is on and a front controller is configured, but the document root holds no
-  asset a file could be served from — every request stats for a file that is never there
-  write `serve_only = "backend"` to skip the static layer, which answers exactly the same
-  requests without the stat
+  static files:
+    all
+    enabled for the HTTP listener
+      precompressed:   no
+      ...
+    <default>: off, though the file enables it — /srv/app/public holds no asset a file could be
+    served from
 ```
 
-A warning rather than an inferred default. The layer is right for a site that serves assets, and
-turning it off automatically on upgrade would be a silent behaviour change; what is not
-defensible is leaving the operator to discover a 14–22% difference from a benchmark. Verified
-both ways on the real application: the warning fires on its document root (which holds one
-`index.php` and nothing else) and goes quiet once an `assets/` directory exists.
+`serve` says it in the banner (`static files: off (the document root holds no asset a file could
+be served from)`) and logs it at `WARN`. Verified on the real application — whose document root
+holds one `index.php` and nothing else — and both ways: creating `assets/` brings the layer back
+and `GET /assets/app.css` is then served from disk with its MIME type.
 
 Raw rows: `results/ab-perf-baseline.tsv`. Harness: `scripts/ab-perf.sh` with the `baseline` and
 `new-nostat` variants; report at `scripts/ab-report.py`; record at volucer `docs/plan.md` hazard
