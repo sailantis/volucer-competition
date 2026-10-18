@@ -26,6 +26,13 @@ default_backend = "cgi"
 http = "127.0.0.1:{{PORT}}"
 document_root = "{{ROOT}}/public"
 
+# The static-file layer is OFF so this arm stays comparable with the five others;
+# see the long comment in `volucer-pipe.toml.template`. It is default-on since
+# `b9d34c4` and costs ~6.5 us and up to 21.6% on `GET /` on this host, which is a
+# cost no other arm here pays.
+[server.static_files]
+enabled = false
+
 [backends.cgi]
 kind = "spawn_cgi"
 binary = "{{PHP_CGI}}"

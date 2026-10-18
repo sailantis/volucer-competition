@@ -25,6 +25,22 @@ default_backend = "app"
 http = "127.0.0.1:{{PORT}}"
 document_root = "{{ROOT}}/public"
 
+# The static-file layer is OFF, and that is what keeps this arm comparable.
+#
+# It became default-on after the published build (`b9d34c4`), and it sits on the
+# request path ahead of dispatch: every path that names no file pays a
+# `spawn_blocking` hop to be told so. Measured on this host, same binary, `GET /`
+# at c=32: 42,142 rps with it off against 33,043 with it on (-21.6%), and the cost
+# is a near-constant 6.5 us per request rather than a function of the request.
+#
+# Every other arm runs PHP for every request — nginx passes `location /` straight
+# to FastCGI with no `try_files`, and the FrankenPHP arm says "no `file_server`"
+# in as many words — so leaving this on would make this the only arm that consults
+# a document root, and would charge a deployment-model difference to the server.
+# See hazard 85 in the volucer plan and `scripts/ab-perf.sh`'s `new-nostat` arm.
+[server.static_files]
+enabled = false
+
 [backends.app]
 kind = "worker"
 # Wrapped by the harness: `php` as installed is not necessarily configured like the
