@@ -169,7 +169,13 @@ def main():
                 ("skipping the checksum (new-opt / new-req)", opt_vs_req),
                 ("the crc32c fix       (new-req / old-req)", new_vs_old),
                 ("everything since 91cc7b6 (new-req / baseline)", new_vs_base),
-                ("the static default   (new-req / new-nostat)", nostat_vs_req),
+                # The static layer's cost. `new-req` has it on, `new-nostat` does not,
+                # so this ratio is how much faster the same binary is with the layer
+                # off — the cost of the new default, expressed as a speedup.
+                ("cost of the static default (new-nostat / new-req)", nostat_vs_req),
+                # What is left when that one default is taken out: the same two binaries
+                # would still differ by this if the static layer had never become
+                # default-on, which is what makes it attributable to the new *code*.
                 ("new code only        (new-nostat / baseline)", nostat_vs_base),
                 ("the lead over rr     (new-req / rr)      ", lead_vs_rr),
                 ("what the fix bought  (old-req / rr)      ", old_vs_rr),

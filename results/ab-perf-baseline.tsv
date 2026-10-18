@@ -1,0 +1,289 @@
+variant	conc	round	endpoint	label	rps	p50	p99
+new-req	1	1	/	volucer worker (checksum required)	3089.02	315.00us	487.00us
+new-req	8	1	/	volucer worker (checksum required)	20640.30	368.00us	695.00us
+new-req	16	1	/	volucer worker (checksum required)	28672.46	522.00us	1.19ms
+new-req	32	1	/	volucer worker (checksum required)	33243.26	0.89ms	2.36ms
+new-req	1	1	/items	volucer worker (checksum required)	1977.63	489.00us	756.00us
+new-req	8	1	/items	volucer worker (checksum required)	12260.11	617.00us	1.19ms
+new-req	16	1	/items	volucer worker (checksum required)	16819.60	0.88ms	1.88ms
+new-req	32	1	/items	volucer worker (checksum required)	21639.86	1.40ms	3.49ms
+new-nostat	1	1	/	volucer worker (static layer off)	3696.86	264.00us	410.00us
+new-nostat	8	1	/	volucer worker (static layer off)	24348.55	312.00us	598.00us
+new-nostat	16	1	/	volucer worker (static layer off)	35476.53	424.00us	0.93ms
+new-nostat	32	1	/	volucer worker (static layer off)	41292.93	717.00us	1.84ms
+new-nostat	1	1	/items	volucer worker (static layer off)	2255.74	426.00us	682.00us
+new-nostat	8	1	/items	volucer worker (static layer off)	14289.45	527.00us	1.04ms
+new-nostat	16	1	/items	volucer worker (static layer off)	18842.95	796.00us	1.65ms
+new-nostat	32	1	/items	volucer worker (static layer off)	23079.20	1.31ms	3.48ms
+baseline	1	1	/	volucer worker (published build 91cc7b6)	3224.09	303.00us	449.00us
+baseline	8	1	/	volucer worker (published build 91cc7b6)	24083.23	313.00us	619.00us
+baseline	16	1	/	volucer worker (published build 91cc7b6)	34851.40	413.00us	1.38ms
+baseline	32	1	/	volucer worker (published build 91cc7b6)	37914.67	643.00us	6.99ms
+baseline	1	1	/items	volucer worker (published build 91cc7b6)	1745.20	562.00us	763.00us
+baseline	8	1	/items	volucer worker (published build 91cc7b6)	11560.38	640.00us	1.29ms
+baseline	16	1	/items	volucer worker (published build 91cc7b6)	17036.10	831.00us	3.11ms
+baseline	32	1	/items	volucer worker (published build 91cc7b6)	18912.72	1.23ms	15.64ms
+rr	1	1	/	roadrunner worker	3034.16	321.00us	572.00us
+rr	8	1	/	roadrunner worker	19592.41	375.00us	1.00ms
+rr	16	1	/	roadrunner worker	33006.40	440.00us	1.41ms
+rr	32	1	/	roadrunner worker	35488.42	835.00us	2.16ms
+rr	1	1	/items	roadrunner worker	1728.61	563.00us	845.00us
+rr	8	1	/items	roadrunner worker	11026.64	654.00us	1.57ms
+rr	16	1	/items	roadrunner worker	17692.89	828.00us	2.12ms
+rr	32	1	/items	roadrunner worker	18054.13	1.70ms	3.33ms
+new-nostat	1	2	/	volucer worker (static layer off)	3877.26	251.00us	389.00us
+new-nostat	8	2	/	volucer worker (static layer off)	24608.86	308.00us	595.00us
+new-nostat	16	2	/	volucer worker (static layer off)	34419.18	437.00us	0.96ms
+new-nostat	32	2	/	volucer worker (static layer off)	40289.22	738.00us	1.89ms
+new-nostat	1	2	/items	volucer worker (static layer off)	2330.60	412.00us	685.00us
+new-nostat	8	2	/items	volucer worker (static layer off)	14207.19	530.00us	1.05ms
+new-nostat	16	2	/items	volucer worker (static layer off)	18738.92	800.00us	1.66ms
+new-nostat	32	2	/items	volucer worker (static layer off)	22298.36	1.34ms	3.60ms
+baseline	1	2	/	volucer worker (published build 91cc7b6)	3560.21	273.00us	430.00us
+baseline	8	2	/	volucer worker (published build 91cc7b6)	24095.88	312.00us	622.00us
+baseline	16	2	/	volucer worker (published build 91cc7b6)	35032.55	412.00us	1.34ms
+baseline	32	2	/	volucer worker (published build 91cc7b6)	37444.67	658.00us	6.74ms
+baseline	1	2	/items	volucer worker (published build 91cc7b6)	1786.99	549.00us	759.00us
+baseline	8	2	/items	volucer worker (published build 91cc7b6)	11591.43	642.00us	1.26ms
+baseline	16	2	/items	volucer worker (published build 91cc7b6)	17108.10	827.00us	2.91ms
+baseline	32	2	/items	volucer worker (published build 91cc7b6)	19421.47	1.26ms	14.14ms
+rr	1	2	/	roadrunner worker	3071.60	315.00us	580.00us
+rr	8	2	/	roadrunner worker	19884.53	367.00us	1.02ms
+rr	16	2	/	roadrunner worker	33702.28	431.00us	1.38ms
+rr	32	2	/	roadrunner worker	35876.18	825.00us	2.16ms
+rr	1	2	/items	roadrunner worker	1787.07	546.00us	798.00us
+rr	8	2	/items	roadrunner worker	11106.14	652.00us	1.55ms
+rr	16	2	/items	roadrunner worker	17487.65	833.00us	2.15ms
+rr	32	2	/items	roadrunner worker	17896.81	1.69ms	3.34ms
+new-req	1	2	/	volucer worker (checksum required)	3178.35	308.00us	459.00us
+new-req	8	2	/	volucer worker (checksum required)	20922.27	361.00us	703.00us
+new-req	16	2	/	volucer worker (checksum required)	28629.90	522.00us	1.20ms
+new-req	32	2	/	volucer worker (checksum required)	33026.47	0.89ms	2.37ms
+new-req	1	2	/items	volucer worker (checksum required)	2050.29	474.00us	713.00us
+new-req	8	2	/items	volucer worker (checksum required)	12537.98	604.00us	1.16ms
+new-req	16	2	/items	volucer worker (checksum required)	16792.01	0.89ms	1.88ms
+new-req	32	2	/items	volucer worker (checksum required)	20876.91	1.43ms	3.51ms
+baseline	1	3	/	volucer worker (published build 91cc7b6)	3233.35	301.00us	447.00us
+baseline	8	3	/	volucer worker (published build 91cc7b6)	24126.84	312.00us	625.00us
+baseline	16	3	/	volucer worker (published build 91cc7b6)	34956.59	414.00us	1.30ms
+baseline	32	3	/	volucer worker (published build 91cc7b6)	37304.13	635.00us	7.79ms
+baseline	1	3	/items	volucer worker (published build 91cc7b6)	1773.15	554.00us	755.00us
+baseline	8	3	/items	volucer worker (published build 91cc7b6)	11629.84	635.00us	1.29ms
+baseline	16	3	/items	volucer worker (published build 91cc7b6)	17107.63	822.00us	3.47ms
+baseline	32	3	/items	volucer worker (published build 91cc7b6)	18958.00	1.23ms	15.13ms
+rr	1	3	/	roadrunner worker	3036.38	320.00us	573.00us
+rr	8	3	/	roadrunner worker	19850.17	369.00us	0.99ms
+rr	16	3	/	roadrunner worker	33218.45	437.00us	1.49ms
+rr	32	3	/	roadrunner worker	35475.64	838.00us	2.13ms
+rr	1	3	/items	roadrunner worker	1707.35	570.00us	0.87ms
+rr	8	3	/items	roadrunner worker	11100.41	655.00us	1.58ms
+rr	16	3	/items	roadrunner worker	17398.52	836.00us	2.12ms
+rr	32	3	/items	roadrunner worker	17833.66	1.69ms	3.23ms
+new-req	1	3	/	volucer worker (checksum required)	3065.96	318.00us	469.00us
+new-req	8	3	/	volucer worker (checksum required)	21124.30	359.00us	680.00us
+new-req	16	3	/	volucer worker (checksum required)	28769.53	521.00us	1.18ms
+new-req	32	3	/	volucer worker (checksum required)	32759.03	0.90ms	2.40ms
+new-req	1	3	/items	volucer worker (checksum required)	2011.30	482.00us	739.00us
+new-req	8	3	/items	volucer worker (checksum required)	12713.84	596.00us	1.14ms
+new-req	16	3	/items	volucer worker (checksum required)	16488.60	0.90ms	1.91ms
+new-req	32	3	/items	volucer worker (checksum required)	21162.02	1.43ms	3.61ms
+new-nostat	1	3	/	volucer worker (static layer off)	3942.10	247.00us	395.00us
+new-nostat	8	3	/	volucer worker (static layer off)	24051.56	315.00us	609.00us
+new-nostat	16	3	/	volucer worker (static layer off)	34506.44	437.00us	0.95ms
+new-nostat	32	3	/	volucer worker (static layer off)	40885.46	731.00us	1.86ms
+new-nostat	1	3	/items	volucer worker (static layer off)	2303.60	419.00us	670.00us
+new-nostat	8	3	/items	volucer worker (static layer off)	14124.24	536.00us	1.04ms
+new-nostat	16	3	/items	volucer worker (static layer off)	18695.30	801.00us	1.67ms
+new-nostat	32	3	/items	volucer worker (static layer off)	22577.19	1.32ms	3.55ms
+rr	1	4	/	roadrunner worker	3070.14	317.00us	532.00us
+rr	8	4	/	roadrunner worker	19881.18	369.00us	0.98ms
+rr	16	4	/	roadrunner worker	33157.48	439.00us	1.41ms
+rr	32	4	/	roadrunner worker	35650.49	833.00us	2.12ms
+rr	1	4	/items	roadrunner worker	1717.86	568.00us	829.00us
+rr	8	4	/items	roadrunner worker	10994.12	658.00us	1.59ms
+rr	16	4	/items	roadrunner worker	17287.77	846.00us	2.13ms
+rr	32	4	/items	roadrunner worker	17699.33	1.71ms	3.36ms
+new-req	1	4	/	volucer worker (checksum required)	3075.52	316.00us	485.00us
+new-req	8	4	/	volucer worker (checksum required)	21201.90	356.00us	691.00us
+new-req	16	4	/	volucer worker (checksum required)	28390.72	528.00us	1.20ms
+new-req	32	4	/	volucer worker (checksum required)	32836.19	0.90ms	2.42ms
+new-req	1	4	/items	volucer worker (checksum required)	2057.26	473.00us	712.00us
+new-req	8	4	/items	volucer worker (checksum required)	12982.04	581.00us	1.12ms
+new-req	16	4	/items	volucer worker (checksum required)	16868.93	0.88ms	1.87ms
+new-req	32	4	/items	volucer worker (checksum required)	20928.94	1.43ms	3.53ms
+new-nostat	1	4	/	volucer worker (static layer off)	3698.09	263.00us	399.00us
+new-nostat	8	4	/	volucer worker (static layer off)	24852.09	305.00us	586.00us
+new-nostat	16	4	/	volucer worker (static layer off)	35639.92	423.00us	0.92ms
+new-nostat	32	4	/	volucer worker (static layer off)	42141.65	709.00us	1.80ms
+new-nostat	1	4	/items	volucer worker (static layer off)	2572.19	376.00us	594.00us
+new-nostat	8	4	/items	volucer worker (static layer off)	14884.24	507.00us	1.00ms
+new-nostat	16	4	/items	volucer worker (static layer off)	19340.73	775.00us	1.62ms
+new-nostat	32	4	/items	volucer worker (static layer off)	23073.70	1.31ms	3.35ms
+baseline	1	4	/	volucer worker (published build 91cc7b6)	3310.20	294.00us	437.00us
+baseline	8	4	/	volucer worker (published build 91cc7b6)	24894.48	302.00us	609.00us
+baseline	16	4	/	volucer worker (published build 91cc7b6)	35110.46	410.00us	1.40ms
+baseline	32	4	/	volucer worker (published build 91cc7b6)	38237.07	628.00us	6.70ms
+baseline	1	4	/items	volucer worker (published build 91cc7b6)	1850.44	532.00us	725.00us
+baseline	8	4	/items	volucer worker (published build 91cc7b6)	11749.53	636.00us	1.27ms
+baseline	16	4	/items	volucer worker (published build 91cc7b6)	17813.34	790.00us	3.15ms
+baseline	32	4	/items	volucer worker (published build 91cc7b6)	19023.45	1.17ms	17.63ms
+new-req	1	5	/	volucer worker (checksum required)	3230.12	302.00us	447.00us
+new-req	8	5	/	volucer worker (checksum required)	21302.92	355.00us	683.00us
+new-req	16	5	/	volucer worker (checksum required)	28666.83	521.00us	1.19ms
+new-req	32	5	/	volucer worker (checksum required)	33042.71	0.89ms	2.38ms
+new-req	1	5	/items	volucer worker (checksum required)	2014.29	482.00us	731.00us
+new-req	8	5	/items	volucer worker (checksum required)	12515.82	601.00us	1.18ms
+new-req	16	5	/items	volucer worker (checksum required)	17014.33	0.88ms	1.85ms
+new-req	32	5	/items	volucer worker (checksum required)	21790.67	1.37ms	3.48ms
+new-nostat	1	5	/	volucer worker (static layer off)	3920.78	249.00us	379.00us
+new-nostat	8	5	/	volucer worker (static layer off)	25145.10	301.00us	580.00us
+new-nostat	16	5	/	volucer worker (static layer off)	35890.48	420.00us	0.91ms
+new-nostat	32	5	/	volucer worker (static layer off)	42245.55	707.00us	1.78ms
+new-nostat	1	5	/items	volucer worker (static layer off)	2327.21	417.00us	650.00us
+new-nostat	8	5	/items	volucer worker (static layer off)	14789.77	509.00us	1.01ms
+new-nostat	16	5	/items	volucer worker (static layer off)	19385.34	776.00us	1.63ms
+new-nostat	32	5	/items	volucer worker (static layer off)	23096.68	1.31ms	3.54ms
+baseline	1	5	/	volucer worker (published build 91cc7b6)	3375.31	288.00us	433.00us
+baseline	8	5	/	volucer worker (published build 91cc7b6)	24131.50	312.00us	612.00us
+baseline	16	5	/	volucer worker (published build 91cc7b6)	35679.50	405.00us	1.29ms
+baseline	32	5	/	volucer worker (published build 91cc7b6)	38188.26	635.00us	6.88ms
+baseline	1	5	/items	volucer worker (published build 91cc7b6)	1812.59	542.00us	734.00us
+baseline	8	5	/items	volucer worker (published build 91cc7b6)	11749.71	630.00us	1.26ms
+baseline	16	5	/items	volucer worker (published build 91cc7b6)	17369.47	807.00us	3.21ms
+baseline	32	5	/items	volucer worker (published build 91cc7b6)	19336.76	1.21ms	15.38ms
+rr	1	5	/	roadrunner worker	3124.84	311.00us	540.00us
+rr	8	5	/	roadrunner worker	20233.94	360.00us	0.97ms
+rr	16	5	/	roadrunner worker	34522.22	421.00us	1.39ms
+rr	32	5	/	roadrunner worker	36080.80	824.00us	2.12ms
+rr	1	5	/items	roadrunner worker	1817.59	537.00us	799.00us
+rr	8	5	/items	roadrunner worker	11329.39	641.00us	1.55ms
+rr	16	5	/items	roadrunner worker	17542.86	826.00us	2.12ms
+rr	32	5	/items	roadrunner worker	18318.77	1.66ms	3.32ms
+new-nostat	1	6	/	volucer worker (static layer off)	3767.17	260.00us	393.00us
+new-nostat	8	6	/	volucer worker (static layer off)	25466.65	297.00us	574.00us
+new-nostat	16	6	/	volucer worker (static layer off)	36226.40	416.00us	0.91ms
+new-nostat	32	6	/	volucer worker (static layer off)	42536.01	696.00us	1.79ms
+new-nostat	1	6	/items	volucer worker (static layer off)	2344.48	414.00us	644.00us
+new-nostat	8	6	/items	volucer worker (static layer off)	14486.23	523.00us	1.02ms
+new-nostat	16	6	/items	volucer worker (static layer off)	19029.71	789.00us	1.66ms
+new-nostat	32	6	/items	volucer worker (static layer off)	23010.83	1.30ms	3.45ms
+baseline	1	6	/	volucer worker (published build 91cc7b6)	3337.28	290.00us	442.00us
+baseline	8	6	/	volucer worker (published build 91cc7b6)	24315.34	310.00us	608.00us
+baseline	16	6	/	volucer worker (published build 91cc7b6)	36707.52	394.00us	1.28ms
+baseline	32	6	/	volucer worker (published build 91cc7b6)	38531.77	628.00us	7.26ms
+baseline	1	6	/items	volucer worker (published build 91cc7b6)	1827.52	537.00us	725.00us
+baseline	8	6	/items	volucer worker (published build 91cc7b6)	12092.84	617.00us	1.25ms
+baseline	16	6	/items	volucer worker (published build 91cc7b6)	17549.47	802.00us	3.42ms
+baseline	32	6	/items	volucer worker (published build 91cc7b6)	19320.76	1.20ms	17.90ms
+rr	1	6	/	roadrunner worker	3105.41	313.00us	538.00us
+rr	8	6	/	roadrunner worker	20239.90	361.00us	0.96ms
+rr	16	6	/	roadrunner worker	34343.28	424.00us	1.40ms
+rr	32	6	/	roadrunner worker	36369.41	821.00us	2.09ms
+rr	1	6	/items	roadrunner worker	1786.06	546.00us	808.00us
+rr	8	6	/items	roadrunner worker	11189.15	640.00us	1.56ms
+rr	16	6	/items	roadrunner worker	17642.04	825.00us	2.11ms
+rr	32	6	/items	roadrunner worker	17690.47	1.70ms	3.33ms
+new-req	1	6	/	volucer worker (checksum required)	3200.42	304.00us	453.00us
+new-req	8	6	/	volucer worker (checksum required)	21149.67	359.00us	686.00us
+new-req	16	6	/	volucer worker (checksum required)	29070.52	515.00us	1.18ms
+new-req	32	6	/	volucer worker (checksum required)	32473.01	0.91ms	2.42ms
+new-req	1	6	/items	volucer worker (checksum required)	2002.04	482.00us	768.00us
+new-req	8	6	/items	volucer worker (checksum required)	12349.03	610.00us	1.18ms
+new-req	16	6	/items	volucer worker (checksum required)	16697.40	0.89ms	1.87ms
+new-req	32	6	/items	volucer worker (checksum required)	20957.72	1.45ms	3.57ms
+baseline	1	7	/	volucer worker (published build 91cc7b6)	3148.55	308.00us	455.00us
+baseline	8	7	/	volucer worker (published build 91cc7b6)	24036.77	313.00us	621.00us
+baseline	16	7	/	volucer worker (published build 91cc7b6)	36179.42	399.00us	1.39ms
+baseline	32	7	/	volucer worker (published build 91cc7b6)	38234.89	629.00us	7.21ms
+baseline	1	7	/items	volucer worker (published build 91cc7b6)	1844.88	534.00us	725.00us
+baseline	8	7	/items	volucer worker (published build 91cc7b6)	11924.23	623.00us	1.26ms
+baseline	16	7	/items	volucer worker (published build 91cc7b6)	17404.31	809.00us	3.34ms
+baseline	32	7	/items	volucer worker (published build 91cc7b6)	19077.80	1.21ms	15.07ms
+rr	1	7	/	roadrunner worker	3160.43	308.00us	507.00us
+rr	8	7	/	roadrunner worker	20406.93	357.00us	0.97ms
+rr	16	7	/	roadrunner worker	34586.70	419.00us	1.44ms
+rr	32	7	/	roadrunner worker	36488.01	816.00us	2.11ms
+rr	1	7	/items	roadrunner worker	1806.87	541.00us	805.00us
+rr	8	7	/items	roadrunner worker	11244.15	643.00us	1.55ms
+rr	16	7	/items	roadrunner worker	17621.56	828.00us	2.16ms
+rr	32	7	/items	roadrunner worker	18700.69	1.64ms	3.17ms
+new-req	1	7	/	volucer worker (checksum required)	3146.47	311.00us	458.00us
+new-req	8	7	/	volucer worker (checksum required)	21573.11	353.00us	664.00us
+new-req	16	7	/	volucer worker (checksum required)	29431.63	509.00us	1.15ms
+new-req	32	7	/	volucer worker (checksum required)	33659.60	0.88ms	2.34ms
+new-req	1	7	/items	volucer worker (checksum required)	2103.05	464.00us	694.00us
+new-req	8	7	/items	volucer worker (checksum required)	13009.87	577.00us	1.12ms
+new-req	16	7	/items	volucer worker (checksum required)	17147.09	0.87ms	1.86ms
+new-req	32	7	/items	volucer worker (checksum required)	21122.02	1.42ms	3.38ms
+new-nostat	1	7	/	volucer worker (static layer off)	3878.55	252.00us	381.00us
+new-nostat	8	7	/	volucer worker (static layer off)	24982.95	302.00us	598.00us
+new-nostat	16	7	/	volucer worker (static layer off)	35960.19	419.00us	0.91ms
+new-nostat	32	7	/	volucer worker (static layer off)	42450.57	702.00us	1.78ms
+new-nostat	1	7	/items	volucer worker (static layer off)	2280.27	423.00us	686.00us
+new-nostat	8	7	/items	volucer worker (static layer off)	14450.98	523.00us	1.01ms
+new-nostat	16	7	/items	volucer worker (static layer off)	18931.51	790.00us	1.66ms
+new-nostat	32	7	/items	volucer worker (static layer off)	22721.03	1.31ms	3.49ms
+rr	1	8	/	roadrunner worker	3186.80	305.00us	537.00us
+rr	8	8	/	roadrunner worker	20161.68	363.00us	0.98ms
+rr	16	8	/	roadrunner worker	34357.34	422.00us	1.38ms
+rr	32	8	/	roadrunner worker	36168.29	825.00us	2.09ms
+rr	1	8	/items	roadrunner worker	1753.03	556.00us	824.00us
+rr	8	8	/items	roadrunner worker	11376.25	638.00us	1.56ms
+rr	16	8	/items	roadrunner worker	17777.46	816.00us	2.07ms
+rr	32	8	/items	roadrunner worker	18296.56	1.67ms	3.23ms
+new-req	1	8	/	volucer worker (checksum required)	3072.70	319.00us	463.00us
+new-req	8	8	/	volucer worker (checksum required)	21121.43	359.00us	680.00us
+new-req	16	8	/	volucer worker (checksum required)	29330.90	508.00us	1.18ms
+new-req	32	8	/	volucer worker (checksum required)	33270.22	0.89ms	2.40ms
+new-req	1	8	/items	volucer worker (checksum required)	2084.59	467.00us	705.00us
+new-req	8	8	/items	volucer worker (checksum required)	12848.92	587.00us	1.16ms
+new-req	16	8	/items	volucer worker (checksum required)	16936.76	0.88ms	1.87ms
+new-req	32	8	/items	volucer worker (checksum required)	21292.28	1.41ms	3.52ms
+new-nostat	1	8	/	volucer worker (static layer off)	3849.04	256.00us	386.00us
+new-nostat	8	8	/	volucer worker (static layer off)	24575.62	308.00us	593.00us
+new-nostat	16	8	/	volucer worker (static layer off)	35425.99	424.00us	0.93ms
+new-nostat	32	8	/	volucer worker (static layer off)	42266.63	701.00us	1.81ms
+new-nostat	1	8	/items	volucer worker (static layer off)	2375.01	406.00us	631.00us
+new-nostat	8	8	/items	volucer worker (static layer off)	14632.03	514.00us	1.01ms
+new-nostat	16	8	/items	volucer worker (static layer off)	19188.04	782.00us	1.62ms
+new-nostat	32	8	/items	volucer worker (static layer off)	23280.91	1.30ms	3.39ms
+baseline	1	8	/	volucer worker (published build 91cc7b6)	3205.31	303.00us	454.00us
+baseline	8	8	/	volucer worker (published build 91cc7b6)	24584.24	304.00us	612.00us
+baseline	16	8	/	volucer worker (published build 91cc7b6)	35629.56	402.00us	1.34ms
+baseline	32	8	/	volucer worker (published build 91cc7b6)	37966.42	641.00us	7.24ms
+baseline	1	8	/items	volucer worker (published build 91cc7b6)	1835.45	534.00us	736.00us
+baseline	8	8	/items	volucer worker (published build 91cc7b6)	11834.84	628.00us	1.26ms
+baseline	16	8	/items	volucer worker (published build 91cc7b6)	17667.10	801.00us	2.91ms
+baseline	32	8	/items	volucer worker (published build 91cc7b6)	19724.73	1.20ms	15.97ms
+new-req	1	9	/	volucer worker (checksum required)	3097.38	318.00us	449.00us
+new-req	8	9	/	volucer worker (checksum required)	21061.67	360.00us	676.00us
+new-req	16	9	/	volucer worker (checksum required)	29382.04	510.00us	1.17ms
+new-req	32	9	/	volucer worker (checksum required)	33455.27	0.88ms	2.37ms
+new-req	1	9	/items	volucer worker (checksum required)	2048.34	473.00us	729.00us
+new-req	8	9	/items	volucer worker (checksum required)	12863.10	586.00us	1.14ms
+new-req	16	9	/items	volucer worker (checksum required)	17132.99	0.87ms	1.84ms
+new-req	32	9	/items	volucer worker (checksum required)	21402.43	1.41ms	3.54ms
+new-nostat	1	9	/	volucer worker (static layer off)	3843.82	254.00us	385.00us
+new-nostat	8	9	/	volucer worker (static layer off)	25235.89	300.00us	578.00us
+new-nostat	16	9	/	volucer worker (static layer off)	36177.18	415.00us	0.91ms
+new-nostat	32	9	/	volucer worker (static layer off)	36289.98	823.00us	2.16ms
+new-nostat	1	9	/items	volucer worker (static layer off)	1779.07	535.00us	0.94ms
+new-nostat	8	9	/items	volucer worker (static layer off)	11261.01	669.00us	1.30ms
+new-nostat	16	9	/items	volucer worker (static layer off)	15759.38	0.95ms	1.96ms
+new-nostat	32	9	/items	volucer worker (static layer off)	18190.89	1.65ms	4.47ms
+baseline	1	9	/	volucer worker (published build 91cc7b6)	3254.62	298.00us	444.00us
+baseline	8	9	/	volucer worker (published build 91cc7b6)	24206.00	311.00us	623.00us
+baseline	16	9	/	volucer worker (published build 91cc7b6)	33722.11	422.00us	1.66ms
+baseline	32	9	/	volucer worker (published build 91cc7b6)	35096.99	666.00us	8.60ms
+baseline	1	9	/items	volucer worker (published build 91cc7b6)	1838.34	535.00us	727.00us
+baseline	8	9	/items	volucer worker (published build 91cc7b6)	11784.44	624.00us	1.29ms
+baseline	16	9	/items	volucer worker (published build 91cc7b6)	16917.50	815.00us	4.02ms
+baseline	32	9	/items	volucer worker (published build 91cc7b6)	18527.17	1.23ms	18.89ms
+rr	1	9	/	roadrunner worker	3144.59	309.00us	541.00us
+rr	8	9	/	roadrunner worker	20528.98	356.00us	0.94ms
+rr	16	9	/	roadrunner worker	34766.65	415.00us	1.43ms
+rr	32	9	/	roadrunner worker	36518.04	818.00us	2.06ms
+rr	1	9	/items	roadrunner worker	1832.28	534.00us	804.00us
+rr	8	9	/items	roadrunner worker	11278.81	639.00us	1.52ms
+rr	16	9	/items	roadrunner worker	17793.37	817.00us	2.12ms
+rr	32	9	/items	roadrunner worker	18200.52	1.65ms	3.28ms
