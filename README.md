@@ -410,16 +410,27 @@ workers:
 
 | | static off | static on | difference |
 |---|---|---|---|
-| `statx` | 0.04 /request | **2.05 /request** | **+2.0** |
-| `futex` | 14.11 /request | 20.00 /request | +5.9 |
-| `clock_gettime` | 50.40 /request | 61.58 /request | +11.2 |
-| all syscalls | 158.4 /request | 179.7 /request | **+21.3** |
+| `statx` on `GET /` | 0.04 /request | **1.05 /request** | +1.0 |
+| `statx` on `GET /items` | 0.04 /request | **2.05 /request** | **+2.0** |
+| `futex` (`/items`) | 14.11 /request | 20.00 /request | +5.9 |
+| `clock_gettime` (`/items`) | 50.40 /request | 61.58 /request | +11.2 |
+| all syscalls (`/items`) | 158.4 /request | 179.7 /request | **+21.3** |
 
-**Two stats where the path asks for one.** A path that names no file needs one `stat`, and
-`decide()` runs the whole `plan()` twice: once to learn there is no file, and again because
-`respond()` returns `None` and the caller's fall-through re-enters. The rest of the difference is
-the `spawn_blocking` hop — the `futex` and `clock_gettime` traffic of a task handed to another
-thread and awaited back.
+**A path that names no file needs one `stat`, and it was paying two.** The layer asked
+`is_dir()` and then `is_file()` — two round trips to learn one fact — and for a front-controller
+application that is two round trips on *every* route, because no route names a file. (`/` paid
+one, because a trailing slash takes the `directory_index` branch.) The `futex` and
+`clock_gettime` traffic is the rest of it: the `spawn_blocking` hop that carries the stat off the
+runtime thread.
+
+**Fixing the stat fixes nothing, and that is the measurement.** One `metadata` where the layer
+asked two questions drops `GET /items` from 2.05 `statx` per request to 1.05 — and buys **+0.2%,
++1.1%, −0.1%, −0.2%** on `/` and **+0.5%, +0.9%, +0.1%, +0.2%** on `/items`, with every per-round
+range spanning 1.00. Two binaries, same config, seven rotating rounds, 168 cells, none failed
+(`results/ab-perf-statfix.tsv`). The stat was ~1.5 µs of the 6.5 µs; the hop is the rest.
+
+So the only thing that recovers the 14–22% is **not entering the layer at all**, which is
+`serve_only = "backend"` — or, for a deployment that has not written it, the warning below.
 
 **The cost is flat per request, which is what identifies it.** Per-request service time for the
 same binary, layer on minus off: **63.0 µs at c=1, 7.1 at c=8, 6.7 at c=16, 6.5 at c=32** — a
@@ -438,11 +449,21 @@ default and **404** with `enabled = false`, while `/items` answers 200 in both �
 behaviour rather than merely parsing. And `/items` names no file, so the layer can only be finding
 nothing — which is why the cost is the same regardless of what the request goes on to do.
 
-**This is not an argument for turning the default off.** It is an argument that a fixed cost
-belongs on the path that asks for it: an application whose every route is a front-controller
-dispatch pays a blocking-pool round trip for an answer the route table already had, and
-`serve_only = "backend"` is how a deployment says so. What the measurement establishes is the size
-of the thing, which the default's rationale did not mention.
+**So `volucer check` now says so.** When the layer is on, a front controller is configured, and
+the document root holds no asset, it warns and names `serve_only = "backend"` as the fix:
+
+```
+- server.static_files is on and a front controller is configured, but the document root holds no
+  asset a file could be served from — every request stats for a file that is never there
+  write `serve_only = "backend"` to skip the static layer, which answers exactly the same
+  requests without the stat
+```
+
+A warning rather than an inferred default. The layer is right for a site that serves assets, and
+turning it off automatically on upgrade would be a silent behaviour change; what is not
+defensible is leaving the operator to discover a 14–22% difference from a benchmark. Verified
+both ways on the real application: the warning fires on its document root (which holds one
+`index.php` and nothing else) and goes quiet once an `assets/` directory exists.
 
 Raw rows: `results/ab-perf-baseline.tsv`. Harness: `scripts/ab-perf.sh` with the `baseline` and
 `new-nostat` variants; report at `scripts/ab-report.py`; record at volucer `docs/plan.md` hazard
