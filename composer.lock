@@ -489,7 +489,7 @@
             },
             "suggest": {
                 "ext-mongodb": "PHP driver for MongoDB document persistence (Azera\\Orm\\Storage\\MongoStore)",
-                "mongodb/mongodb": "Required for MongoDB document persistence (Azera\\Orm\\Storage\\MongoStore) â€” install together with the ext-mongodb PHP extension. Optional: only tests/MongoLiveTest.php needs the real package; all other Mongo tests run against an in-memory fake"
+                "mongodb/mongodb": "Required for MongoDB document persistence (Azera\\Orm\\Storage\\MongoStore) — install together with the ext-mongodb PHP extension. Optional: only tests/MongoLiveTest.php needs the real package; all other Mongo tests run against an in-memory fake"
             },
             "default-branch": true,
             "bin": [

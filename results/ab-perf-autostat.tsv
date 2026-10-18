@@ -1,0 +1,161 @@
+variant	conc	round	endpoint	label	rps	p50	p99
+new-req	1	1	/	volucer worker (checksum required)	4146.81	238.00us	360.00us
+new-req	8	1	/	volucer worker (checksum required)	24806.29	305.00us	594.00us
+new-req	16	1	/	volucer worker (checksum required)	35654.19	423.00us	0.91ms
+new-req	32	1	/	volucer worker (checksum required)	41898.10	713.00us	1.82ms
+new-req	1	1	/items	volucer worker (checksum required)	2332.97	415.00us	650.00us
+new-req	8	1	/items	volucer worker (checksum required)	14313.25	526.00us	1.03ms
+new-req	16	1	/items	volucer worker (checksum required)	18915.33	789.00us	1.64ms
+new-req	32	1	/items	volucer worker (checksum required)	22553.63	1.32ms	3.57ms
+new-static	1	1	/	volucer worker (static layer on, forced)	3101.31	315.00us	468.00us
+new-static	8	1	/	volucer worker (static layer on, forced)	21264.45	356.00us	683.00us
+new-static	16	1	/	volucer worker (static layer on, forced)	28668.43	520.00us	1.18ms
+new-static	32	1	/	volucer worker (static layer on, forced)	32966.93	0.90ms	2.39ms
+new-static	1	1	/items	volucer worker (static layer on, forced)	2152.27	449.00us	713.00us
+new-static	8	1	/items	volucer worker (static layer on, forced)	12484.71	607.00us	1.18ms
+new-static	16	1	/items	volucer worker (static layer on, forced)	16926.30	0.88ms	1.85ms
+new-static	32	1	/items	volucer worker (static layer on, forced)	21140.18	1.43ms	3.54ms
+rr	1	1	/	roadrunner worker	3155.53	308.00us	533.00us
+rr	8	1	/	roadrunner worker	20442.47	359.00us	0.96ms
+rr	16	1	/	roadrunner worker	35408.97	411.00us	1.34ms
+rr	32	1	/	roadrunner worker	36635.59	811.00us	2.19ms
+rr	1	1	/items	roadrunner worker	1821.79	534.00us	789.00us
+rr	8	1	/items	roadrunner worker	11231.67	644.00us	1.53ms
+rr	16	1	/items	roadrunner worker	17894.67	813.00us	2.10ms
+rr	32	1	/items	roadrunner worker	18669.67	1.64ms	3.28ms
+franken	1	1	/	frankenphp worker (embedded php)	4680.81	205.00us	406.00us
+franken	8	1	/	frankenphp worker (embedded php)	23334.68	307.00us	1.02ms
+franken	16	1	/	frankenphp worker (embedded php)	20809.93	699.00us	2.80ms
+franken	32	1	/	frankenphp worker (embedded php)	21912.44	1.33ms	3.85ms
+franken	1	1	/items	frankenphp worker (embedded php)	2453.05	390.00us	628.00us
+franken	8	1	/items	frankenphp worker (embedded php)	14444.50	506.00us	1.34ms
+franken	16	1	/items	frankenphp worker (embedded php)	15327.78	0.95ms	2.73ms
+franken	32	1	/items	frankenphp worker (embedded php)	15880.16	1.90ms	4.27ms
+new-static	1	2	/	volucer worker (static layer on, forced)	3265.50	298.00us	438.00us
+new-static	8	2	/	volucer worker (static layer on, forced)	20889.76	363.00us	692.00us
+new-static	16	2	/	volucer worker (static layer on, forced)	29085.51	513.00us	1.17ms
+new-static	32	2	/	volucer worker (static layer on, forced)	33533.63	0.87ms	2.34ms
+new-static	1	2	/items	volucer worker (static layer on, forced)	1984.11	489.00us	727.00us
+new-static	8	2	/items	volucer worker (static layer on, forced)	12991.25	584.00us	1.13ms
+new-static	16	2	/items	volucer worker (static layer on, forced)	17105.13	0.87ms	1.84ms
+new-static	32	2	/items	volucer worker (static layer on, forced)	21478.13	1.41ms	3.53ms
+rr	1	2	/	roadrunner worker	3183.77	305.00us	549.00us
+rr	8	2	/	roadrunner worker	20192.41	358.00us	1.00ms
+rr	16	2	/	roadrunner worker	34756.73	417.00us	1.44ms
+rr	32	2	/	roadrunner worker	36665.03	812.00us	2.11ms
+rr	1	2	/items	roadrunner worker	1813.83	537.00us	786.00us
+rr	8	2	/items	roadrunner worker	11274.40	642.00us	1.53ms
+rr	16	2	/items	roadrunner worker	17802.84	816.00us	2.13ms
+rr	32	2	/items	roadrunner worker	18152.39	1.66ms	3.31ms
+franken	1	2	/	frankenphp worker (embedded php)	4667.23	206.00us	401.00us
+franken	8	2	/	frankenphp worker (embedded php)	22879.59	312.00us	1.04ms
+franken	16	2	/	frankenphp worker (embedded php)	20914.66	694.00us	2.77ms
+franken	32	2	/	frankenphp worker (embedded php)	22051.32	1.32ms	3.83ms
+franken	1	2	/items	frankenphp worker (embedded php)	2501.84	384.00us	611.00us
+franken	8	2	/items	frankenphp worker (embedded php)	14400.88	508.00us	1.31ms
+franken	16	2	/items	frankenphp worker (embedded php)	15487.40	0.94ms	2.72ms
+franken	32	2	/items	frankenphp worker (embedded php)	16208.04	1.86ms	4.04ms
+new-req	1	2	/	volucer worker (checksum required)	3718.22	263.00us	381.00us
+new-req	8	2	/	volucer worker (checksum required)	25345.81	299.00us	570.00us
+new-req	16	2	/	volucer worker (checksum required)	36440.06	413.00us	0.91ms
+new-req	32	2	/	volucer worker (checksum required)	42679.67	699.00us	1.79ms
+new-req	1	2	/items	volucer worker (checksum required)	2291.36	423.00us	659.00us
+new-req	8	2	/items	volucer worker (checksum required)	14479.67	524.00us	1.02ms
+new-req	16	2	/items	volucer worker (checksum required)	19147.57	790.00us	1.62ms
+new-req	32	2	/items	volucer worker (checksum required)	22851.26	1.31ms	3.50ms
+rr	1	3	/	roadrunner worker	3075.54	316.00us	535.00us
+rr	8	3	/	roadrunner worker	20001.71	365.00us	0.97ms
+rr	16	3	/	roadrunner worker	34709.14	419.00us	1.37ms
+rr	32	3	/	roadrunner worker	36257.58	818.00us	2.12ms
+rr	1	3	/items	roadrunner worker	1816.75	539.00us	784.00us
+rr	8	3	/items	roadrunner worker	11311.97	639.00us	1.55ms
+rr	16	3	/items	roadrunner worker	17763.96	818.00us	2.10ms
+rr	32	3	/items	roadrunner worker	18381.68	1.65ms	3.25ms
+franken	1	3	/	frankenphp worker (embedded php)	4679.50	206.00us	397.00us
+franken	8	3	/	frankenphp worker (embedded php)	22931.48	314.00us	1.05ms
+franken	16	3	/	frankenphp worker (embedded php)	20941.25	690.00us	2.79ms
+franken	32	3	/	frankenphp worker (embedded php)	21948.14	1.33ms	3.81ms
+franken	1	3	/items	frankenphp worker (embedded php)	2558.37	376.00us	605.00us
+franken	8	3	/items	frankenphp worker (embedded php)	14659.70	501.00us	1.31ms
+franken	16	3	/items	frankenphp worker (embedded php)	15436.00	0.94ms	2.77ms
+franken	32	3	/items	frankenphp worker (embedded php)	15970.55	1.87ms	4.12ms
+new-req	1	3	/	volucer worker (checksum required)	4223.60	230.00us	362.00us
+new-req	8	3	/	volucer worker (checksum required)	24961.18	303.00us	578.00us
+new-req	16	3	/	volucer worker (checksum required)	35706.75	421.00us	0.93ms
+new-req	32	3	/	volucer worker (checksum required)	41915.38	705.00us	1.80ms
+new-req	1	3	/items	volucer worker (checksum required)	2386.75	409.00us	614.00us
+new-req	8	3	/items	volucer worker (checksum required)	14471.21	521.00us	1.02ms
+new-req	16	3	/items	volucer worker (checksum required)	19086.66	781.00us	1.63ms
+new-req	32	3	/items	volucer worker (checksum required)	23430.85	1.27ms	3.52ms
+new-static	1	3	/	volucer worker (static layer on, forced)	3238.95	301.00us	444.00us
+new-static	8	3	/	volucer worker (static layer on, forced)	21309.62	357.00us	672.00us
+new-static	16	3	/	volucer worker (static layer on, forced)	29568.87	505.00us	1.16ms
+new-static	32	3	/	volucer worker (static layer on, forced)	33003.45	0.89ms	2.38ms
+new-static	1	3	/items	volucer worker (static layer on, forced)	2055.71	472.00us	722.00us
+new-static	8	3	/items	volucer worker (static layer on, forced)	12418.59	610.00us	1.18ms
+new-static	16	3	/items	volucer worker (static layer on, forced)	16884.67	0.88ms	1.86ms
+new-static	32	3	/items	volucer worker (static layer on, forced)	21045.05	1.42ms	3.57ms
+franken	1	4	/	frankenphp worker (embedded php)	4602.16	206.00us	422.00us
+franken	8	4	/	frankenphp worker (embedded php)	22369.54	317.00us	1.09ms
+franken	16	4	/	frankenphp worker (embedded php)	20416.56	710.00us	2.84ms
+franken	32	4	/	frankenphp worker (embedded php)	21631.72	1.35ms	3.86ms
+franken	1	4	/items	frankenphp worker (embedded php)	2417.95	398.00us	634.00us
+franken	8	4	/items	frankenphp worker (embedded php)	14419.05	508.00us	1.35ms
+franken	16	4	/items	frankenphp worker (embedded php)	15324.48	0.95ms	2.73ms
+franken	32	4	/items	frankenphp worker (embedded php)	16154.33	1.87ms	4.19ms
+new-req	1	4	/	volucer worker (checksum required)	3755.37	259.00us	413.00us
+new-req	8	4	/	volucer worker (checksum required)	24799.25	305.00us	599.00us
+new-req	16	4	/	volucer worker (checksum required)	35839.18	419.00us	0.92ms
+new-req	32	4	/	volucer worker (checksum required)	42465.44	703.00us	1.78ms
+new-req	1	4	/items	volucer worker (checksum required)	2394.29	405.00us	629.00us
+new-req	8	4	/items	volucer worker (checksum required)	14672.48	518.00us	1.02ms
+new-req	16	4	/items	volucer worker (checksum required)	19080.17	783.00us	1.64ms
+new-req	32	4	/items	volucer worker (checksum required)	22809.40	1.30ms	3.54ms
+new-static	1	4	/	volucer worker (static layer on, forced)	3299.36	298.00us	424.00us
+new-static	8	4	/	volucer worker (static layer on, forced)	21328.19	356.00us	678.00us
+new-static	16	4	/	volucer worker (static layer on, forced)	29014.60	516.00us	1.19ms
+new-static	32	4	/	volucer worker (static layer on, forced)	33385.19	0.88ms	2.35ms
+new-static	1	4	/items	volucer worker (static layer on, forced)	1976.84	490.00us	738.00us
+new-static	8	4	/items	volucer worker (static layer on, forced)	12861.06	588.00us	1.15ms
+new-static	16	4	/items	volucer worker (static layer on, forced)	17058.19	0.87ms	1.85ms
+new-static	32	4	/items	volucer worker (static layer on, forced)	21370.44	1.42ms	3.53ms
+rr	1	4	/	roadrunner worker	3169.96	307.00us	543.00us
+rr	8	4	/	roadrunner worker	20161.49	360.00us	0.98ms
+rr	16	4	/	roadrunner worker	34882.02	417.00us	1.43ms
+rr	32	4	/	roadrunner worker	36304.38	823.00us	2.08ms
+rr	1	4	/items	roadrunner worker	1809.22	538.00us	827.00us
+rr	8	4	/items	roadrunner worker	11089.13	651.00us	1.57ms
+rr	16	4	/items	roadrunner worker	17531.95	827.00us	2.16ms
+rr	32	4	/items	roadrunner worker	18100.04	1.70ms	3.32ms
+new-req	1	5	/	volucer worker (checksum required)	3816.41	254.00us	390.00us
+new-req	8	5	/	volucer worker (checksum required)	24581.80	307.00us	606.00us
+new-req	16	5	/	volucer worker (checksum required)	35235.77	428.00us	0.93ms
+new-req	32	5	/	volucer worker (checksum required)	42713.51	698.00us	1.78ms
+new-req	1	5	/items	volucer worker (checksum required)	2533.80	382.00us	613.00us
+new-req	8	5	/items	volucer worker (checksum required)	14760.30	512.00us	1.01ms
+new-req	16	5	/items	volucer worker (checksum required)	19173.52	782.00us	1.64ms
+new-req	32	5	/items	volucer worker (checksum required)	22996.70	1.32ms	3.54ms
+new-static	1	5	/	volucer worker (static layer on, forced)	3280.43	297.00us	431.00us
+new-static	8	5	/	volucer worker (static layer on, forced)	21253.86	355.00us	677.00us
+new-static	16	5	/	volucer worker (static layer on, forced)	29600.98	505.00us	1.16ms
+new-static	32	5	/	volucer worker (static layer on, forced)	33381.29	0.88ms	2.37ms
+new-static	1	5	/items	volucer worker (static layer on, forced)	2074.05	468.00us	701.00us
+new-static	8	5	/items	volucer worker (static layer on, forced)	12832.78	589.00us	1.15ms
+new-static	16	5	/items	volucer worker (static layer on, forced)	17013.36	0.87ms	1.86ms
+new-static	32	5	/items	volucer worker (static layer on, forced)	21233.60	1.41ms	3.40ms
+rr	1	5	/	roadrunner worker	3202.10	305.00us	515.00us
+rr	8	5	/	roadrunner worker	20567.96	355.00us	0.96ms
+rr	16	5	/	roadrunner worker	34845.16	417.00us	1.36ms
+rr	32	5	/	roadrunner worker	36979.58	801.00us	2.12ms
+rr	1	5	/items	roadrunner worker	1814.93	540.00us	765.00us
+rr	8	5	/items	roadrunner worker	11355.76	640.00us	1.52ms
+rr	16	5	/items	roadrunner worker	17673.63	824.00us	2.13ms
+rr	32	5	/items	roadrunner worker	18209.00	1.68ms	3.23ms
+franken	1	5	/	frankenphp worker (embedded php)	4625.22	207.00us	406.00us
+franken	8	5	/	frankenphp worker (embedded php)	22810.13	313.00us	1.06ms
+franken	16	5	/	frankenphp worker (embedded php)	20708.53	698.00us	2.78ms
+franken	32	5	/	frankenphp worker (embedded php)	22066.31	1.32ms	3.77ms
+franken	1	5	/items	frankenphp worker (embedded php)	2462.63	391.00us	619.00us
+franken	8	5	/items	frankenphp worker (embedded php)	14280.94	515.00us	1.30ms
+franken	16	5	/items	frankenphp worker (embedded php)	15383.12	0.95ms	2.71ms
+franken	32	5	/items	frankenphp worker (embedded php)	16002.60	1.88ms	4.16ms

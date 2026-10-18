@@ -394,7 +394,10 @@ produced the wrong answer:
 - **static layer off** — `new-nostat / new-req`: the *same binary* with
   `[server.static_files] enabled = false`, so the difference can only be that one table.
   **`/` loses 18–26% to the default** (1.220x, 1.176x, 1.231x, 1.261x, every per-round range clear
-  of 1.00); `/items` loses 7–14%, whose ranges span 1.00 at c=1 and c=8 and so are the weaker half.
+  of 1.00); `/items` loses 7–14%, whose ranges cross 1.00 in all four cells — but all four crossings
+  come from the same round, in which the whole `new-nostat` block fell about 20% while the other
+  three arms held. That is one disturbed measurement, not four independent flukes; dropping that
+  round leaves `/items` at 7–14% with no range crossing 1.00.
 - **new code only** — `new-nostat / baseline`: the same comparison with that one default removed.
   **The code added since the published build is faster in seven of eight cells, up to +29%.**
 
@@ -444,13 +447,63 @@ the total, because they are a wake-up rather than a computation.
 **The `new-nostat` arm is the difference between a finding and a wrong conclusion.** Without it
 there is only "current is slower", and the natural reading is "the fifty new steps cost
 throughput" — pointing at reverting work that is in fact the fastest this project has been. One
-extra arm, one extra config table.
+extra arm, one extra config table. (Since the layer became self-deciding it is `new-static` that
+does this job, for the mirror-image reason — see below.)
 
 Two falsifications ran before the numbers were believed. The layer really is on by default and
 really is off with the table: a real file in the document root answers **200 with its bytes** by
 default and **404** with `enabled = false`, while `/items` answers 200 in both — the table changes
 behaviour rather than merely parsing. And `/items` names no file, so the layer can only be finding
 nothing — which is why the cost is the same regardless of what the request goes on to do.
+
+### Re-measured after the layer became self-deciding
+
+With `Sites::from_config_with` turning the layer off for a document root that holds no asset, the
+`new-nostat` arm above **no longer differs from `new-req`** — this application's root is one
+`index.php`, so both arms now run with the layer off. The arm that has to be pinned explicitly
+became the other one, and `ab-perf.sh` gained `new-static` (`[server.static_files] enabled = true`,
+which the decision honours because a written `true` is a request rather than a default).
+
+Four arms, five rotating rounds, 160 cells, none failed (`results/ab-perf-autostat.tsv`). Absolute
+median rps, with both controls in the table so the host can be judged rather than trusted:
+
+| arm | `/` c=1 | c=8 | c=16 | c=32 | `/items` c=1 | c=8 | c=16 | c=32 |
+|---|---|---|---|---|---|---|---|---|
+| volucer `main`, layer **off** (now the default) | **3,816** | **24,806** | **35,707** | **42,465** | **2,387** | **14,480** | **19,087** | **22,851** |
+| volucer `main`, layer forced **on** | 3,266 | 21,264 | 29,086 | 33,381 | 2,056 | 12,833 | 17,013 | 21,234 |
+| RoadRunner 2025.1.15 | 3,170 | 20,192 | 34,845 | 36,636 | 1,815 | 11,274 | 17,764 | 18,209 |
+| FrankenPHP 1.13.1 (PHP 8.5.11) | 4,667 | 22,880 | 20,810 | 21,948 | 2,463 | 14,419 | 15,383 | 16,003 |
+
+**The default converged on the arm it was meant to recover.** New `new-req` against the old
+`new-nostat` row above, cell by cell on `/items`: **+2.6%, +0.2%, +0.8%, −0.7%**. Both arms have
+the layer off; the difference between them is only which binary decided it, so this is a
+cross-check that the inferred default landed where the explicit switch was measured, and that the
+two runs are on comparable footing. Against the old *layer-on* row the same binary reads +16.5%,
++13.9%, +13.1%, +8.0% — the gain an existing deployment now gets without writing anything.
+
+**RoadRunner reproduced its published numbers to within 2.1% in every cell**, which is what makes
+the volucer row comparable to the table above rather than merely plausible. Within-round ratios
+against it, median over the five rounds:
+
+| concurrency | volucer `/` vs rr | volucer `/items` vs rr | layer on vs off, `/` | layer on vs off, `/items` |
+|---|---|---|---|---|
+| 1 | **+19.2%** | **+31.4%** | −14.0% | −13.9% |
+| 8 | **+23.0%** | **+28.4%** | −14.3% | −12.8% |
+| 16 | +2.7% | +7.6% | −19.0% | −10.7% |
+| 32 | **+15.6%** | **+26.0%** | −21.4% | −6.3% |
+
+Every range here is clear of 1.00. The layer's cost measured **13–21% on `/` and 6–14% on
+`/items`** — the same order as the 18–26% / 7–14% above, from a different binary and a different
+run, so the finding is not a property of the earlier one. The `/` figure exceeds `/items`' at high
+concurrency for the reason recorded earlier: `/` resolves through the directory-index branch,
+`/items` names no file at all.
+
+FrankenPHP is the only arm that does not gain from concurrency: **20,810 at c=16 against 22,880 at
+c=8** on `/`, and flat from 16 to 32 on `/items`. That plateau is the architectural result
+`results/frankenphp.md` describes, reproduced on a different host and a newer binary. It is also
+the one arm ahead of volucer anywhere: **+17.5% on `/` at c=1** (0.825x), a cell where volucer
+wins on `/items` by −4.9% with a range crossing 1.00, so at concurrency 1 the two are close and
+inconsistent rather than ordered.
 
 **So the layer is now turned off for exactly those applications.** `Sites::from_config_with`
 decides it, which is the table `serve` actually serves from, so there is one answer rather than a
@@ -481,14 +534,21 @@ be served from)`) and logs it at `WARN`. Verified on the real application — wh
 holds one `index.php` and nothing else — and both ways: creating `assets/` brings the layer back
 and `GET /assets/app.css` is then served from disk with its MIME type.
 
-Raw rows: `results/ab-perf-baseline.tsv`. Harness: `scripts/ab-perf.sh` with the `baseline` and
-`new-nostat` variants; report at `scripts/ab-report.py`; record at volucer `docs/plan.md` hazard
-85:
+Raw rows: `results/ab-perf-baseline.tsv` (before the layer became self-deciding) and
+`results/ab-perf-autostat.tsv` (after, with both controls). Harness: `scripts/ab-perf.sh` with the
+`baseline`, `new-nostat` and `new-static` variants; report at `scripts/ab-report.py`; record at
+volucer `docs/plan.md` hazard 85:
 
 ```bash
+# The original attribution: what the default cost, against the published build.
 BIN=~/volucer-bench/target/release/volucer \
 BIN_BASE=~/volucer-bench-old/target/release/stokehold \
 ROUNDS=9 CONC=1,8,16,32 VARIANTS=new-req,new-nostat,baseline,rr \
+  ENDPOINTS=/,/items bash scripts/ab-perf.sh
+
+# The re-measurement: the layer is off by default now, so it is the ON arm that is pinned.
+BIN=~/volucer-bench/target/release/volucer \
+ROUNDS=5 CONC=1,8,16,32 VARIANTS=new-req,new-static,rr,franken \
   ENDPOINTS=/,/items bash scripts/ab-perf.sh
 ```
 

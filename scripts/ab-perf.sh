@@ -17,11 +17,14 @@
 # spread of those ratios across rounds is the error bar.
 #
 #   variant    what it is
-#   new-req    current volucer, checksum = "required"   (what the sweep measured)
+#   new-req    current volucer, checksum = "required", static layer as the server decides it
+#              (what the sweep should measure today: the layer is off for this document root)
 #   new-opt    current volucer, checksum = "optional"   (does skipping it help?)
 #   old-req    pre-crc32c-fix volucer, checksum = "required"  (what the fix bought)
 #   baseline   the published build 91cc7b6, checksum = "required"  (what everything since cost)
 #   new-nostat same binary as new-req, static layer off     (how much of that is the new default)
+#   new-static same binary as new-req, static layer FORCED on (what the layer costs now that the
+#              default turns it off for a document root holding no asset)
 #   rr         RoadRunner, resident worker                 (the control)
 #   franken    FrankenPHP, worker mode                     (embedded-runtime control)
 #
@@ -104,7 +107,7 @@ BIN_PREFIX="${BIN_PREFIX:-$HOME/volucer-bench-prefix/target/release/volucer}"
 RUNDIR="${RUNDIR:-$HOME/volucer-bench-run-ab}"
 RR="${RR:-$HOME/bin/rr}"
 FP="${FP:-$HOME/bin/frankenphp}"
-VARIANTS="${VARIANTS:-new-req,new-opt,old-req,rr,franken}"
+VARIANTS="${VARIANTS:-new-req,new-static,new-opt,old-req,rr,franken}"
 CONC="${CONC:-8,16,32}"
 DUR="${DUR:-5s}"
 ROUNDS="${ROUNDS:-7}"
@@ -222,6 +225,21 @@ working_dir = "$ROOT"
 max_requests = 0
 checksum = "$(checksum_of "$variant")"
 EOF
+            # The static layer, spelled out per variant rather than left to the
+            # default, because the default is no longer the same for every
+            # deployment. Since the layer is turned off for a site whose document
+            # root holds no asset (see the note on `new-static` above), a variant
+            # that writes nothing gets *off* here — so the arm that has to be
+            # pinned explicitly is the one that wants it ON.
+            if [ "$variant" = "new-static" ]; then
+                cat >> "$file" <<'EOF'
+
+# Asked for, so the decision that turns the layer off where it cannot help
+# does not apply: a written `enabled = true` is honoured.
+[server.static_files]
+enabled = true
+EOF
+            fi
             # `-nostat` is the same *binary* as `new-req` with the static layer
             # turned off. It exists so a delta against `baseline` can be attributed
             # rather than merely detected: the static layer became on-by-default
@@ -488,6 +506,7 @@ label_of() {
         old-req) echo "volucer worker (pre-crc32c-fix)" ;;
         baseline) echo "volucer worker (published build 91cc7b6)" ;;
         new-nostat) echo "volucer worker (static layer off)" ;;
+        new-static) echo "volucer worker (static layer on, forced)" ;;
         prefix) echo "volucer worker (pre-stat-fix)" ;;
         rr) echo "roadrunner worker" ;;
         franken) echo "frankenphp worker (embedded php)" ;;
