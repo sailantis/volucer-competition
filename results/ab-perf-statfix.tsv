@@ -1,0 +1,169 @@
+variant	conc	round	endpoint	label	rps	p50	p99
+new-req	1	1	/	volucer worker (checksum required)	3183.95	306.00us	455.00us
+new-req	8	1	/	volucer worker (checksum required)	20920.53	363.00us	694.00us
+new-req	16	1	/	volucer worker (checksum required)	28823.05	519.00us	1.18ms
+new-req	32	1	/	volucer worker (checksum required)	33186.91	0.89ms	2.40ms
+new-req	1	1	/items	volucer worker (checksum required)	2053.57	471.00us	717.00us
+new-req	8	1	/items	volucer worker (checksum required)	12595.75	596.00us	1.18ms
+new-req	16	1	/items	volucer worker (checksum required)	16951.22	0.88ms	1.86ms
+new-req	32	1	/items	volucer worker (checksum required)	21400.00	1.40ms	3.52ms
+prefix	1	1	/	volucer worker (pre-stat-fix)	2466.87	380.00us	728.00us
+prefix	8	1	/	volucer worker (pre-stat-fix)	17029.69	446.00us	0.88ms
+prefix	16	1	/	volucer worker (pre-stat-fix)	24462.00	614.00us	1.39ms
+prefix	32	1	/	volucer worker (pre-stat-fix)	28194.54	1.05ms	2.74ms
+prefix	1	1	/items	volucer worker (pre-stat-fix)	1770.02	523.00us	0.98ms
+prefix	8	1	/items	volucer worker (pre-stat-fix)	12191.15	619.00us	1.21ms
+prefix	16	1	/items	volucer worker (pre-stat-fix)	16694.11	0.89ms	1.88ms
+prefix	32	1	/items	volucer worker (pre-stat-fix)	19969.50	1.50ms	3.78ms
+rr	1	1	/	roadrunner worker	3130.64	310.00us	545.00us
+rr	8	1	/	roadrunner worker	20150.39	363.00us	0.97ms
+rr	16	1	/	roadrunner worker	33931.25	428.00us	1.43ms
+rr	32	1	/	roadrunner worker	35949.12	825.00us	2.13ms
+rr	1	1	/items	roadrunner worker	1795.38	544.00us	782.00us
+rr	8	1	/items	roadrunner worker	11287.66	640.00us	1.51ms
+rr	16	1	/items	roadrunner worker	17521.33	832.00us	2.12ms
+rr	32	1	/items	roadrunner worker	18234.16	1.66ms	3.33ms
+prefix	1	2	/	volucer worker (pre-stat-fix)	3228.76	303.00us	444.00us
+prefix	8	2	/	volucer worker (pre-stat-fix)	21109.29	360.00us	676.00us
+prefix	16	2	/	volucer worker (pre-stat-fix)	29123.66	513.00us	1.18ms
+prefix	32	2	/	volucer worker (pre-stat-fix)	32827.54	0.89ms	2.41ms
+prefix	1	2	/items	volucer worker (pre-stat-fix)	2021.36	479.00us	716.00us
+prefix	8	2	/items	volucer worker (pre-stat-fix)	12845.06	590.00us	1.15ms
+prefix	16	2	/items	volucer worker (pre-stat-fix)	16869.48	0.88ms	1.88ms
+prefix	32	2	/items	volucer worker (pre-stat-fix)	21207.85	1.43ms	3.55ms
+rr	1	2	/	roadrunner worker	3142.56	310.00us	514.00us
+rr	8	2	/	roadrunner worker	20173.31	362.00us	0.98ms
+rr	16	2	/	roadrunner worker	34723.14	418.00us	1.39ms
+rr	32	2	/	roadrunner worker	36229.32	822.00us	2.13ms
+rr	1	2	/items	roadrunner worker	1798.75	542.00us	791.00us
+rr	8	2	/items	roadrunner worker	11204.61	643.00us	1.54ms
+rr	16	2	/items	roadrunner worker	17915.34	815.00us	2.09ms
+rr	32	2	/items	roadrunner worker	18123.16	1.69ms	3.33ms
+new-req	1	2	/	volucer worker (checksum required)	3088.81	317.00us	463.00us
+new-req	8	2	/	volucer worker (checksum required)	20868.36	364.00us	691.00us
+new-req	16	2	/	volucer worker (checksum required)	28761.67	519.00us	1.19ms
+new-req	32	2	/	volucer worker (checksum required)	32764.11	0.90ms	2.36ms
+new-req	1	2	/items	volucer worker (checksum required)	1961.50	491.00us	759.00us
+new-req	8	2	/items	volucer worker (checksum required)	12265.00	613.00us	1.19ms
+new-req	16	2	/items	volucer worker (checksum required)	16494.80	0.90ms	1.92ms
+new-req	32	2	/items	volucer worker (checksum required)	20826.60	1.44ms	3.55ms
+rr	1	3	/	roadrunner worker	3067.91	316.00us	568.00us
+rr	8	3	/	roadrunner worker	19935.59	366.00us	0.96ms
+rr	16	3	/	roadrunner worker	33626.49	433.00us	1.46ms
+rr	32	3	/	roadrunner worker	35510.12	841.00us	2.10ms
+rr	1	3	/items	roadrunner worker	1750.28	556.00us	820.00us
+rr	8	3	/items	roadrunner worker	11139.08	653.00us	1.55ms
+rr	16	3	/items	roadrunner worker	17323.32	847.00us	2.13ms
+rr	32	3	/items	roadrunner worker	18028.43	1.69ms	3.28ms
+new-req	1	3	/	volucer worker (checksum required)	3289.91	297.00us	440.00us
+new-req	8	3	/	volucer worker (checksum required)	20987.79	361.00us	686.00us
+new-req	16	3	/	volucer worker (checksum required)	28728.54	519.00us	1.18ms
+new-req	32	3	/	volucer worker (checksum required)	33140.82	0.89ms	2.39ms
+new-req	1	3	/items	volucer worker (checksum required)	2010.93	484.00us	739.00us
+new-req	8	3	/items	volucer worker (checksum required)	12773.95	592.00us	1.15ms
+new-req	16	3	/items	volucer worker (checksum required)	16663.75	0.89ms	1.88ms
+new-req	32	3	/items	volucer worker (checksum required)	21022.36	1.44ms	3.62ms
+prefix	1	3	/	volucer worker (pre-stat-fix)	3049.22	317.00us	504.00us
+prefix	8	3	/	volucer worker (pre-stat-fix)	20753.57	366.00us	692.00us
+prefix	16	3	/	volucer worker (pre-stat-fix)	28282.87	529.00us	1.21ms
+prefix	32	3	/	volucer worker (pre-stat-fix)	32648.24	0.91ms	2.41ms
+prefix	1	3	/items	volucer worker (pre-stat-fix)	1987.20	488.00us	770.00us
+prefix	8	3	/items	volucer worker (pre-stat-fix)	12434.23	607.00us	1.18ms
+prefix	16	3	/items	volucer worker (pre-stat-fix)	16644.95	0.89ms	1.87ms
+prefix	32	3	/items	volucer worker (pre-stat-fix)	20984.94	1.44ms	3.50ms
+new-req	1	4	/	volucer worker (checksum required)	3027.73	323.00us	478.00us
+new-req	8	4	/	volucer worker (checksum required)	21114.46	359.00us	686.00us
+new-req	16	4	/	volucer worker (checksum required)	28567.60	525.00us	1.20ms
+new-req	32	4	/	volucer worker (checksum required)	32908.50	0.90ms	2.41ms
+new-req	1	4	/items	volucer worker (checksum required)	2122.48	458.00us	692.00us
+new-req	8	4	/items	volucer worker (checksum required)	12136.04	624.00us	1.21ms
+new-req	16	4	/items	volucer worker (checksum required)	16397.68	0.91ms	1.92ms
+new-req	32	4	/items	volucer worker (checksum required)	20646.75	1.47ms	3.64ms
+prefix	1	4	/	volucer worker (pre-stat-fix)	3154.08	308.00us	474.00us
+prefix	8	4	/	volucer worker (pre-stat-fix)	20580.79	369.00us	700.00us
+prefix	16	4	/	volucer worker (pre-stat-fix)	28329.17	528.00us	1.21ms
+prefix	32	4	/	volucer worker (pre-stat-fix)	32489.78	0.91ms	2.43ms
+prefix	1	4	/items	volucer worker (pre-stat-fix)	1974.86	490.00us	752.00us
+prefix	8	4	/items	volucer worker (pre-stat-fix)	12089.22	625.00us	1.20ms
+prefix	16	4	/items	volucer worker (pre-stat-fix)	16762.36	0.89ms	1.87ms
+prefix	32	4	/items	volucer worker (pre-stat-fix)	20714.68	1.45ms	3.63ms
+rr	1	4	/	roadrunner worker	3094.55	314.00us	537.00us
+rr	8	4	/	roadrunner worker	19814.08	368.00us	1.03ms
+rr	16	4	/	roadrunner worker	33528.94	434.00us	1.48ms
+rr	32	4	/	roadrunner worker	35506.62	842.00us	2.12ms
+rr	1	4	/items	roadrunner worker	1789.50	544.00us	793.00us
+rr	8	4	/items	roadrunner worker	11015.32	651.00us	1.57ms
+rr	16	4	/items	roadrunner worker	17445.81	838.00us	2.15ms
+rr	32	4	/items	roadrunner worker	18126.20	1.69ms	3.32ms
+prefix	1	5	/	volucer worker (pre-stat-fix)	3029.37	323.00us	477.00us
+prefix	8	5	/	volucer worker (pre-stat-fix)	20904.63	363.00us	691.00us
+prefix	16	5	/	volucer worker (pre-stat-fix)	28889.26	520.00us	1.17ms
+prefix	32	5	/	volucer worker (pre-stat-fix)	33071.08	0.89ms	2.41ms
+prefix	1	5	/items	volucer worker (pre-stat-fix)	1947.09	496.00us	788.00us
+prefix	8	5	/items	volucer worker (pre-stat-fix)	12295.22	618.00us	1.21ms
+prefix	16	5	/items	volucer worker (pre-stat-fix)	16542.88	0.90ms	1.91ms
+prefix	32	5	/items	volucer worker (pre-stat-fix)	20738.85	1.46ms	3.68ms
+rr	1	5	/	roadrunner worker	3098.84	314.00us	530.00us
+rr	8	5	/	roadrunner worker	19927.68	367.00us	0.99ms
+rr	16	5	/	roadrunner worker	33404.83	435.00us	1.41ms
+rr	32	5	/	roadrunner worker	36035.66	828.00us	2.14ms
+rr	1	5	/items	roadrunner worker	1774.18	550.00us	814.00us
+rr	8	5	/items	roadrunner worker	11086.64	656.00us	1.55ms
+rr	16	5	/items	roadrunner worker	17069.92	0.86ms	2.17ms
+rr	32	5	/items	roadrunner worker	17493.77	1.73ms	3.37ms
+new-req	1	5	/	volucer worker (checksum required)	3035.37	320.00us	493.00us
+new-req	8	5	/	volucer worker (checksum required)	20937.56	362.00us	690.00us
+new-req	16	5	/	volucer worker (checksum required)	28514.39	527.00us	1.18ms
+new-req	32	5	/	volucer worker (checksum required)	32557.79	0.90ms	2.39ms
+new-req	1	5	/items	volucer worker (checksum required)	1906.65	506.00us	770.00us
+new-req	8	5	/items	volucer worker (checksum required)	12399.67	612.00us	1.19ms
+new-req	16	5	/items	volucer worker (checksum required)	16413.83	0.90ms	1.87ms
+new-req	32	5	/items	volucer worker (checksum required)	20467.76	1.46ms	3.59ms
+rr	1	6	/	roadrunner worker	3067.43	316.00us	560.00us
+rr	8	6	/	roadrunner worker	19830.71	369.00us	0.99ms
+rr	16	6	/	roadrunner worker	33803.47	431.00us	1.46ms
+rr	32	6	/	roadrunner worker	35173.83	848.00us	2.20ms
+rr	1	6	/items	roadrunner worker	1763.83	553.00us	837.00us
+rr	8	6	/items	roadrunner worker	11047.43	658.00us	1.59ms
+rr	16	6	/items	roadrunner worker	17536.88	836.00us	2.11ms
+rr	32	6	/items	roadrunner worker	17908.88	1.69ms	3.32ms
+new-req	1	6	/	volucer worker (checksum required)	3363.12	289.00us	461.00us
+new-req	8	6	/	volucer worker (checksum required)	20299.25	374.00us	712.00us
+new-req	16	6	/	volucer worker (checksum required)	28413.71	527.00us	1.20ms
+new-req	32	6	/	volucer worker (checksum required)	32229.58	0.91ms	2.44ms
+new-req	1	6	/items	volucer worker (checksum required)	1987.76	485.00us	767.00us
+new-req	8	6	/items	volucer worker (checksum required)	11988.84	625.00us	1.21ms
+new-req	16	6	/items	volucer worker (checksum required)	16497.23	0.91ms	1.90ms
+new-req	32	6	/items	volucer worker (checksum required)	20529.13	1.46ms	3.66ms
+prefix	1	6	/	volucer worker (pre-stat-fix)	3041.77	320.00us	489.00us
+prefix	8	6	/	volucer worker (pre-stat-fix)	20728.77	366.00us	691.00us
+prefix	16	6	/	volucer worker (pre-stat-fix)	28436.79	525.00us	1.21ms
+prefix	32	6	/	volucer worker (pre-stat-fix)	32601.09	0.90ms	2.39ms
+prefix	1	6	/items	volucer worker (pre-stat-fix)	2002.37	483.00us	753.00us
+prefix	8	6	/items	volucer worker (pre-stat-fix)	12508.45	605.00us	1.18ms
+prefix	16	6	/items	volucer worker (pre-stat-fix)	16428.75	0.91ms	1.90ms
+prefix	32	6	/items	volucer worker (pre-stat-fix)	20392.79	1.49ms	3.67ms
+new-req	1	7	/	volucer worker (checksum required)	2889.65	336.00us	506.00us
+new-req	8	7	/	volucer worker (checksum required)	20954.41	362.00us	685.00us
+new-req	16	7	/	volucer worker (checksum required)	28226.50	528.00us	1.21ms
+new-req	32	7	/	volucer worker (checksum required)	32145.45	0.91ms	2.44ms
+new-req	1	7	/items	volucer worker (checksum required)	1990.45	485.00us	756.00us
+new-req	8	7	/items	volucer worker (checksum required)	12650.08	599.00us	1.15ms
+new-req	16	7	/items	volucer worker (checksum required)	16730.68	0.89ms	1.88ms
+new-req	32	7	/items	volucer worker (checksum required)	21001.78	1.43ms	3.62ms
+prefix	1	7	/	volucer worker (pre-stat-fix)	2969.69	328.00us	507.00us
+prefix	8	7	/	volucer worker (pre-stat-fix)	20522.89	370.00us	700.00us
+prefix	16	7	/	volucer worker (pre-stat-fix)	28367.26	528.00us	1.19ms
+prefix	32	7	/	volucer worker (pre-stat-fix)	32609.65	0.91ms	2.41ms
+prefix	1	7	/items	volucer worker (pre-stat-fix)	1981.47	488.00us	754.00us
+prefix	8	7	/items	volucer worker (pre-stat-fix)	12325.03	612.00us	1.18ms
+prefix	16	7	/items	volucer worker (pre-stat-fix)	16548.63	0.90ms	1.90ms
+prefix	32	7	/items	volucer worker (pre-stat-fix)	20753.36	1.44ms	3.52ms
+rr	1	7	/	roadrunner worker	2997.16	323.00us	555.00us
+rr	8	7	/	roadrunner worker	19579.10	376.00us	0.99ms
+rr	16	7	/	roadrunner worker	32994.67	440.00us	1.53ms
+rr	32	7	/	roadrunner worker	34357.16	0.87ms	2.18ms
+rr	1	7	/items	roadrunner worker	1688.12	578.00us	0.86ms
+rr	8	7	/items	roadrunner worker	10863.08	670.00us	1.59ms
+rr	16	7	/items	roadrunner worker	16969.72	0.86ms	2.20ms
+rr	32	7	/items	roadrunner worker	17662.11	1.74ms	3.37ms
