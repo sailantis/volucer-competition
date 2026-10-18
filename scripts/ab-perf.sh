@@ -20,6 +20,7 @@
 #   new-req    current volucer, checksum = "required"   (what the sweep measured)
 #   new-opt    current volucer, checksum = "optional"   (does skipping it help?)
 #   old-req    pre-crc32c-fix volucer, checksum = "required"  (what the fix bought)
+#   baseline   the published build 91cc7b6, checksum = "required"  (what everything since cost)
 #   rr         RoadRunner, resident worker                 (the control)
 #   franken    FrankenPHP, worker mode                     (embedded-runtime control)
 #
@@ -89,6 +90,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="${ROOT:-$(dirname "$SCRIPT_DIR")}"
 BIN="${BIN:-$HOME/volucer-bench/target/release/volucer}"
 BIN_OLD="${BIN_OLD:-$HOME/volucer-bench-nocrc/target/release/volucer}"
+# The *published* build, which is a different question from `old-req`. `old-req` is a
+# targeted revert of one function out of the current tree, so it isolates the crc32c
+# change and nothing else. `baseline` is the commit the published sweep measured
+# (`91cc7b6`), so it isolates *everything* that has happened since — which is what "what
+# did the new features cost" means, and what a one-function revert cannot answer.
+BIN_BASE="${BIN_BASE:-$HOME/volucer-bench-old/target/release/stokehold}"
 RUNDIR="${RUNDIR:-$HOME/volucer-bench-run-ab}"
 RR="${RR:-$HOME/bin/rr}"
 FP="${FP:-$HOME/bin/frankenphp}"
@@ -152,6 +159,7 @@ port_of() { echo $((PORT_BASE + $(variant_index "$1"))); }
 binary_of() {
     case "$1" in
         old-req | old-opt) echo "$BIN_OLD" ;;
+        baseline) echo "$BIN_BASE" ;;
         *) echo "$BIN" ;;
     esac
 }
@@ -457,6 +465,7 @@ label_of() {
         new-req) echo "volucer worker (checksum required)" ;;
         new-opt) echo "volucer worker (checksum optional)" ;;
         old-req) echo "volucer worker (pre-crc32c-fix)" ;;
+        baseline) echo "volucer worker (published build 91cc7b6)" ;;
         rr) echo "roadrunner worker" ;;
         franken) echo "frankenphp worker (embedded php)" ;;
         *) echo "$1" ;;
@@ -477,6 +486,11 @@ for v in ${VARIANTS//,/ }; do
     [ "$v" = "old-req" ] || [ "$v" = "old-opt" ] || continue
     [ -x "$BIN_OLD" ] && echo "  old  binary: $(md5sum "$BIN_OLD" | cut -d' ' -f1)  (pre-crc32c-fix)" \
         || fail "variant $v needs BIN_OLD at $BIN_OLD"
+done
+for v in ${VARIANTS//,/ }; do
+    [ "$v" = "baseline" ] || continue
+    [ -x "$BIN_BASE" ] && echo "  base binary: $(md5sum "$BIN_BASE" | cut -d' ' -f1)  (published 91cc7b6)" \
+        || fail "variant $v needs BIN_BASE at $BIN_BASE"
 done
 echo "  variants:    $VARIANTS"
 echo "  rotation:    round r starts at variant r mod $(awk -F, '{print NF}' <<<"$VARIANTS")"
