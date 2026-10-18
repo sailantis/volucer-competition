@@ -97,6 +97,10 @@ BIN_OLD="${BIN_OLD:-$HOME/volucer-bench-nocrc/target/release/volucer}"
 # (`91cc7b6`), so it isolates *everything* that has happened since — which is what "what
 # did the new features cost" means, and what a one-function revert cannot answer.
 BIN_BASE="${BIN_BASE:-$HOME/volucer-bench-old/target/release/stokehold}"
+# The same commit as `new-req` with one function not yet fixed — used to price a
+# change that is otherwise invisible in a config diff. `prefix` runs the *same*
+# config as `new-req` (static on), so a ratio between them can only be the code.
+BIN_PREFIX="${BIN_PREFIX:-$HOME/volucer-bench-prefix/target/release/volucer}"
 RUNDIR="${RUNDIR:-$HOME/volucer-bench-run-ab}"
 RR="${RR:-$HOME/bin/rr}"
 FP="${FP:-$HOME/bin/frankenphp}"
@@ -161,6 +165,7 @@ binary_of() {
     case "$1" in
         old-req | old-opt) echo "$BIN_OLD" ;;
         baseline) echo "$BIN_BASE" ;;
+        prefix) echo "$BIN_PREFIX" ;;
         *) echo "$BIN" ;;
     esac
 }
@@ -483,6 +488,7 @@ label_of() {
         old-req) echo "volucer worker (pre-crc32c-fix)" ;;
         baseline) echo "volucer worker (published build 91cc7b6)" ;;
         new-nostat) echo "volucer worker (static layer off)" ;;
+        prefix) echo "volucer worker (pre-stat-fix)" ;;
         rr) echo "roadrunner worker" ;;
         franken) echo "frankenphp worker (embedded php)" ;;
         *) echo "$1" ;;
@@ -508,6 +514,11 @@ for v in ${VARIANTS//,/ }; do
     [ "$v" = "baseline" ] || continue
     [ -x "$BIN_BASE" ] && echo "  base binary: $(md5sum "$BIN_BASE" | cut -d' ' -f1)  (published 91cc7b6)" \
         || fail "variant $v needs BIN_BASE at $BIN_BASE"
+done
+for v in ${VARIANTS//,/ }; do
+    [ "$v" = "prefix" ] || continue
+    [ -x "$BIN_PREFIX" ] && echo "  pre  binary: $(md5sum "$BIN_PREFIX" | cut -d' ' -f1)  (same commit, one stat fix short)" \
+        || fail "variant $v needs BIN_PREFIX at $BIN_PREFIX"
 done
 echo "  variants:    $VARIANTS"
 echo "  rotation:    round r starts at variant r mod $(awk -F, '{print NF}' <<<"$VARIANTS")"
