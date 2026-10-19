@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "0f1ac5fce9f8be7dbcf88d3de9fddf17",
+    "content-hash": "4c05f0a467b53d11c734961775fff1ea",
     "packages": [
         {
             "name": "google/protobuf",
@@ -613,12 +613,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/sailantis/volucer-php-sdk.git",
-                "reference": "4848e5b05c0678810585ae09b8c0f8d8e04d415f"
+                "reference": "4cae8517c60bb3bffd5dc1f33621ca3b417d4c09"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/sailantis/volucer-php-sdk/zipball/4848e5b05c0678810585ae09b8c0f8d8e04d415f",
-                "reference": "4848e5b05c0678810585ae09b8c0f8d8e04d415f",
+                "url": "https://api.github.com/repos/sailantis/volucer-php-sdk/zipball/4cae8517c60bb3bffd5dc1f33621ca3b417d4c09",
+                "reference": "4cae8517c60bb3bffd5dc1f33621ca3b417d4c09",
                 "shasum": ""
             },
             "require": {

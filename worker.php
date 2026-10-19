@@ -48,8 +48,12 @@ $app->bootstrap();
 // worker — the measurement `scripts/fork-demo.php` makes, and the reason volucer grew a backend
 // that dials a relay instead of spawning a process.
 //
+//     php worker.php --prefork                      # the relay from VOLUCER_RELAY_SOCKET
 //     php worker.php --prefork unix:/run/app/workers.sock
 //
+// The argument is optional. `relay` in `volucer.toml` names the same address, so a deployment can
+// write it once in the unit file and have both sides read it — see the SDK README's
+// "the address can be written once".
 // The loop itself is the SDK's, in `Volucer\Supervisor`. It lives there rather than in this file
 // because it is not application code: every application that wants the fork model needs the same
 // decisions — accept in the master so the assignment stays exact, reap from the accept loop rather
@@ -64,11 +68,10 @@ $app->bootstrap();
 // already said "listening" shows up as a connection reset on the pool's first request rather
 // than as the error it is. `Supervisor::serve()` warms the SDK's own classes for the same reason.
 if (($argv[1] ?? '') === '--prefork') {
-    $relay = $argv[2] ?? '';
-    if ($relay === '') {
-        fwrite(STDERR, "usage: php worker.php --prefork <unix:/path/to.sock>\n");
-        exit(2);
-    }
+    // `null` when the argument is absent, which is where `VOLUCER_RELAY_SOCKET` is read. The
+    // harnesses still pass it explicitly, because a benchmark's two arms must be told apart by
+    // their own configuration rather than by a variable in the operator's shell.
+    $relay = ($argv[2] ?? '') === '' ? null : $argv[2];
 
     // The SDK is pinned to a commit in `composer.json`, so a checkout that was installed before the
     // supervisor existed has a `Volucer\Worker` and no `Volucer\Supervisor`. Saying so is worth the
