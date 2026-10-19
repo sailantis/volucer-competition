@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "bdd5018bbfb2ff1843f4510d9329ac70",
+    "content-hash": "0f1ac5fce9f8be7dbcf88d3de9fddf17",
     "packages": [
         {
             "name": "google/protobuf",
@@ -489,7 +489,7 @@
             },
             "suggest": {
                 "ext-mongodb": "PHP driver for MongoDB document persistence (Azera\\Orm\\Storage\\MongoStore)",
-                "mongodb/mongodb": "Required for MongoDB document persistence (Azera\\Orm\\Storage\\MongoStore) — install together with the ext-mongodb PHP extension. Optional: only tests/MongoLiveTest.php needs the real package; all other Mongo tests run against an in-memory fake"
+                "mongodb/mongodb": "Required for MongoDB document persistence (Azera\\Orm\\Storage\\MongoStore) â€” install together with the ext-mongodb PHP extension. Optional: only tests/MongoLiveTest.php needs the real package; all other Mongo tests run against an in-memory fake"
             },
             "default-branch": true,
             "bin": [
@@ -613,12 +613,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/sailantis/volucer-php-sdk.git",
-                "reference": "4b4134834007196eac4f44f76135deafbd8a2735"
+                "reference": "4848e5b05c0678810585ae09b8c0f8d8e04d415f"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/sailantis/volucer-php-sdk/zipball/4b4134834007196eac4f44f76135deafbd8a2735",
-                "reference": "4b4134834007196eac4f44f76135deafbd8a2735",
+                "url": "https://api.github.com/repos/sailantis/volucer-php-sdk/zipball/4848e5b05c0678810585ae09b8c0f8d8e04d415f",
+                "reference": "4848e5b05c0678810585ae09b8c0f8d8e04d415f",
                 "shasum": ""
             },
             "require": {
@@ -663,7 +663,7 @@
                 "issues": "https://github.com/sailantis/volucer-php-sdk/issues",
                 "source": "https://github.com/sailantis/volucer-php-sdk"
             },
-            "time": "2026-10-14T23:50:04+00:00"
+            "time": "2026-10-19T12:36:14+00:00"
         },
         {
             "name": "spiral/goridge",

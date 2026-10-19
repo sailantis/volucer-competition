@@ -1284,11 +1284,16 @@ PHP process cannot hand a file descriptor over, so the side that owns the socket
 side that owns the fork. `kind = "attach"` is that shape - volucer **dials** a `unix:` relay a
 supervisor listens on, and does not start a process at all.
 
-`worker.php --prefork unix:/run/app/workers.sock` is the supervisor: boot once, accept in the
-master, fork per connection. Accepting in the master rather than in every child is deliberate:
-the kernel wakes one waiter per connection and does not do it fairly, so N children sharing one
-listener can leave one holding two connections and another none - a slot whose connection nobody
-is reading.
+`worker.php --prefork unix:/run/app/workers.sock` is the supervisor: boot the application once, then
+hand off to `Volucer\Supervisor::serve()` in the SDK, which accepts in the master and forks per
+connection. Accepting in the master rather than in every child is deliberate: the kernel wakes one
+waiter per connection and does not do it fairly, so N children sharing one listener can leave one
+holding two connections and another none - a slot whose connection nobody is reading.
+
+The loop is in the SDK rather than in this file because it is not application code: the decisions
+it makes are the same for every application, and the ones that are easy to get subtly wrong are
+exactly the ones a copy drifts on. This file now supplies only what is its own — the `BenchApp`
+boot the children inherit, and the handler.
 
 Same configuration, alternating runs, three each:
 

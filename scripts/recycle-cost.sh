@@ -244,12 +244,15 @@ run_attach_arm() { # port max_requests phase round
 
     "$D/php-worker" "$ROOT/worker.php" --prefork "unix:$relay" > "$D/sup-$port-$round.out" 2>&1 &
     SUP=$!
+    # The supervisor's own readiness line, on stderr, once the listener exists. Waiting for it
+    # rather than for the socket path is what makes the `rm` above belt and braces rather than
+    # load-bearing.
     for _ in $(seq 1 300); do
         kill -0 "$SUP" 2>/dev/null || break
-        [ -S "$relay" ] && break
+        grep -q 'listening on' "$D/sup-$port-$round.out" 2>/dev/null && break
         sleep 0.1
     done
-    if ! kill -0 "$SUP" 2>/dev/null || [ ! -S "$relay" ]; then
+    if ! grep -q 'listening on' "$D/sup-$port-$round.out" 2>/dev/null; then
         echo "FAIL ? ? ?"
         sed 's/^/    /' "$D/sup-$port-$round.out" | head -5
         SUP=""
@@ -342,7 +345,7 @@ setup_fpm() {
 write_fpm_pool() { # socket max_requests workers
     local socket="$1" max="$2" n="$3"
     # Not `/etc/php/*/...`: `/etc/php` is not readable by the unprivileged user, so the
-    # glob never expands and `tee` is handed the literal pattern — which fails with
+    # glob never expands and `tee` is handed the literal pattern â€” which fails with
     # "No such file or directory" and looks like a missing php-fpm. `FPM_POOL_DIR` is
     # resolved once in `setup_fpm`, where the version is known.
     sudo tee "$FPM_POOL_DIR/bench-recycle.conf" >/dev/null <<EOF

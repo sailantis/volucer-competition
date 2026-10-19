@@ -50,11 +50,19 @@ $app->bootstrap();
 //
 //     php worker.php --prefork unix:/run/app/workers.sock
 //
-// **The application is booted before the fork and the SDK is loaded before it too**, and both
+// The loop itself is the SDK's, in `Volucer\Supervisor`. It lives there rather than in this file
+// because it is not application code: every application that wants the fork model needs the same
+// decisions — accept in the master so the assignment stays exact, reap from the accept loop rather
+// than from a `SIGCHLD` handler, drop the master's copy of the connection, `exit` rather than a
+// return from the child — and a supervisor copied into each application gets them subtly
+// differently. This file now supplies only what is genuinely its own: the boot to inherit, and the
+// handler.
+//
+// **The application is booted before the fork, and the SDK is loaded before it too**, and both
 // are load-bearing. A class the master has not loaded is one each child compiles for itself,
 // which would undo half the saving; and a child that fatals in `require` after the master has
 // already said "listening" shows up as a connection reset on the pool's first request rather
-// than as the error it is.
+// than as the error it is. `Supervisor::serve()` warms the SDK's own classes for the same reason.
 if (($argv[1] ?? '') === '--prefork') {
     $relay = $argv[2] ?? '';
     if ($relay === '') {
@@ -62,87 +70,33 @@ if (($argv[1] ?? '') === '--prefork') {
         exit(2);
     }
 
-    // Force the load now, so every child inherits it rather than lazily compiling its own.
-    class_exists(Volucer\Worker::class);
-    class_exists(Volucer\Request::class);
-    class_exists(Volucer\Response::class);
-
-    // `unix:` is volucer's convention, not PHP's: `stream_socket_server` takes the bare path.
-    $path = str_starts_with($relay, 'unix:') ? substr($relay, 5) : $relay;
-    @unlink($path);
-    $listener = stream_socket_server('unix://' . $path, $errno, $errstr);
-    if ($listener === false) {
-        fwrite(STDERR, "prefork: cannot listen on {$path}: {$errstr} ({$errno})\n");
+    // The SDK is pinned to a commit in `composer.json`, so a checkout that was installed before the
+    // supervisor existed has a `Volucer\Worker` and no `Volucer\Supervisor`. Saying so is worth the
+    // four lines: the alternative is a "class not found" inside a `require`, which reads like a typo.
+    if (!class_exists(Volucer\Supervisor::class)) {
+        fwrite(
+            STDERR,
+            "prefork: this volucer-worker build has no Volucer\\Supervisor; raise the "
+            . "sailantis/volucer-worker pin in composer.json and run `composer update`\n",
+        );
         exit(1);
     }
 
-    // Readiness is announced only once the listener exists, so `volucer serve` can start
-    // immediately afterwards without racing the socket.
-    fwrite(STDOUT, "listening\n");
-    fflush(STDOUT);
+    Volucer\Supervisor::serve($relay, static function (Volucer\Request $request) use ($app): Volucer\Response {
+        $result = $app->dispatch($request->method, $request->uri);
+        // Drop this request's scope, or the next one inherits it. In a supervisor this matters
+        // more than in a reused process, because the next request may be served by a *different*
+        // child that inherited none of it.
+        $app->cleanup();
 
-    // **Reaping is not optional here, and it is not the operating system's job.** A child that
-    // exits stays a zombie until its parent waits for it, and a supervisor that only accepts
-    // and forks grows one per connection — measured at exactly 10 zombies for 10 connections,
-    // which for a pool that recycles is a process table that fills up over a day. `SIGCHLD`
-    // with a `WNOHANG` loop is the standard answer: the handler must not block, because it runs
-    // between any two instructions of the accept loop.
-    pcntl_async_signals(true);
-    pcntl_signal(SIGCHLD, static function (): void {
-        while (pcntl_waitpid(-1, $status, WNOHANG) > 0) {
-            // Reap everything that has exited. php-fpm's answer for the same problem.
-        }
+        return new Volucer\Response(
+            $result->status,
+            [['Content-Type', 'text/html; charset=utf-8']],
+            $result->body,
+        );
     });
 
-    // Accept in the master, fork per connection. The ordering is what keeps the assignment
-    // exact: the kernel wakes one waiter per connection and does not do it fairly, so N children
-    // sharing the listener can leave one holding two connections and another none — which for
-    // volucer would mean a slot whose connection nobody is reading.
-    while (true) {
-        $connection = @stream_socket_accept($listener, -1);
-        if ($connection === false) {
-            // A signal interrupted the accept, which is expected once per exiting child. The
-            // signal handler has already reaped it; this loop just goes back to waiting.
-            continue;
-        }
-
-        $pid = pcntl_fork();
-        if ($pid === -1) {
-            // Out of processes. Dropping the connection is the honest answer: volucer sees a
-            // closed socket on that slot and replaces it on the next request, where pretending
-            // to have forked would leave a slot waiting for an answer that never comes.
-            fclose($connection);
-
-            continue;
-        }
-
-        if ($pid !== 0) {
-            // The master must drop its copy, or the socket never reaches end-of-file when the
-            // child exits and one fd leaks per connection.
-            fclose($connection);
-
-            continue;
-        }
-
-        fclose($listener);
-
-        // `create()`, not `connect()`: the connection is already open and is handed over. The
-        // child inherited the booted `$app` by copy-on-write, which is the whole point.
-        Volucer\Worker::create($connection, $connection)->run(
-            static function (Volucer\Request $request) use ($app): Volucer\Response {
-                $result = $app->dispatch($request->method, $request->uri);
-                $app->cleanup();
-
-                return new Volucer\Response(
-                    $result->status,
-                    [['Content-Type', 'text/html; charset=utf-8']],
-                    $result->body,
-                );
-            },
-        );
-
-        exit(0);
-    }
+    exit(0);
 }
 
 $worker = Volucer\Worker::connect();

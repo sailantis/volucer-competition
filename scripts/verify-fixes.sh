@@ -163,8 +163,17 @@ echo
 # framework container, so a hello-world supervisor would prove the plumbing and nothing else.
 "$DIR/php-bench" "$ROOT/worker.php" --prefork "unix:$RELAY" > "$DIR/supervisor.out" 2>&1 &
 SUP=$!
-for _ in $(seq 1 300); do [ -S "$RELAY" ] && break; sleep 0.1; done
-if [ ! -S "$RELAY" ]; then
+# The supervisor announces itself on **stderr** once the listener exists. Waiting for a log line
+# rather than for the socket *file* is deliberate: a file left by a supervisor that was `SIGKILL`ed
+# is still `-S`, so a check that only tests for the path passes instantly against a listener that is
+# gone, and volucer then fails at startup on a path that exists. `worker.php` redirects stderr into
+# the same file, so this reads it either way.
+for _ in $(seq 1 300); do
+    grep -q 'listening on' "$DIR/supervisor.out" 2>/dev/null && break
+    kill -0 "$SUP" 2>/dev/null || break
+    sleep 0.1
+done
+if ! grep -q 'listening on' "$DIR/supervisor.out" 2>/dev/null; then
     sed 's/^/    /' "$DIR/supervisor.out"
     fail "the supervisor did not listen"
 fi
