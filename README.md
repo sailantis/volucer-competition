@@ -1231,6 +1231,97 @@ through a `socat` bridge reached 9,352 req/s, but that path adds a TCP hop and i
 a load generator that speaks `unix://` directly — Ubuntu's `wrk` 4.1.0 does not have
 `--unix-socket` — which is why the in-process number above is the honest one to quote.
 
+## What the three fixes are worth, measured
+
+The fork discussion left three concrete defects, each with a number attached. All three are fixed
+in `volucer` and the PHP SDK, and re-measured here on the same host, the same page and the same
+published configuration (`w = 16`, `c = 64`, `wrk -t12`, opcache on). `scripts/verify-fixes.sh`
+reproduces the first two and the `attach` plumbing end to end.
+
+### 1. `TCP_NODELAY` in the PHP SDK: the socket transport was 100x slow
+
+The SDK opened its socket with `stream_socket_client` and never disabled Nagle, while the server
+did. The protocol writes a header and a payload as two small writes and is a strict ping-pong, so
+Nagle held the second write until the peer acknowledged the first - and a delayed ACK is up to
+40 ms away. Every request paid the timer.
+
+One option, in the connect context (`tcp_nodelay`, which PHP applies with
+`setsockopt(SOL_TCP, TCP_NODELAY, 1)` during the connect - verified with `strace`, not assumed):
+
+| transport | before | after |
+|---|---|---|
+| `socket` (the same 16 workers, same page) | **24 rps** | **22,257 rps** |
+| `pipe`, for reference | 23,740 rps | 23,740 rps |
+
+The socket transport is 6% behind the pipe rather than 100x behind it, which is the connection's
+syscall cost. That makes it a second option rather than a broken one - and it is the default on
+Windows, where the pipe is the slow one.
+
+### 2. The Unix lifecycle guard existed only as a comment
+
+`lifecycle.rs` described a process group and `PR_SET_PDEATHSIG` and implemented neither: `killpg`
+appeared nowhere, every kill was `Child::kill` on one pid, and `LifecycleGuard::adopt` was a no-op
+on Unix. The consequence is the hazard the file exists for - a `SIGKILL`ed or OOM-killed server
+leaves its `php-cgi` and worker children running, holding their ports, with nothing that knows
+their configuration.
+
+Both halves are now real, and they cover different failures. The **process group** is what a
+deliberate kill targets, so `lifecycle::kill` reaches a worker *and* anything it forked - which is
+what makes a prefork supervisor's children die with it. `PR_SET_PDEATHSIG` covers the case a group
+cannot: it is installed in the child's `pre_exec` hook, so the kernel delivers `SIGKILL` when the
+parent dies **without getting a turn**, which is exactly what `SIGKILL` on the server is.
+
+| 4 workers, server `SIGKILL`ed | children still running 1 s later |
+|---|---|
+| before | 4 - reparented to init, still bound |
+| after | **0** |
+
+### 3. `attach`: the fork model, with the warm pipe kept
+
+The fork saving is real (~89% less memory for the same worker count) but a server cannot collect
+it by spawning: an `exec`ed process cannot attach to an existing OPcache segment on Linux, and a
+PHP process cannot hand a file descriptor over, so the side that owns the socket has to be the
+side that owns the fork. `kind = "attach"` is that shape - volucer **dials** a `unix:` relay a
+supervisor listens on, and does not start a process at all.
+
+`worker.php --prefork unix:/run/app/workers.sock` is the supervisor: boot once, accept in the
+master, fork per connection. Accepting in the master rather than in every child is deliberate:
+the kernel wakes one waiter per connection and does not do it fairly, so N children sharing one
+listener can leave one holding two connections and another none - a slot whose connection nobody
+is reading.
+
+Same configuration, alternating runs, three each:
+
+| | rps | PSS before load | PSS after 10 s at c=64 |
+|---|---|---|---|
+| `worker`, 16 `exec`ed processes | 23,937 / 24,228 / 24,143 | 263 MB | 314 MB |
+| `attach`, supervisor + 16 children | **25,322 / 25,981 / 25,585** | **48 MB** | **69 MB** |
+
+**263 MB against 48 MB, for the same 16 processes doing the same work, at no throughput cost** -
+the `attach` arm is actually 5% faster, because a unix socket write is cheaper than a pipe write.
+Summed RSS cannot see this: it counts every shared page once per child and reports 758 MB against
+314 MB, which understates the saving. PSS splits a shared page between its mappers, so summing it
+is what the machine holds.
+
+What that does **not** mean is that `attach` should replace `worker`. It costs a socket per slot
+and a supervisor the operator has to run and reload; the 5% is inside the noise of a 12-core VM
+under wrk, and `worker` needs no second process. It means the fork model is now reachable for
+deployments that want the memory back, without giving up the warm pipe the way `spawn_cgi` does -
+8,292 rps there against 25,585 here.
+
+### The cheap order, and what is still open
+
+The order this was built in was deliberate: the SDK fix is one line and unblocks a transport; the
+lifecycle fix is required for `spawn_cgi` whether or not anyone forks; `attach` is the smallest
+server change that makes the fork real; and fair `accept()` distribution stops mattering once the
+master owns the accept.
+
+Still unmeasured, and the honest next question: **the cost of recycling**. Every arm here runs
+`max_requests = 0`, so nothing has measured what a worker's replacement costs - and for a forked
+pool it should be a `connect` and a handshake rather than a framework boot, which is the argument
+that would make aggressive recycling cheap enough to bound a leak. `attach` supports
+`max_requests` for exactly that experiment.
+
 ## Reproducing
 
 ```bash
@@ -1307,6 +1398,7 @@ TRANSPORT=socket CHILDREN=1 bash scripts/fork-worker-demo.sh   # the TCP transpo
 STOP=kill CHILDREN=4 bash scripts/fork-worker-demo.sh # what SIGKILLing the server leaves
 
 CHILDREN=8 php scripts/fork-relay.php                 # the recommended design, at load
+bash scripts/verify-fixes.sh                          # all three fixes, end to end
 # then, with a load generator that speaks unix:// (Ubuntu's wrk 4.1.0 does not):
 #   wrk -t12 -c64 -d5s --latency --unix-socket /tmp/volucer-relay.sock http://localhost/items
 ```
@@ -1639,6 +1731,8 @@ scripts/fork-worker-demo.sh  the "forking worker" proposal against real volucer:
                         transport, liveness, teardown, and one process group
 scripts/fork-relay.php  the recommended design at load: one boot, N children,
                         one inherited unix listener (HTTP, so wrk can drive it)
+scripts/verify-fixes.sh end to end, with a real server and real signals: the socket
+                        transport, a SIGKILLed server's children, and kind = "attach"
 scripts/probe-franken-php.sh asks the running FrankenPHP which PHP it executes,
                         rather than trusting a version banner
 scripts/ab-perf.sh      interleaved warm-arm pass: every arm inside one round

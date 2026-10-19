@@ -42,6 +42,85 @@ $app->bootstrap();
  * `Worker::connect()` is the whole decision — the protocol does not know which transport
  * it is on, so nothing else in this file changes.
  */
+// **Supervisor mode**, which is the shape the `attach` backend exists for: one boot, then
+// accept-and-fork. Each child serves one connection from the heap it inherited, so the
+// interpreter and the OPcache segment are shared copy-on-write instead of mapped once per
+// worker — the measurement `scripts/fork-demo.php` makes, and the reason volucer grew a backend
+// that dials a relay instead of spawning a process.
+//
+//     php worker.php --prefork unix:/run/app/workers.sock
+//
+// **The application is booted before the fork and the SDK is loaded before it too**, and both
+// are load-bearing. A class the master has not loaded is one each child compiles for itself,
+// which would undo half the saving; and a child that fatals in `require` after the master has
+// already said "listening" shows up as a connection reset on the pool's first request rather
+// than as the error it is.
+if (($argv[1] ?? '') === '--prefork') {
+    $relay = $argv[2] ?? '';
+    if ($relay === '') {
+        fwrite(STDERR, "usage: php worker.php --prefork <unix:/path/to.sock>\n");
+        exit(2);
+    }
+
+    // Force the load now, so every child inherits it rather than lazily compiling its own.
+    class_exists(Volucer\Worker::class);
+    class_exists(Volucer\Request::class);
+    class_exists(Volucer\Response::class);
+
+    // `unix:` is volucer's convention, not PHP's: `stream_socket_server` takes the bare path.
+    $path = str_starts_with($relay, 'unix:') ? substr($relay, 5) : $relay;
+    @unlink($path);
+    $listener = stream_socket_server('unix://' . $path, $errno, $errstr);
+    if ($listener === false) {
+        fwrite(STDERR, "prefork: cannot listen on {$path}: {$errstr} ({$errno})\n");
+        exit(1);
+    }
+
+    // Readiness is announced only once the listener exists, so `volucer serve` can start
+    // immediately afterwards without racing the socket.
+    fwrite(STDOUT, "listening\n");
+    fflush(STDOUT);
+
+    // Accept in the master, fork per connection. The ordering is what keeps the assignment
+    // exact: the kernel wakes one waiter per connection and does not do it fairly, so N children
+    // sharing the listener can leave one holding two connections and another none — which for
+    // volucer would mean a slot whose connection nobody is reading.
+    while (true) {
+        $connection = @stream_socket_accept($listener, -1);
+        if ($connection === false) {
+            continue;
+        }
+
+        $pid = pcntl_fork();
+        if ($pid !== 0) {
+            // The master must drop its copy, or the socket never reaches end-of-file when the
+            // child exits and one fd leaks per connection.
+            fclose($connection);
+
+            continue;
+        }
+
+        fclose($listener);
+
+        // `create()`, not `connect()`: the connection is already open and is handed over. The
+        // child inherited the booted `$app` by copy-on-write, which is the whole point.
+        Volucer\Worker::create($connection, $connection)->run(
+            static function (Volucer\Request $request) use ($app): Volucer\Response {
+                $result = $app->dispatch($request->method, $request->uri);
+                $app->cleanup();
+
+                return new Volucer\Response(
+                    $result->status,
+                    [['Content-Type', 'text/html; charset=utf-8']],
+                    $result->body,
+                );
+            },
+        );
+
+        exit(0);
+    }
+}
+
 $worker = Volucer\Worker::connect();
 
 $worker->run(static function (Volucer\Request $request) use ($app): Volucer\Response {
