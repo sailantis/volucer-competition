@@ -505,6 +505,20 @@ the one arm ahead of volucer anywhere: **+17.5% on `/` at c=1** (0.825x), a cell
 wins on `/items` by −4.9% with a range crossing 1.00, so at concurrency 1 the two are close and
 inconsistent rather than ordered.
 
+**The host had 3.9 GB of RAM, and that is not a confound — measured, not assumed.** An earlier
+draft of this section called it one, on the reasoning that the published sweep ran on a bigger
+host. It does not survive being checked. Sampled once per half-second across a three-arm sweep at
+concurrency 32: minimum `MemAvailable` **2,842 MB**, the kernel's PSI memory-stall counter
+**unchanged at 220,362 µs** across the whole run, and **zero swap-out pages** — on a host with no
+swap device at all, so a shortage would have shown up as an OOM kill rather than as silent
+throttling, and there were none. All 160 cells of the full sweep recorded a positive rps.
+
+The reason the headroom is that large is that the arms run one at a time and each needs about a
+gigabyte: **volucer 1,058 MB** and **RoadRunner 1,088 MB** for a twelve-worker pool (thirteen
+processes), **FrankenPHP 232 MB** (two processes, because its workers are threads). So three
+gigabytes is comfortable for this matrix. It would stop being comfortable if arms ran
+concurrently, which is exactly what the interleaved design avoids doing.
+
 **So the layer is now turned off for exactly those applications.** `Sites::from_config_with`
 decides it, which is the table `serve` actually serves from, so there is one answer rather than a
 warning that could disagree with the request path. Three conditions bound it:
