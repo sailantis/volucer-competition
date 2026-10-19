@@ -975,6 +975,114 @@ So: **further memory savings are available, they are large, and they are not fre
 here claims volucer should fork; it measures what fork would be worth and names what it would
 cost.
 
+### The "forking worker": measured, and it needs a server change
+
+The natural way to collect that 89% is to let the *worker* fork: start one PHP process, boot
+once, have it fork N children and stay resident only to replace them — and report the pids so
+the server can adopt them. `scripts/fork-worker-demo.sh` runs exactly that against real volucer
+(`workers = 1`, `VOLUCER_WORKER_FORK=1`, children reporting their own pids), because the shape
+of the saving is only useful if the server can still do the four things it does to a worker it
+spawned itself.
+
+| configuration, c=16 | rps | p50 | non-2xx |
+|---|---|---|---|
+| 1 process, no fork (the ordinary warm worker) | 3,225 | 4.8 ms | 0 |
+| **4 forked children, pipe transport** | **30** | **500 ms** | **90–150 / 150** |
+| 4 forked children, socket transport | 30 | 504 ms | 14 |
+
+Four forked children should be roughly four times one process — about 12,000 rps. They deliver
+thirty, and every request times out. **The children cannot share one worker channel**, and the
+reason is the same `fork()` semantics that make the memory saving work in the first place:
+
+- `fork()` copies the *file descriptor table*, not the open files. Parent and children end up
+  with separate fds pointing at **one shared file description** — one pipe, one buffer, one
+  read position. N children then race over a single frame stream, each taking a fragment of
+  somebody else's request. That is what the 500 ms timeouts are: a request whose frame was
+  split between two readers and can no longer be parsed.
+- The socket transport does not rescue it either, for a different reason: the server binds a
+  listener, and `accept_with_deadline` accepts **one** connection per spawned worker
+  (`handshake.rs`). A child that connects for itself is not a worker the pool has a slot for.
+
+So "give the children to volucer" is not a change the PHP side can make alone. The pool is
+built as **one spawned process per slot** — `for _ in 0..count { boot(...) }` in
+`worker_pool/mod.rs` — with one channel, one `try_wait` and one `child.kill()` per slot. A
+forking master breaks all four:
+
+| what the pool does to a worker | with a forked child |
+|---|---|
+| route a request | one channel per slot; children share one fd |
+| notice it died (`child.try_wait()`) | watches the **master**, never the children |
+| recycle it (`max_requests`, `memory_limit_mb`) | counts at the master, which serves nothing |
+| kill it (`child.kill()`) | kills the **master**; children keep the pipes |
+
+Measured: killing one grandchild left volucer unaware — but the master **did** replace it
+within a second, so the self-healing half of the design works, just on the wrong side of the
+process boundary.
+
+### One process group does not fix this — but it fixes something else
+
+The question is the right one to ask, and the answer splits cleanly in two.
+
+**It cannot help routing or health.** A process group is a signal-addressing mechanism; it
+carries no request stream and no exit status. `try_wait()` on a grandchild is impossible from
+the server's side whatever the grouping, because `wait()` belongs to the parent.
+
+**It does fix teardown, and that half is a real defect today.** The demo's children turn out
+to *already* be in the master's own process group — `configure_command` calls
+`process_group(0)`, so the master gets a new group and its forked children inherit it (verified:
+master and all children report the same `PGID`). And `lifecycle.rs`'s Unix section says the
+mechanism is "a process group, so a single signal reaches the whole tree, and
+`PR_SET_PDEATHSIG` where it is available". But **nothing sends a group signal, and
+`PR_SET_PDEATHSIG` is never set** — `killpg` and `pre_exec` appear nowhere in the crates. The
+Unix guard is a comment, not code: `LifecycleGuard::adopt` is a no-op on Unix, and every kill
+path is `child.kill()`, which signals one pid.
+
+That is measurable and it is not specific to fork. SIGKILL the server and a plain forked
+master survives, reparented to init:
+
+```
+PHP processes before the stop: 5, after: 1
+  2553036   1  /usr/bin/php .../fork-worker-demo.php
+```
+
+The children died (their pipes reached end-of-file); the master did not, because nothing ever
+signalled it. A group signal — or the `PR_SET_PDEATHSIG` the module claims — would have. That
+is worth fixing on its own merits, for `spawn_cgi` too: `pool.rs` puts each `php-cgi` slot in
+its own group, and `php-cgi` can spawn 20 children under it if `PHP_FCGI_CHILDREN` ever leaks
+in from the environment.
+
+### What a workable design would have to change
+
+Ranked by how much of the measured saving survives contact with the server's invariants:
+
+1. **Children accept on a shared listener (socket transport).** The server keeps one listening
+   socket, and every forked child calls `accept()` on it; the kernel hands each connection to
+   exactly one of them. No PHP process is on the request path, so the throughput of the warm
+   arm is preserved, and the memory saving is the fork saving. The server change is that a
+   backend may accept **N** connections for **one** configured worker, and it still needs a
+   liveness answer for the factory (the master), which serves nothing.
+2. **The master becomes a dispatcher.** It keeps one channel and forwards frames to children
+   over private `socketpair`s. Smallest server change — `workers = 1` stays literally true —
+   but it puts a PHP process in the hot path of every request, which is the cost this whole
+   repository exists to measure. It would need its own A/B before anyone believed it was cheap.
+3. **The server treats each child as a slot** (children connect back individually under
+   `workers = N`). Conceptually the cleanest: the pool's existing one-process-per-slot model is
+   untouched, and `try_wait`/`kill` keep working. It needs the children to be spawned *by* the
+   server to be waitable — which reintroduces the exec cost unless the fork happens after the
+   server's own spawn, i.e. exactly the handshake the proposal describes, plus a protocol
+   message that says "these pids are yours now". That message has to carry the fds, or the
+   channels have to be re-established per child.
+
+Option 3 is what the proposal describes, and it is the one that keeps every existing invariant.
+Its blocking requirement is not the fork — it is that `Child::try_wait` cannot be pointed at a
+process somebody else spawned, so either the children reconnect on their own channels (server
+change) or the master owns health and the server owns only the group (teardown change plus a
+reconnect protocol).
+
+Until one of those lands, `fork()` in a worker is a memory win that cannot be routed to. Which
+is the useful outcome of measuring it: the saving is real, and the thing standing in the way is
+a single-process-per-slot assumption, not the memory model.
+
 ## Reproducing
 
 ```bash
@@ -1043,6 +1151,10 @@ The two memory questions have their own short scripts, neither needing sudo:
 WORKERS=16 CONC=64 bash scripts/diag-fpm-memory.sh    # PSS vs RSS vs private, per child
 CHILDREN=16 php scripts/fork-demo.php                 # exec vs fork, one run, one host
 bash scripts/probe-franken-php.sh                     # which PHP does FrankenPHP execute?
+
+CHILDREN=4 bash scripts/fork-worker-demo.sh           # a worker that forks, against volucer
+TRANSPORT=socket CHILDREN=4 bash scripts/fork-worker-demo.sh
+STOP=kill CHILDREN=4 bash scripts/fork-worker-demo.sh # what SIGKILLing the server leaves
 ```
 
 ## Four measurements, four questions
@@ -1367,6 +1479,8 @@ scripts/diag-fpm-memory.sh per-child PSS vs RSS vs private, so the opcache memor
                         question is settled rather than argued
 scripts/fork-demo.php   exec vs fork process models, same host, same run:
                         what fork() would save and what it would cost
+scripts/fork-worker-demo.sh  the "forking worker" proposal against real volucer:
+                        transport, liveness, teardown, and one process group
 scripts/probe-franken-php.sh asks the running FrankenPHP which PHP it executes,
                         rather than trusting a version banner
 scripts/ab-perf.sh      interleaved warm-arm pass: every arm inside one round
