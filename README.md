@@ -1400,19 +1400,86 @@ kind = "external"
 socket = "127.0.0.1:9000"
 ```
 
-Measured at `w = 16`, `c = 64`, `wrk -t12`, PSS summed over the master, its children and volucer:
+Measured at `c = 64`, `wrk -t12`, PSS summed over the master, its children and volucer. There is
+**no `w` for this arm**, because `external` has no `workers` key — see "How `external` sizes its
+own concurrency" below, which is the interesting part:
 
-| arm, 16 PHP processes | rps | PSS before load | PSS after load |
-| --- | --- | --- | --- |
-| `worker`, 16 `exec`ed | 23,937 – 24,228 | 263 MB | 314 MB |
-| `attach`, supervisor + fork | 25,322 – 25,981 | 48 MB | 69 MB |
-| **`external` → php-cgi prefork** | **8,202** | **35 MB** | **66 MB** |
+| arm, 16 PHP processes | requests in flight | rps | PSS before load | PSS after load |
+| --- | --- | --- | --- | --- |
+| `worker`, 16 `exec`ed | 16 (`workers`) | 23,937 – 24,228 | 263 MB | 314 MB |
+| `attach`, supervisor + fork | 16 (`workers`) | 25,322 – 25,981 | 48 MB | 69 MB |
+| **`external` → php-cgi prefork** | **64** (unbounded; one per request) | **8,202** | **35 MB** | **66 MB** |
 
 **The memory is the same and the throughput is a third.** That is the honest result, and it is not
 a defect in php-cgi: `external` speaks FastCGI, which means a cold interpreter per request and no
 channel, so it lands where `spawn_cgi` lands (8,292 rps) rather than where a warm worker does. Fork
 buys the memory; it does not buy the warm protocol. `attach` is the arm that has both, and that is
 the entire reason it exists as a backend rather than as advice to run `php-cgi -b`.
+
+### How `external` sizes its own concurrency: it does not, and the cap is opt-in
+
+`external` is `{ socket, max_connections? }` — no `workers`, no pool size. That is not an
+omission, because **there is no number to discover reliably and none to enforce**.
+
+There is nothing to discover. php-fpm's `pm.max_children` and php-cgi's `PHP_FCGI_CHILDREN` live in
+configuration volucer has no access to. FastCGI *does* publish a capacity channel — `FCGI_GET_VALUES`,
+asking for `FCGI_MAX_CONNS` and `FCGI_MAX_REQS` — and both PHP servers populate it from their own
+pool (`fpm_php.c` from `pm.max_children`, `cgi_main.c` from `PHP_FCGI_CHILDREN`). What they do when
+asked is the part that decides the design:
+
+| server, asked for `FCGI_MAX_CONNS`/`FCGI_MAX_REQS` | answer |
+| --- | --- |
+| preforking `php-cgi`, `PHP_FCGI_CHILDREN=6` | `FCGI_MAX_CONNS=6, FCGI_MAX_REQS=6` — **correct** |
+| `php-fpm`, `pm.max_children=4` | answered, but with an **empty result** |
+
+And neither *enforces* what it advertises. A `php-cgi` advertising 4 served 32 simultaneous requests
+across exactly 4 children with **zero refusals**, queuing the excess in the children's backlog.
+
+So the figure is a hint about the pool's width, never a limit a client is held to, and volucer does
+not query it on the request path. It has a `get_values` client and deliberately does not wire it into
+`serve`: a discovery round trip on the accept path — against a server that answers `max_connections`
+with nothing and needs ~1.5 s after start before it answers at all — would trade a reliable queue for
+an unreliable gauge. `volucer check` asks, because a human is waiting and the answer is printed rather
+than acted on:
+
+```
+  backends:
+    app: external (default)
+      per-request reset: yes (PHP SAPI)
+      concurrency:       one connection per request in flight; the pool's own max_children is the limit
+      socket:            127.0.0.1:9000
+      max connections:   none (one connection per request in flight)
+      advertised:        FCGI_MAX_CONNS=6, FCGI_MAX_REQS=6
+```
+
+What volucer *does* offer is `max_connections`: an operator-supplied ceiling, **off by default**,
+which makes a request wait for a slot instead of opening another connection. It is back-pressure for
+a front-end that would otherwise pile up faster than the pool can drain — not a declaration of the
+pool's size, and setting it above `pm.max_children` changes nothing. `0` is refused rather than read
+as "off"; absent is how "no cap" is spelled.
+
+### Why `external` does not need a `workers` key to begin with
+
+One FastCGI connection carries exactly one request at a time; the codec has no request-id
+demultiplexer, so multiplexing is not available. Concurrency is therefore **one connection per request
+in flight**, and the real limit is the far side's own accept loop:
+
+| `PHP_FCGI_CHILDREN` | children | distinct pids serving 64 concurrent requests |
+| --- | --- | --- |
+| 16 | 16 | **16** |
+| 2 | 2 | **2** |
+
+The master accepts and hands each connection to a free child, so a client that opens as many
+connections as it has requests gets exactly as much concurrency as the pool has children, and a client
+that opens more queues in the children's backlog. A `workers` key would be a volucer-side ceiling that
+duplicated a php-fpm setting volucer cannot see — which is the same mistake `attach` avoids, for the
+same reason.
+
+What volucer *does* bound unconditionally is retention: `MAX_IDLE_CONNECTIONS = 1`. php-fpm counts a
+child that is idle-on-a-connection as **active**, so every parked connection permanently removes one
+child from the dispatchable set — retaining 4 cost 7% at concurrency 32 and retaining 12 cost 26% (see
+`backend.rs`). One warm connection pays for itself on the concurrency-1 path and costs nothing at
+concurrency 32; more than one buys nothing.
 
 ### `attach` is not renamed, and the name is the honest one
 
