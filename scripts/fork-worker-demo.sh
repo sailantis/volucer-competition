@@ -34,11 +34,12 @@ CHILDREN="${CHILDREN:-4}"
 CONC="${CONC:-16}"
 DUR="${DUR:-5s}"
 PORT="${PORT:-18700}"
-# `pipe` (the default transport) or `socket`. The distinction is the experiment:
-# the protocol channel is the worker's own stdin/stdout, and `fork()` inherits one
-# *file description* per fd, not a private copy — so N children sharing it race
-# over a single frame stream. On the socket transport each child would have to
-# connect for itself, and the pool accepts exactly one connection per worker.
+# `pipe` (the default transport) or `socket`. The distinction is the experiment: on
+# the pipe transport the protocol channel is the worker's own stdin/stdout, and
+# `fork()` inherits one *file description* per fd, not a private copy — so N children
+# sharing it race over a single frame stream. The socket transport fails differently
+# (one accepted connection per spawned worker), and it is also ~100x slower than the
+# pipe because the PHP SDK never sets TCP_NODELAY — see the README.
 TRANSPORT="${TRANSPORT:-pipe}"
 # How to stop the server at the end: `term` lets the master cooperate, `kill`
 # gives it no chance at all. The second is the case that decides whether the

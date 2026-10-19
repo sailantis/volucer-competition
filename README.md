@@ -1151,6 +1151,86 @@ the children **do** inherit one shared file description per fd, so a forked chil
 the master's channel (measured: 30 rps); and a forked master **does** survive its server being
 SIGKILLed, reparented to init, because nothing signals the group (measured: PPID 1).
 
+### Does fork need a unix socket? Yes — and the reason is measured, not assumed
+
+Three things had to be separated, because they are easy to conflate.
+
+**The 24,336 rps figure is the plain pipe.** It is `volucer-worker`, w=16, opcache on, c=64,
+`wrk -t12`, on the run whose `meta.txt` records no `transport` setting at all — and
+`WorkerTransport::default()` is `Pipe` off Windows. No socket is involved anywhere in that
+number. The `spawn_cgi` arm is the unix-socket one and it reached 6,855.
+
+**Volucer's own socket transport cannot enable fork.** Even with one forked child it fails,
+and the reason is not the protocol: the pool binds a listener and
+`accept_with_deadline` accepts **one** connection per spawned worker, so a child that connects
+for itself is a worker with no slot. Measured at 1, 2 and 4 children: 30 rps each, with
+`MAX_SLOT_WAIT` (500 ms) as the latency.
+
+**A TCP socket is also 100× worse than a pipe, and that is a bug worth fixing on its own.**
+Same single process, c=1:
+
+| transport | rps |
+|---|---|
+| pipe | 2,334 |
+| socket | 24 |
+
+The cause is not congestion control in general but a specific interaction. The PHP SDK opens the
+socket with `stream_socket_client` and **never sets `TCP_NODELAY`** (`socket_set_option` appears
+nowhere in it), while the server does set it on its side. The protocol writes a header and a
+payload as two separate small writes, so Nagle holds the second one until the first is
+acknowledged, and TCP delays that acknowledgement by up to 40 ms. Two processes doing it to each
+other deadlock into one stall per request:
+
+| protocol-shaped ping-pong | per request |
+|---|---|
+| TCP, Nagle on (what the SDK does now) | **38.96 ms** |
+| TCP, `TCP_NODELAY` on the client | **0.06 ms** |
+| AF_UNIX socket | 0.06 ms |
+
+So the socket transport is currently unusable for throughput for a reason unrelated to its
+design, and one line in the SDK hides it. That is worth fixing before any fork work, because it
+makes the socket transport a viable second option rather than a broken one.
+
+**Therefore: yes, a unix socket is what makes fork work — `AF_UNIX`, not TCP, and as a relay the
+children connect to rather than as volucer's worker transport.** That is option 1 above, and the
+mechanism was checked directly: a `fork()`ed child inherits the **listening** fd automatically —
+an fd is precisely what `fork()` shares — so N children can each call `accept()` on one listener
+with no fd passing, no `SCM_RIGHTS` and no `SO_REUSEPORT`.
+
+| 4 children, one inherited `unix://` listener, 40 connections | result |
+|---|---|
+| served | 40 / 40 |
+| per connection | 0.06 ms |
+| children that served | **3 of 4** |
+
+The last row is the caveat: shared `accept()` is correct but **not fair** — a child that loops
+straight back into `accept()` tends to win the race repeatedly, which is the classic thundering
+herd. It does not threaten the design (the listener balances, the relay does not need each child
+to get an equal share to be fast), but it does mean a forked relay needs a deliberate
+distribution story rather than assuming the kernel divides evenly.
+
+`scripts/fork-relay.php` runs that design at load, so the claim is demonstrated rather than
+argued. It boots once, binds one `unix://` listener, forks N children that each `accept()` on
+it, and speaks plain HTTP so a load generator can drive it directly:
+
+| 8 children, one inherited `unix://` listener | result |
+|---|---|
+| 3,000 sequential requests | **3,000 correct**, 0.211 ms each (4,742 req/s, one client) |
+| master boot before forking | 6.1 ms |
+| master + 8 children, while serving | **32.7 MB** summed PSS |
+| per child, while serving | **~3.3 MB** |
+
+Two things that number settles. First, a forked child keeps the warm worker's speed: 0.211 ms
+per request is the same order as the pipe arm, not the 5–7 ms of a cold CGI. Second, the
+footprint is the fork family's real cost *while serving*, not while idle — and it is in the same
+range as php-fpm's, for a worker that no longer boots per request.
+
+The 4,742 req/s is one synchronous client and is a floor, not a ceiling: driving the relay
+through a `socat` bridge reached 9,352 req/s, but that path adds a TCP hop and its own
+`fork` per connection, so it measures `socat` as much as the relay. What the relay needs next is
+a load generator that speaks `unix://` directly — Ubuntu's `wrk` 4.1.0 does not have
+`--unix-socket` — which is why the in-process number above is the honest one to quote.
+
 ## Reproducing
 
 ```bash
@@ -1223,8 +1303,12 @@ CHILDREN=8 bash scripts/diag-opcache-sharing.sh       # does each exec'd worker 
 bash scripts/probe-franken-php.sh                     # which PHP does FrankenPHP execute?
 
 CHILDREN=4 bash scripts/fork-worker-demo.sh           # a worker that forks, against volucer
-TRANSPORT=socket CHILDREN=4 bash scripts/fork-worker-demo.sh
+TRANSPORT=socket CHILDREN=1 bash scripts/fork-worker-demo.sh   # the TCP transport's 39 ms stall
 STOP=kill CHILDREN=4 bash scripts/fork-worker-demo.sh # what SIGKILLing the server leaves
+
+CHILDREN=8 php scripts/fork-relay.php                 # the recommended design, at load
+# then, with a load generator that speaks unix:// (Ubuntu's wrk 4.1.0 does not):
+#   wrk -t12 -c64 -d5s --latency --unix-socket /tmp/volucer-relay.sock http://localhost/items
 ```
 
 ## Four measurements, four questions
@@ -1553,6 +1637,8 @@ scripts/fork-demo.php   exec vs fork process models, same host, same run:
 scripts/diag-opcache-sharing.sh  do exec'd workers share OPcache, or clone it?
 scripts/fork-worker-demo.sh  the "forking worker" proposal against real volucer:
                         transport, liveness, teardown, and one process group
+scripts/fork-relay.php  the recommended design at load: one boot, N children,
+                        one inherited unix listener (HTTP, so wrk can drive it)
 scripts/probe-franken-php.sh asks the running FrankenPHP which PHP it executes,
                         rather than trusting a version banner
 scripts/ab-perf.sh      interleaved warm-arm pass: every arm inside one round
