@@ -638,6 +638,173 @@ ROUNDS=5 CONC=1,8,16,32 VARIANTS=new-req,new-static,rr,franken \
   ENDPOINTS=/,/items bash scripts/ab-perf.sh
 ```
 
+## How workers, opcache and concurrency interact
+
+`bench.sh` and `ab-perf.sh` each hold the configuration fixed and vary the load. Neither
+answers the two questions an operator setting up a host actually asks: **how many PHP
+workers should this box run**, and **what is opcache worth**. `scripts/matrix.sh` runs that
+grid — 5 arms × 4 worker counts × 2 opcache modes × 4 concurrency levels × 3 rounds — and
+samples PSS and RSS of each arm's process tree at boot and after load, because the warm
+model's speed is paid for in memory and that trade had not been put in one table before.
+
+The published run is `results/matrix/` (raw rows, memory samples, and the generated
+tables); the numbers below are from it. Host: 12 cores, 3.9 GB, PHP 8.3.35 for everything
+except FrankenPHP (its release binary embeds 8.5.11 — stated, not corrected), volucer
+0.1.0, RoadRunner 2025.1.15, FrankenPHP 1.13.0, nginx 1.24.0. Every cell proved its
+opcache mode from inside the running server rather than from its config file, and no cell
+was skipped.
+
+```bash
+bash scripts/matrix.sh
+python3 scripts/matrix-report.py ~/matrix-run/matrix.tsv ~/matrix-run/memory.tsv
+```
+
+### opcache is worth 1.02× warm and 10× cold
+
+| opcache on / off, c=64 | w=12 | w=16 | w=20 | w=24 |
+|---|---|---|---|---|
+| volucer worker (warm) | 1.02× | 1.02× | 1.02× | 1.02× |
+| RoadRunner worker (warm) | 1.01× | 1.03× | 1.01× | 1.04× |
+| FrankenPHP worker (warm) | 1.02× | 1.03× | 1.03× | 1.04× |
+| volucer `spawn_cgi` (cold) | 10.19× | 10.15× | 11.06× | 9.58× |
+| nginx + php-fpm (cold) | 9.64× | 10.34× | 11.15× | **11.23×** |
+
+**The deployment model decides whether opcache matters at all.** A warm worker compiles each
+script once, when the process boots, and never again — so the bytecode cache buys 1–4%,
+which is about the size of this host's round-to-round spread and is not a tuning decision. A
+cold worker re-runs the front controller on every request, and without the cache every one
+of those requests recompiles the same files: 10× slower. At w=24 the FPM pool falls from
+9,046 rps to 806 — the same server, the same application, one ini flag.
+
+For FPM the ratio also *grows* with the worker count (9.64× at w=12 to 11.23× at w=24),
+which is the shape of the waste: more children compiling the same files at once buys no
+throughput and costs more. volucer's `spawn_cgi` pool does not show the same monotonic
+growth, so the effect there is a flat ~10× rather than an increasing one.
+
+That is also why the opcache axis is not a tuning question for the warm arms: there is
+nothing left to cache. It is a question about which model you are running.
+
+### More workers do not make a resident worker faster
+
+Throughput at c=64, opcache on:
+
+| arm | w=12 | w=16 | w=20 | w=24 | peak |
+|---|---|---|---|---|---|
+| volucer worker | 23,118 | **23,508** | 23,449 | 22,938 | w=16 (+1.7%) |
+| RoadRunner worker | 18,190 | 19,437 | 19,750 | **19,864** | w=24 (+9.2%) |
+| FrankenPHP worker | **16,252** | 14,542 | 13,844 | 13,535 | w=12 (**−16.7%**) |
+| volucer `spawn_cgi` | 7,574 | 6,764 | **7,648** | 7,253 | w=20 (+1.0%) |
+| nginx + php-fpm | 7,698 | 8,376 | 8,933 | **9,046** | w=24 (+17.5%) |
+
+One worker per core is already the ceiling for volucer: 12 workers reach 98% of the best
+cell, and adding a second worker per core costs a little instead of gaining. That is the
+c=32 plateau above reproduced at four worker counts — the server is not CPU-bound, so a
+bigger pool queues more requests behind the same cores.
+
+The two cold arms are the interesting pair. **FPM is the only arm that still gains from
+more workers** (+17.5% from 12 to 24), because a cold child is idle between requests and a
+bigger pool hides more of the per-request boot. volucer's `spawn_cgi` pool does not gain,
+and its w=16 column is a reproducible dip rather than noise: 6,451 / 6,675 / 6,764 rps at
+c=32/48/64 against 7,026 / 7,420 / 7,574 at w=12 and 7,049 / 7,484 / 7,648 at w=20, with
+every round agreeing. The dip is measured here; what causes it is not, and it is recorded
+rather than explained.
+
+FrankenPHP is the one warm arm that gets *worse* with every worker added — 16,252 at 12
+down to 13,535 at 24, a 17% loss — which is the queueing ceiling
+[`results/frankenphp.md`](results/frankenphp.md) localised, reproduced on a newer binary
+and a different host.
+
+### At 64 concurrent clients the warm arms separate, and the cold ones fall behind
+
+| c=64, opcache on, best worker count | rps | vs volucer worker |
+|---|---|---|
+| volucer worker (w=16) | **23,508** | — |
+| RoadRunner worker (w=24) | 19,864 | 0.85× |
+| FrankenPHP worker (w=12) | 16,252 | 0.69× |
+| nginx + php-fpm (w=24) | 9,046 | 0.38× |
+| volucer `spawn_cgi` (w=20) | 7,648 | 0.33× |
+
+The ratio is not a constant: at c=16 the same five arms (w=12) read 15,916 / 15,229 /
+15,946 / 6,524 / 5,531, so at low load volucer, RoadRunner and FrankenPHP are within 5% of
+each other and only the two cold arms are far behind. The separation is produced by
+concurrency, not by the server choice: from c=16 to c=64 volucer's lead grows to 1.26× over
+RoadRunner, 1.42× over FrankenPHP and 3.01× over FPM. That is the same shape
+[`results/frankenphp.md`](results/frankenphp.md) reports — the arm whose interpreter is
+inside its own process is indistinguishable at c=1 and falls behind as load rises — with
+RoadRunner showing a weaker version of it. Which server "wins" is a statement about a
+concurrency level, not about a server.
+
+### Memory: ~16 MB per warm worker, ~1–4 MB per cold one
+
+Summed PSS over each arm's whole deployment after load, opcache on — nginx's own workers are
+inside the FPM figure, because a deployment's footprint is the thing being compared and
+volucer and FrankenPHP are their own web server:
+
+| arm | w=12 | w=24 | marginal MB/worker |
+|---|---|---|---|
+| volucer worker | 227.5 | 418.5 | **15.9** |
+| RoadRunner worker | 287.7 | 476.1 | 15.7 |
+| volucer `spawn_cgi` | 226.8 | 412.8 | 15.5 |
+| FrankenPHP worker | 132.6 | 151.7 | **1.6** |
+| nginx + php-fpm | 53.7 | 68.6 | **1.2** |
+
+**The speed and the footprint are the same decision.** A resident worker holds a booted
+framework container — that is what makes it fast and that is what each one costs. A cold
+child holds nothing between requests, so 24 FPM children fit in a third of the space
+twelve resident workers occupy (68.6 MB against 227.5), each counted the same way.
+
+Two cautions, because the wrong column here is very persuasive. **RSS says FPM uses 632 MB
+at w=24 against its true 69 MB** — a shared page is charged once per process, so the same
+opcache segment is counted 24 times. And **FrankenPHP's 1.6 MB per worker is not a fair
+comparison with volucer's 15.9**: a thread shares the interpreter, a spawned process does
+not, which is exactly the trade `results/frankenphp.md` describes from the other side.
+
+The opcache axis moves memory too, in opposite directions. With opcache off, a warm worker's
+boot footprint *drops* (187.6 → 151.8 MB at w=12) because there is no bytecode cache to
+hold. A cold pool is the reverse after load: FPM at w=24 goes 40.6 → 128.1 MB PSS with
+opcache off against 43.8 → 68.6 MB with it on, while its **RSS falls** (360 → 596 MB,
+against 375 → 632 MB) because the shared opcache segment is no longer mapped at all.
+
+The two columns disagree because they measure different things, and sampling each php-fpm
+child on its own — `scripts/diag-fpm-memory.sh`, which reproduces this in about a minute —
+says which to believe:
+
+| php-fpm pool, w=24, after load | per-child PSS | per-child RSS | sum PSS | sum RSS |
+|---|---|---|---|---|
+| opcache on | 2.0 MB | ~23 MB | **49 MB** | 556 MB |
+| opcache off | 4.5 MB | ~22 MB | **109 MB** | 530 MB |
+
+With opcache on, most of each child's resident set is one shared segment and PSS charges it
+once across all 24; with it off there is nothing to share, so nearly everything a child
+touches is private and PSS sums to a larger total. **The honest figure more than doubles
+when opcache is disabled, and RSS reports the opposite direction.** That is the same trap as
+the FPM total above, one layer down: RSS rewards an arm for not mapping memory it needs.
+
+### What the run does not claim
+
+- **It is one host, one run.** Each cell is the median of three 5-second rounds; the
+  min–max spread across rounds is printed beside every number and is generally under 2%,
+  but a different core count moves every absolute figure.
+- **The cold arms' tails are load spikes, not a steady state.** At c=64 the `spawn_cgi` p99
+  is 67–107 ms against FPM's 9 ms, and its p50 is 5.8–6.4 ms against FPM's 6.4–7.1 — the
+  median says the two cold arms cost about the same per request, and the tail says
+  `spawn_cgi` occasionally makes one wait an order of magnitude longer. That is recorded
+  rather than smoothed: a p50-only reading here would hide the difference a real deployment
+  would feel.
+- **wrk's thread count is fixed at 12, not set to the concurrency.** Every earlier harness
+  here used `-t$c`, which makes c=64 put 64 busy client threads on 12 cores and lets the
+  load generator's own scheduling into the tail (`diag-slots.sh`). Fixed threads keep the
+  client's cost constant across arms and levels; the trade is that c=64's tail is the
+  server's, measured with a client that is no longer scaling with it.
+- **Two cells recorded a single socket timeout each** — both in the `spawn_cgi` opcache-OFF
+  arm at the highest concurrency, where a request costs 15 ms and a 5-second window is long
+  enough for one straggler. They are listed in the report's integrity table rather than
+  silently averaged in, and they are 0.03% of those cells' requests; no cell lost a measured
+  response to a `Non-2xx`, so no arm was seen shedding load.
+- **FrankenPHP runs PHP 8.5.11 and every other arm 8.3.35.** That is the release binary's
+  own interpreter and there is no 8.3 build of it; the arm is measured as deployed rather
+  than as matched.
+
 ## Reproducing
 
 ```bash
@@ -678,6 +845,16 @@ SKIP_FPM=1       bash scripts/bench.sh
 CROSSOVER=1 CROSS_CONC=1,4,8,16 bash scripts/bench.sh
 ```
 
+The configuration matrix is a separate pass, and it needs nothing `bench.sh` does not —
+in particular no sudo: php-fpm is started against a generated pool and nginx against a
+private prefix, so the host's own services are never reloaded.
+
+```bash
+bash scripts/matrix.sh                     # 40 configurations, ~70 minutes on 12 cores
+ARMS=fpm WORKERS_LIST=12,24 bash scripts/matrix.sh   # a subset
+python3 scripts/matrix-report.py ~/matrix-run/matrix.tsv ~/matrix-run/memory.tsv
+```
+
 ## Four measurements, four questions
 
 The repository runs four passes, and reading the wrong one is the mistake this
@@ -692,6 +869,7 @@ project made for several weeks:
 | `diag-slots.sh` | 32, with the thread count varied | is the tail the pool's queueing or the load generator's |
 | `diag-slots.sh` (A/B mode) | 24 and 32, every variant inside one round | did the pool fix really buy what a blocked run said |
 | `ab-perf.sh` | 1..32, every arm inside one round, order rotated | what does each warm server do as the load rises — and where is the ceiling |
+| `matrix.sh` | 16, 32, 48, 64 at 12/16/20/24 workers, opcache on and off | how many workers should this host run, and what is opcache worth — with the memory each configuration costs |
 
 They disagree, and the first two are both right. A 12-slot sweep overlaps every
 request's framework boot with eleven other requests, so the boot vanishes from the
@@ -991,6 +1169,9 @@ seed.php                creates data/bench.sqlite
 apps/azera/             the application, copied from azera-competition
 conf/                   one stamped config per arm
 scripts/bench.sh        the harness
+scripts/matrix.sh       workers x opcache x concurrency grid, with memory sampling
+scripts/matrix-report.py reads it: medians, spread, opcache ratios, PSS/RSS tables
+scripts/diag-fpm-memory.sh per-child PSS vs RSS, so the opcache memory question is settled
 scripts/ab-perf.sh      interleaved warm-arm pass: every arm inside one round
 scripts/ab-report.py    reads it: within-round ratios, spread across rounds
 scripts/diag-split.sh   CPU per request: server process vs PHP workers

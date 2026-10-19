@@ -1,0 +1,19 @@
+=== worker x opcache x concurrency matrix ===
+  host:        12 cores, 3884 MB
+  kernel:      Linux 6.8.0-139-generic
+  php:         PHP 8.3.35 (cli) (built: Sep 25 2026 05:16:50) (NTS)
+  php-cgi:     PHP 8.3.35 (cgi-fcgi) (built: Sep 25 2026 05:16:50)
+  php-fpm:     PHP 8.3.35 (fpm-fcgi) (built: Sep 25 2026 05:16:50)
+  nginx:       nginx version: nginx/1.24.0 (Ubuntu)
+  volucer:     volucer 0.1.0
+  roadrunner:  rr version 2025.1.15 (build time: 2026-06-17T16:05:22+0000, go1.26.4), OS: linux, arch: amd64
+  frankenphp:  FrankenPHP v1.13.0 PHP 8.5.11 Caddy v2.11.7 h1:yj0Y4fYZGPkSvibBJ1sTWE33xC0fxztVyXEW5iIdUT4=
+  app:         /home/competition/volucer-competition
+  app ref:     fa0ecb5
+  arms:        volucer-worker,volucer-fastcgi,rr,frankenphp,fpm
+  workers:     12,16,20,24
+  opcache:     on,off
+  endpoint:    /items
+  concurrency: 16,32,48,64   wrk threads: 12   duration: 5s   rounds: 3
+  opcache on: cli wrapper active=1, cgi wrapper active=1
+  opcache off: cli wrapper active=0, cgi wrapper active=0
