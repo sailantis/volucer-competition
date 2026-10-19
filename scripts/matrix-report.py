@@ -328,6 +328,65 @@ def table_headlines(rows):
     return out
 
 
+def thread_values(rows):
+    """Distinct `threads` values, in numeric order.
+
+    Older runs have no such column: they are the fixed-thread runs, and a single
+    "all cells" group is the right reading for them.
+    """
+    vals = {r.get("threads", "") for r in rows if r.get("threads", "")}
+    return sorted(vals, key=lambda x: int(x) if str(x).isdigit() else 0)
+
+
+def table_threads(rows, concurrency):
+    """Is the p99 the server's, or the load generator's?
+
+    `wrk -t$conc` gives every concurrent request its own client thread, so nothing
+    queues in the client. At c=64 on a 12-core host that is also 64 busy threads
+    competing for the cores the server is being measured on, so the tail may be
+    the client's. Holding `-t12` makes the client cost constant and moves the
+    question to the server. Both are measured; this is the table that says whether
+    the choice mattered.
+    """
+    cells = defaultdict(list)
+    arms, workers, modes, tvals = set(), set(), set(), set()
+    for r in rows:
+        if r["conc"] != concurrency or r["rps"] == "FAIL":
+            continue
+        cells[(r["arm"], r["opcache"], r["workers"], r["threads"])].append(r)
+        arms.add(r["arm"])
+        workers.add(r["workers"])
+        modes.add(r["opcache"])
+        tvals.add(r["threads"])
+
+    out = [
+        f"### wrk thread count at concurrency {concurrency} "
+        f"(rps | p50 ms | p99 ms)",
+        "",
+    ]
+    out.append("| arm | opcache | workers | " + " | ".join(f"t={t}" for t in thread_values(rows)) + " |")
+    out.append("|" + "---|" * (3 + len(tvals)))
+    for arm in arm_sort(arms):
+        for mode in sorted(modes):
+            for w in ordered(workers):
+                line = [ARM_NAME.get(arm, arm), mode, str(w)]
+                for t in thread_values(rows):
+                    got = cells.get((arm, mode, w, t))
+                    if not got:
+                        line.append("—")
+                        continue
+                    rps = med([num(x["rps"]) for x in got])
+                    p50 = med([ms(x["p50"]) for x in got])
+                    p99 = med([ms(x["p99"]) for x in got])
+                    line.append(f"{fmt(rps)} ({fmt(p50, 2)} / {fmt(p99, 2)})")
+                out.append("| " + " | ".join(line) + " |")
+    out.append("")
+    out.append("Each cell is `rps (p50 / p99)`. Where the columns differ, the choice of")
+    out.append("thread count was a variable and not a constant.")
+    out.append("")
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("matrix", nargs="?", default=None)
@@ -359,8 +418,12 @@ def main():
 
     out.append("## Throughput (requests/sec)")
     out.append("")
+    tvals = thread_values(rows)
     for c in concs:
-        out += table_throughput(rows, "rps", 0, c)
+        if len(tvals) > 1:
+            out += table_threads(rows, c)
+        else:
+            out += table_throughput(rows, "rps", 0, c)
 
     out += table_headlines(rows)
 

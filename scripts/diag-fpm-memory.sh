@@ -97,7 +97,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-printf '%-9s %-10s %-10s %-10s %-12s\n' mode children sum_pss_mb sum_rss_mb per_child_pss
+printf '%-9s %-10s %-10s %-10s %-12s %-12s %-12s\n' mode children sum_pss_mb sum_rss_mb sum_private_mb per_child_pss per_child_peak
 for mode in on off; do
     oc=$([ "$mode" = "on" ] && echo 1 || echo 0)
     rm -f "$D/fpm.sock"
@@ -121,21 +121,53 @@ for mode in on off; do
     wrk -t12 -c"$CONC" -d5s "http://127.0.0.1:$PORT/items" >/dev/null 2>&1
     sleep 1
 
-    pss=0; rss=0; n=0
+    # Sample the children WHILE they are working, not only after the burst. A
+    # drained pool reports the floor - and the floor is exactly what makes FPM
+    # look implausibly small: a child that is between requests has freed the
+    # request's allocations, so 2 MB is a true reading of a true state and a
+    # misleading answer to "what does this pool cost".
+    PEAK="$(mktemp "$D/peak.XXXXXX")"
+    wrk -t12 -c"$CONC" -d3s "http://127.0.0.1:$PORT/items" >/dev/null 2>&1 &
+    WPID=$!
+    sleep 1.5
+    for p in $(pgrep -P "$FP"); do
+        s="$(awk '/^Pss:/{print $2; exit}' "/proc/$p/smaps_rollup" 2>/dev/null)"
+        c="$(awk '/^Private_Clean:/{print $2; exit}' "/proc/$p/smaps_rollup" 2>/dev/null)"
+        d="$(awk '/^Private_Dirty:/{print $2; exit}' "/proc/$p/smaps_rollup" 2>/dev/null)"
+        echo "$s ${c:-0} ${d:-0}" >> "$PEAK"
+    done
+    wait $WPID 2>/dev/null
+
+    pss=0; rss=0; n=0; priv=0; ppeak=0; pn=0
     for p in $(pgrep -P "$FP"); do
         s="$(awk '/^Pss:/{print $2; exit}' "/proc/$p/smaps_rollup" 2>/dev/null)"
         r="$(awk '/^VmRSS:/{print $2; exit}' "/proc/$p/status" 2>/dev/null)"
         [ -n "$s" ] || continue
         pss=$((pss + s)); rss=$((rss + r)); n=$((n + 1))
+        c="$(awk '/^Private_Clean:/{print $2; exit}' "/proc/$p/smaps_rollup" 2>/dev/null)"
+        d="$(awk '/^Private_Dirty:/{print $2; exit}' "/proc/$p/smaps_rollup" 2>/dev/null)"
+        priv=$((priv + ${c:-0} + ${d:-0}))
     done
+    while read -r s c d; do
+        [ -n "$s" ] || continue
+        ppeak=$((ppeak + s)); pn=$((pn + 1))
+    done < "$PEAK"
+    rm -f "$PEAK"
     per="$(awk -v p="$pss" -v n="$n" 'BEGIN { printf "%.2f", (n > 0 ? p / n / 1024 : 0) }')"
     # Only the pool's children are summed: the FPM master and nginx's workers are
     # constant across the two modes, so including them would dilute the thing being
     # measured. `matrix.sh` sums the whole deployment instead, which is why its
     # totals are larger than these by the master and nginx's four workers.
-    printf '%-9s %-10s %-10s %-10s %-12s\n' "$mode" "$n" \
+    #
+    # `private` is the column that decides whether a number is honest: it is the
+    # part of each child's resident set that no other process maps, so it is the
+    # same whether you sum it, average it, or count it once. Shared pages are what
+    # make PSS and RSS disagree, and this is neither.
+    printf '%-9s %-10s %-10s %-10s %-12s %-12s %-12s\n' "$mode" "$n" \
         "$(awk -v k="$pss" 'BEGIN{printf "%.0f", k/1024}')" \
-        "$(awk -v k="$rss" 'BEGIN{printf "%.0f", k/1024}')" "$per"
+        "$(awk -v k="$rss" 'BEGIN{printf "%.0f", k/1024}')" \
+        "$(awk -v k="$priv" 'BEGIN{printf "%.0f", k/1024}')" "$per" \
+        "$(awk -v k="$ppeak" -v n="$pn" 'BEGIN { printf "%.2f", (n > 0 ? k / n / 1024 : 0) }')"
 
     kill "$NP" "$FP" 2>/dev/null
     wait "$NP" 2>/dev/null

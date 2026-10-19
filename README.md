@@ -647,12 +647,14 @@ grid — 5 arms × 4 worker counts × 2 opcache modes × 4 concurrency levels ×
 samples PSS and RSS of each arm's process tree at boot and after load, because the warm
 model's speed is paid for in memory and that trade had not been put in one table before.
 
-The published run is `results/matrix/` (raw rows, memory samples, and the generated
-tables); the numbers below are from it. Host: 12 cores, 3.9 GB, PHP 8.3.35 for everything
-except FrankenPHP (its release binary embeds 8.5.11 — stated, not corrected), volucer
-0.1.0, RoadRunner 2025.1.15, FrankenPHP 1.13.0, nginx 1.24.0. Every cell proved its
-opcache mode from inside the running server rather than from its config file, and no cell
-was skipped.
+The published runs are `results/matrix/` (raw rows, memory samples, and the generated
+tables) and `results/matrix85/`, which repeats the grid on PHP 8.5 with every arm on the same
+interpreter — see [PHP 8.5, one interpreter for every arm](#php-85-one-interpreter-for-every-arm).
+The numbers below are from the 8.3 run. Host: 12 cores, 3.9 GB, PHP 8.3.35 for everything
+except FrankenPHP (its release binary embeds 8.5.11 — stated, not corrected, and closed by the
+8.5 run), volucer 0.1.0, RoadRunner 2025.1.15, FrankenPHP 1.13.0, nginx 1.24.0. Every cell
+proved its opcache mode from inside the running server rather than from its config file, and no
+cell was skipped.
 
 ```bash
 bash scripts/matrix.sh
@@ -780,6 +782,33 @@ touches is private and PSS sums to a larger total. **The honest figure more than
 when opcache is disabled, and RSS reports the opposite direction.** That is the same trap as
 the FPM total above, one layer down: RSS rewards an arm for not mapping memory it needs.
 
+#### Why FPM really does need less, and not just look like it
+
+"53.7 MB for a whole web server plus twelve PHP processes" is low enough to be worth
+disbelieving, so `diag-fpm-memory.sh` also reports summed **private** memory — the part of
+each child's resident set that no other process maps. It is the one number that cannot be
+flattered by how a total is divided up:
+
+| php-fpm pool, w=16, after load | per-child PSS | sum PSS | sum RSS | **sum private** |
+|---|---|---|---|---|
+| opcache on | 2.4 MB | 39 MB | 374 MB | **20 MB** |
+| opcache off | 4.8 MB | 77 MB | 354 MB | **62 MB** |
+
+A drained php-fpm child is genuinely about 2 MB of its own, and the pool is genuinely about
+20 MB of memory nobody else can have. The reason is not that php-fpm is magic but that it
+**releases what it allocated**: the framework is booted, the page is rendered, and everything
+that boot touched is freed before the child waits for the next request. A resident worker
+keeps it, deliberately, because keeping it is what makes the warm arms 3.6× faster.
+
+So the comparison is not "24 cheap children against 12 expensive workers" — it is
+**20 MB of private memory that is thrown away and rebuilt on every request, against 240 MB
+that is kept**. At 5.2 ms per request (opcache on, c=64) the rebuild is the cost of the
+memory not being there; see the throughput table above for what that trade is worth.
+
+The `fork()` numbers two sections down make the same point from the other side: the ~16 MB a
+warm worker costs is the interpreter, not the container, so fork keeps the container for 1.8 MB
+per worker. FPM reaches its 20 MB a different way — by keeping nothing.
+
 ### What the run does not claim
 
 - **It is one host, one run.** Each cell is the median of three 5-second rounds; the
@@ -795,15 +824,156 @@ the FPM total above, one layer down: RSS rewards an arm for not mapping memory i
   here used `-t$c`, which makes c=64 put 64 busy client threads on 12 cores and lets the
   load generator's own scheduling into the tail (`diag-slots.sh`). Fixed threads keep the
   client's cost constant across arms and levels; the trade is that c=64's tail is the
-  server's, measured with a client that is no longer scaling with it.
+  server's, measured with a client that is no longer scaling with it. That choice was worth
+  **12–15% at low concurrency**, which the 8.5 run measures directly: see
+  [the wrk thread count is a second variable](#the-wrk-thread-count-is-a-second-variable-and-it-is-worth-1215).
 - **Two cells recorded a single socket timeout each** — both in the `spawn_cgi` opcache-OFF
   arm at the highest concurrency, where a request costs 15 ms and a 5-second window is long
   enough for one straggler. They are listed in the report's integrity table rather than
   silently averaged in, and they are 0.03% of those cells' requests; no cell lost a measured
   response to a `Non-2xx`, so no arm was seen shedding load.
-- **FrankenPHP runs PHP 8.5.11 and every other arm 8.3.35.** That is the release binary's
-  own interpreter and there is no 8.3 build of it; the arm is measured as deployed rather
-  than as matched.
+- **FrankenPHP runs PHP 8.5.11 and every other arm 8.3.35** — in *this* run. That was the
+  release binary's own interpreter and there is no 8.3 build of it. `results/matrix85/`
+  re-runs the whole thing on 8.5 with every arm on the same interpreter, which removes the
+  confound rather than caveating it; see
+  [PHP 8.5, one interpreter for every arm](#php-85-one-interpreter-for-every-arm).
+
+## PHP 8.5, one interpreter for every arm
+
+The run above had a hole in it: FrankenPHP executes its **embedded** PHP, which was 8.5.11,
+while the other four arms executed the distro's 8.3.35. Every cross-arm ratio therefore mixed
+the server's effect with the interpreter's. `results/matrix85/` closes that hole by running
+the same five arms with `PHP=/usr/bin/php8.5`, at the worker count the earlier run peaked on.
+
+Two things had to be true before that run measured what it claimed:
+
+**The interpreter under test has to be the one that loaded.** A stock `php8.5` on this host is
+not the same program as a stock `php8.3`:
+
+- it loads **xdebug 3.5.3 with `xdebug.mode=develop`**, i.e. instrumented execution, and
+- it ships an **internal `psr` extension** that provides `Psr\Log\LoggerInterface` as an
+  `UNtyped` interface. This repository's bench app implements the composer interface with
+  typed signatures, so PHP rejects the mismatch and the application dies on a fatal
+  declaration error before it answers anything.
+
+Both are excluded by pointing `PHP_INI_SCAN_DIR` at a conf.d copy without `20-xdebug.ini` and
+`15-psr.ini`, and `matrix.sh` now refuses to start if either is loaded — a debugger in a
+benchmark measures the debugger, and a fatal error measures nothing. `meta.txt` records what
+was actually loaded, per SAPI.
+
+**FrankenPHP needs none of that.** Its embedded 8.5 is built without either extension
+(`php8.5 xdebug=no psr=no`), which is exactly why the 8.3-era run could serve this app from a
+PHP 8.5 arm while a distro PHP 8.5 could not.
+`scripts/probe-franken-php.sh` asks the running server rather than trusting a version banner.
+
+### The interpreter is worth about 2%, and that is the size of the noise
+
+`/items`, w=16, median of three 5-second rounds. The 8.3 column is the same configuration
+from the run above; both used `wrk -t12`. The delta is the whole curve, not one cell.
+
+| arm | opcache | c=16 | c=32 | c=48 | c=64 | mean |
+|---|---|---|---|---|---|---|
+| volucer worker | on | −0.7% | +1.4% | +3.4% | **+3.5%** | +1.9% |
+| volucer worker | off | −0.3% | +4.0% | **+3.5%** | +3.1% | +2.6% |
+| volucer `spawn_cgi` | on | +2.8% | +3.0% | +2.1% | +1.3% | +2.3% |
+| RoadRunner worker | on | +2.9% | +1.1% | +1.7% | +2.4% | +2.0% |
+| **FrankenPHP worker** | on | −3.0% | −1.0% | −1.0% | −0.9% | **−1.5%** |
+| nginx + php-fpm | on | −0.7% | −0.2% | +0.6% | −1.0% | −0.3% |
+| nginx + php-fpm | off | −3.1% | −3.2% | −4.9% | −4.5% | **−3.9%** |
+
+**FrankenPHP is the null control, and that is the most useful row in the table.** Its
+interpreter did not change — the release binary embeds 8.5.11 in both runs — so anything it
+"gained" or "lost" is host drift and run-to-run noise. It moved **−1.5% to +0.1%**. So the
+noise floor of this whole matrix is roughly **±2%**, and any claim smaller than that is not a
+claim.
+
+With that floor, the honest reading is narrower than "8.5 is 3% faster":
+
+- **volucer worker at c=48–64 gains ~3.5%**, outside the floor, and the gain grows with
+  concurrency. At c=16–32 it is inside the noise.
+- **RoadRunner and `spawn_cgi` sit at the floor's edge** (+2.0%, +2.3%) and cannot be called
+  a win on this evidence.
+- **php-fpm with opcache off is consistently *slower* on 8.5** (−3.9% mean, negative at every
+  concurrency). That is the one direction the noise does not explain, and it is the coldest
+  path in the matrix: compile everything, per request, with no bytecode cache.
+- **Nothing reorders.** volucer worker still leads RoadRunner at every concurrency (1.09× at
+  c=16, widening to 1.22× at c=64), and with opcache off the cold arms are still 31–36× behind
+  the warm one at c=64. Both are far outside ±2%.
+
+The opcache axis is unchanged too — at c=64 it is **1.02–1.03×** for the warm arms,
+**10.3×** for `spawn_cgi` and **10.7×** for php-fpm, against 1.01–1.04× / 9.58–11.06× /
+9.64–11.23× on 8.3. Every one of those is far outside the noise floor.
+
+### The wrk thread count is a second variable, and it is worth 12–15%
+
+Every harness in this repository before this one — including the run above — either used
+`-t$c` or fixed the thread count at 12. Both are defensible and they answer different
+questions, so the 8.5 run measures both in the same cells, as a `threads` column in
+`results/matrix85/matrix.tsv`. `THREADS_LIST=tc,t12` selects it; `tc` means `-t$conc`.
+
+| volucer worker, opcache on | `-t12` | `-t$c` | change |
+|---|---|---|---|
+| c=16 | 15,770 | 18,087 | **+14.7%** |
+| c=32 | 22,076 | 23,674 | +7.2% |
+| c=48 | 24,035 | 23,792 | −1.0% |
+| c=64 | 24,336 | 24,307 | −0.1% |
+
+**`-t$c` is not free and it is not a detail.** At c=16 it is worth 15% of throughput, because
+16 client threads schedule better on 12 cores than 12 do; by c=48 the two converge, and the
+convergence is the useful part — it means the fixed-12 numbers at the top of the curve were
+**client-limited at low concurrency and correct at high concurrency**, which is the direction
+that flatters the server least. The p99s tell the same story: `-t$c` produces a slightly
+*worse* tail at every level (1.43 → 1.73 ms at c=16, 7.28 → 8.11 ms at c=64), because 64 busy
+client threads on 12 cores compete with the server for the same cores. Neither setting is
+"right"; a comparison should state which one it held constant, and none of the earlier ones did.
+
+## Why a resident worker costs 16 MB — and what fork() would change
+
+The memory table says a warm worker costs **~16 MB of PSS each**, and that this is what makes
+volucer's 24 workers cost 418 MB while 24 php-fpm children cost 69. The natural reading is
+"then boot once and fork", which is exactly what php-fpm does and why its per-worker figure is
+1.2 MB. `scripts/fork-demo.php` measures whether that transfer works for this application
+instead of assuming it does, by running both process models on the same host, in one script,
+in one run:
+
+```
+php scripts/fork-demo.php          # CHILDREN=16 REQUESTS=50
+```
+
+| 16 workers, opcache on | exec (what volucer does) | fork (what php-fpm does) |
+|---|---|---|
+| summed PSS | 264.8 MB | **28.4 MB** |
+| summed private | 240.1 MB | **11.9 MB** |
+| per worker | 16.6 MB | **1.8 MB** |
+| children rendering the page | 16 / 16 | 16 / 16 |
+| opcache scripts per child | 80 | 81 |
+
+**Forking works, and it is the whole difference.** −89% of PSS and −95% of private memory for
+a *warm* worker that keeps its booted container, and every forked child served the same page
+with the same opcache population as the parent — the cache survives because it is a shared
+segment mapped before the fork, so nothing has to be rebuilt. The 16.6 MB the exec model costs
+is not the container: it is the *interpreter*, paid 16 times.
+
+The exec column also validates the matrix against itself. Those 16 children cost **264.6 MB**,
+and the matrix measured volucer-worker at w=16 after load at **291.5 MB** for the whole
+deployment — a 26.9 MB difference that is the Rust server process the children sit behind. Two
+independent scripts, counting the same thing two different ways, agree to within 1%. The
+fork column's 1.8 MB per worker is therefore comparable with the matrix's 15.9 MB marginal
+figure, not an artefact of a different measurement.
+
+The catch is not memory, and it is the reason `spawn_cgi` looks the way it does. `pool.rs`
+records it at the point where the decision was already made once: `PHP_FCGI_CHILDREN` relies
+on `fork()`, a `php-cgi` started with `-b` is a parent that spawns 20 children by default, and
+the pool deliberately sets it to `0` because **a forked child cannot be counted, recycled, or
+killed independently of its parent** — "the slot looks idle while 20 requests run". Adopting
+fork at the worker level would buy the memory above and pay for it in exactly those three
+properties, plus the one this demo can only hint at: the children inherited an already-open
+SQLite handle and all returned the right bytes, but 16 processes sharing one `PDO` connection's
+file state is a correctness question that a single-page benchmark does not answer.
+
+So: **further memory savings are available, they are large, and they are not free.** Nothing
+here claims volucer should fork; it measures what fork would be worth and names what it would
+cost.
 
 ## Reproducing
 
@@ -853,6 +1023,26 @@ private prefix, so the host's own services are never reloaded.
 bash scripts/matrix.sh                     # 40 configurations, ~70 minutes on 12 cores
 ARMS=fpm WORKERS_LIST=12,24 bash scripts/matrix.sh   # a subset
 python3 scripts/matrix-report.py ~/matrix-run/matrix.tsv ~/matrix-run/memory.tsv
+```
+
+Sweeping the client as well, and running the whole grid on PHP 8.5 with one interpreter
+for every arm (`results/matrix85/`) — `INI_SCAN_DIR` is what keeps xdebug and the internal
+`psr` extension out of the measurement, and `meta.txt` records what actually loaded:
+
+```bash
+THREADS_LIST=tc,t12 bash scripts/matrix.sh            # -t$conc vs -t12, same cells
+
+PHP=/usr/bin/php8.5 PHP_CGI=/usr/bin/php-cgi8.5 PHP_FPM=/usr/sbin/php-fpm8.5 \
+INI_SCAN_DIR=$HOME/php85-clean/conf.d WORKERS_LIST=16 \
+THREADS_LIST=tc,t12 RUNDIR=$HOME/matrix85 bash scripts/matrix.sh
+```
+
+The two memory questions have their own short scripts, neither needing sudo:
+
+```bash
+WORKERS=16 CONC=64 bash scripts/diag-fpm-memory.sh    # PSS vs RSS vs private, per child
+CHILDREN=16 php scripts/fork-demo.php                 # exec vs fork, one run, one host
+bash scripts/probe-franken-php.sh                     # which PHP does FrankenPHP execute?
 ```
 
 ## Four measurements, four questions
@@ -1170,8 +1360,15 @@ apps/azera/             the application, copied from azera-competition
 conf/                   one stamped config per arm
 scripts/bench.sh        the harness
 scripts/matrix.sh       workers x opcache x concurrency grid, with memory sampling
-scripts/matrix-report.py reads it: medians, spread, opcache ratios, PSS/RSS tables
-scripts/diag-fpm-memory.sh per-child PSS vs RSS, so the opcache memory question is settled
+                        (and an optional wrk thread-count sweep: THREADS_LIST=tc,t12)
+scripts/matrix-report.py reads it: medians, spread, opcache ratios, PSS/RSS tables,
+                        thread-count columns when more than one was measured
+scripts/diag-fpm-memory.sh per-child PSS vs RSS vs private, so the opcache memory
+                        question is settled rather than argued
+scripts/fork-demo.php   exec vs fork process models, same host, same run:
+                        what fork() would save and what it would cost
+scripts/probe-franken-php.sh asks the running FrankenPHP which PHP it executes,
+                        rather than trusting a version banner
 scripts/ab-perf.sh      interleaved warm-arm pass: every arm inside one round
 scripts/ab-report.py    reads it: within-round ratios, spread across rounds
 scripts/diag-split.sh   CPU per request: server process vs PHP workers

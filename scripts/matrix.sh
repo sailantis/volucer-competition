@@ -75,10 +75,34 @@
 #   DUR           wrk duration per cell                   [5s]
 #   ROUNDS        repeats per cell                        [3]
 #   THREADS       wrk threads, FIXED across cells         [12]
+#   THREADS_LIST  sweep the client instead of fixing it   [empty]
+#                 e.g. `tc,t12`: `tc` sets -t$conc, `t12`
+#                 holds it. Recorded as a `threads` column,
+#                 so one run can answer "is the tail the
+#                 server's or the load generator's?".
 #   ENDPOINT      the page measured                       [/items]
 #   WARMUP        unmeasured load before each cell        [2s]
 #   BIN / RR / FP volucer, RoadRunner, FrankenPHP binaries
+#   PHP / PHP_CGI / PHP_FPM  the interpreter, per SAPI    [distro default]
+#   INI_SCAN_DIR  PHP_INI_SCAN_DIR for every PHP process  [unset]
+#                 Lets a run exclude a conf.d entry without
+#                 editing /etc (see RUNNING ON 8.5 below).
 #   RUNDIR        configs, logs, rows                     [$HOME/matrix-run]
+#
+# RUNNING ON 8.5
+#   PHP=/usr/bin/php8.5 PHP_CGI=/usr/bin/php-cgi8.5 \
+#   PHP_FPM=/usr/sbin/php-fpm8.5 INI_SCAN_DIR=/path/to/conf.d \
+#       bash scripts/matrix.sh
+#
+#   `INI_SCAN_DIR` is not a nicety on this host. A stock php8.5 loads xdebug
+#   3.5 (mode=develop) and an internal `psr` extension whose
+#   `LoggerInterface::emergency()` is UNTYPED, which fatals this
+#   repository's bench app: its MemoryLogger implements the composer
+#   interface with typed signatures and PHP rejects the mismatch. Every
+#   8.5 arm therefore runs from a conf.d copy with `20-xdebug.ini` and
+#   `15-psr.ini` removed - i.e. it measures PHP 8.5, not PHP 8.5 plus a
+#   debugger. FrankenPHP needs none of this: its embedded 8.5 is built
+#   without either extension (scripts/probe-franken-php.sh proves it).
 #
 # Output:
 #   $RUNDIR/matrix.tsv   one row per (arm, workers, opcache, conc, round)
@@ -99,7 +123,17 @@ RR="${RR:-$HOME/bin/rr}"
 FP="${FP:-$HOME/bin/frankenphp}"
 PHP="${PHP:-$(command -v php || true)}"
 PHP_CGI="${PHP_CGI:-$(command -v php-cgi || true)}"
-PHP_FPM="${PHP_FPM:-$(command -v php-fpm8.3 || command -v php-fpm || true)}"
+# `PHP_FPM` is matched to the CLI major.minor when the caller did not name one,
+# so `PHP=/usr/bin/php8.5 bash matrix.sh` cannot silently measure FPM on 8.3.
+# Falls back to whatever php-fpm exists, which is what a single-version host has.
+default_fpm() {
+    local ver fpm
+    ver="$("$PHP" -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;' 2>/dev/null)"
+    fpm="$(command -v "php-fpm${ver}" 2>/dev/null)"
+    [ -n "$fpm" ] || fpm="$(command -v php-fpm8.3 || command -v php-fpm || true)"
+    echo "$fpm"
+}
+PHP_FPM="${PHP_FPM:-$(default_fpm)}"
 NGINX="${NGINX:-$(command -v nginx || true)}"
 RUNDIR="${RUNDIR:-$HOME/matrix-run}"
 
@@ -109,6 +143,10 @@ OPCACHE_MODES="${OPCACHE_MODES:-on,off}"
 CONC="${CONC:-16,32,48,64}"
 DUR="${DUR:-5s}"
 ROUNDS="${ROUNDS:-3}"
+# Normalise the thread sweep to a list. Empty => the single fixed THREADS, which
+# keeps every existing invocation and the committed 8.3 run identical.
+TLIST="${THREADS_LIST//,/ }"
+[ -n "$TLIST" ] || TLIST="$THREADS"
 # wrk's thread count is FIXED rather than `-t$conc`. Every harness in this
 # repository used `-t$c`, which makes concurrency the CLIENT's thread count too:
 # `diag-slots.sh` measured that as a p99 artifact once concurrency exceeds the
@@ -116,8 +154,19 @@ ROUNDS="${ROUNDS:-3}"
 # cores. Holding it constant keeps the client's own cost constant across every arm
 # and every concurrency level, which is what a cross-arm comparison needs.
 THREADS="${THREADS:-12}"
+# Empty means "one fixed thread count", which is the default and what the
+# committed 8.3 run used. Set it to sweep the CLIENT instead, which is a
+# different question: `-t$conc` gives every concurrent request its own client
+# thread, so nothing queues in the load generator - and at c=64 that is 64 busy
+# threads on 12 cores once `-c` exceeds the worker count, so the tail may be the
+# client's. Both are recorded side by side rather than argued about.
+THREADS_LIST="${THREADS_LIST:-}"
 ENDPOINT="${ENDPOINT:-/items}"
 WARMUP="${WARMUP:-2s}"
+# Passed straight through to every PHP process this script starts. Unset means
+# the host's conf.d, which is the normal case; setting it is how a run excludes
+# a conf.d entry (xdebug, psr) without editing /etc.
+INI_SCAN_DIR="${INI_SCAN_DIR:-}"
 
 PORT_BASE="${PORT_BASE:-18500}"
 PORT_W=$((PORT_BASE + 0))
@@ -161,7 +210,11 @@ chmod 0755 "$SOCK"
 # nothing to validate, and setting it would imply the setting mattered.
 # ---------------------------------------------------------------------------
 write_wrappers() {
-    local mode cli_flag cgi_flag
+    local mode cli_flag cgi_flag scan
+    # `env` before the interpreter, so the scan dir reaches the process the
+    # wrapper execs; an empty INI_SCAN_DIR means "leave it alone".
+    scan=""
+    [ -n "$INI_SCAN_DIR" ] && scan="env PHP_INI_SCAN_DIR=$INI_SCAN_DIR"
     for mode in ${OPCACHE_MODES//,/ }; do
         if [ "$mode" = "on" ]; then
             cli_flag="-d opcache.enable_cli=1 -d opcache.validate_timestamps=0"
@@ -170,10 +223,10 @@ write_wrappers() {
             cli_flag="-d opcache.enable_cli=0 -d opcache.enable=0"
             cgi_flag="-d opcache.enable=0"
         fi
-        printf '#!/bin/sh\nexec %s %s -d memory_limit=512M -d date.timezone=UTC -d display_errors=0 "$@"\n' \
-            "$PHP" "$cli_flag" > "$CFG/php-worker-$mode"
-        printf '#!/bin/sh\nexec %s %s -d memory_limit=512M -d date.timezone=UTC -d display_errors=0 "$@"\n' \
-            "$PHP_CGI" "$cgi_flag" > "$CFG/php-cgi-$mode"
+        printf '#!/bin/sh\nexec %s %s %s -d memory_limit=512M -d date.timezone=UTC -d display_errors=0 "$@"\n' \
+            "$scan" "$PHP" "$cli_flag" > "$CFG/php-worker-$mode"
+        printf '#!/bin/sh\nexec %s %s %s -d memory_limit=512M -d date.timezone=UTC -d display_errors=0 "$@"\n' \
+            "$scan" "$PHP_CGI" "$cgi_flag" > "$CFG/php-cgi-$mode"
         chmod +x "$CFG/php-worker-$mode" "$CFG/php-cgi-$mode"
     done
 }
@@ -371,11 +424,13 @@ EOF
 }
 
 cfg_rr() { # file port workers mode
+    local scan=""
+    [ -n "$INI_SCAN_DIR" ] && scan="env PHP_INI_SCAN_DIR=$INI_SCAN_DIR "
     cat > "$1" <<EOF
 version: "3"
 
 server:
-  command: "$CFG/php-worker-$4 $ROOT/roadrunner-worker.php"
+  command: "${scan}$CFG/php-worker-$4 $ROOT/roadrunner-worker.php"
   relay: pipes
 
 http:
@@ -541,7 +596,12 @@ start_arm() { # arm workers mode
             cfg_nginx "$CFG/nginx-$n-$mode.conf" "$PORT_F" "$SOCK/fpm.sock"
             # See cfg_fpm: the opcache mode has to reach the master, not the pool.
             local oc; oc=$([ "$mode" = "on" ] && echo 1 || echo 0)
-            start_bg "$LOG/$arm-$n-$mode-fpm.log" "$PHP_FPM" -y "$CFG/$arm-$n-$mode.conf" -F \
+            # `env` (not a bare assignment) because start_bg runs this in the
+            # background and the scan dir must apply to the master itself.
+            local env_scan=()
+            [ -n "$INI_SCAN_DIR" ] && env_scan=(env "PHP_INI_SCAN_DIR=$INI_SCAN_DIR")
+            start_bg "$LOG/$arm-$n-$mode-fpm.log" "${env_scan[@]}" "$PHP_FPM" \
+                -y "$CFG/$arm-$n-$mode.conf" -F \
                 -d opcache.enable="$oc" -d opcache.validate_timestamps=0
             # nginx may start before the socket exists; it fails per request until
             # then, and wait_ready below is what proves the pair works.
@@ -613,13 +673,14 @@ assert_mode_live() { # arm workers mode
 # ---------------------------------------------------------------------------
 # One cell: wrk for DUR at a fixed concurrency, then the memory sample.
 # ---------------------------------------------------------------------------
-run_cell() { # arm workers mode conc round
+run_cell() { # arm workers mode conc round [threads]
     local arm="$1" n="$2" mode="$3" conc="$4" round="$5"
+    local threads="${6:-$THREADS}"
     local port; port="$(port_of "$arm")"
-    local out="$LOG/wrk-$arm-$n-$mode-c$conc-r$round.txt"
+    local out="$LOG/wrk-$arm-$n-$mode-t$threads-c$conc-r$round.txt"
     local rps p50 p99 p999 errs
 
-    wrk -t"$THREADS" -c"$conc" -d"$DUR" --latency "http://127.0.0.1:$port$ENDPOINT" \
+    wrk -t"$threads" -c"$conc" -d"$DUR" --latency "http://127.0.0.1:$port$ENDPOINT" \
         > "$out" 2>&1
 
     rps="$(awk '/^Requests\/sec:/{print $2; exit}' "$out")"
@@ -630,17 +691,17 @@ run_cell() { # arm workers mode conc round
     errs="$(grep -cE 'Non-2xx or 3xx responses|Socket errors' "$out" 2>/dev/null)"
 
     if [ -z "$rps" ] || [ -z "$p50" ] || [ -z "$p99" ]; then
-        printf '%s\t%s\t%s\t%s\t%s\tFAIL\t?\t?\t%s\n' \
-            "$arm" "$n" "$mode" "$conc" "$round" "$errs" >> "$RESULTS"
-        printf '    %-15s w=%-2s %-3s c=%-3s r=%s  FAILED (incomplete wrk output)\n' \
-            "$arm" "$n" "$mode" "$conc" "$round"
+        printf '%s\t%s\t%s\t%s\t%s\t%s\tFAIL\t?\t?\t%s\n' \
+            "$arm" "$n" "$mode" "$conc" "$round" "$threads" "$errs" >> "$RESULTS"
+        printf '    %-15s w=%-2s %-3s t=%-3s c=%-3s r=%s  FAILED (incomplete wrk output)\n' \
+            "$arm" "$n" "$mode" "$threads" "$conc" "$round"
         return 1
     fi
 
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-        "$arm" "$n" "$mode" "$conc" "$round" "$rps" "$p50" "$p99" "$errs" >> "$RESULTS"
-    printf '    %-15s w=%-2s %-3s c=%-3s r=%s  %9s rps  p50 %8s  p99 %8s\n' \
-        "$arm" "$n" "$mode" "$conc" "$round" "$rps" "$p50" "$p99"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        "$arm" "$n" "$mode" "$conc" "$round" "$threads" "$rps" "$p50" "$p99" "$errs" >> "$RESULTS"
+    printf '    %-15s w=%-2s %-3s t=%-3s c=%-3s r=%s  %9s rps  p50 %8s  p99 %8s\n' \
+        "$arm" "$n" "$mode" "$threads" "$conc" "$round" "$rps" "$p50" "$p99"
 }
 
 # ---------------------------------------------------------------------------
@@ -667,11 +728,50 @@ run_cell() { # arm workers mode conc round
     echo "  workers:     $WORKERS_LIST"
     echo "  opcache:     $OPCACHE_MODES"
     echo "  endpoint:    $ENDPOINT"
-    echo "  concurrency: $CONC   wrk threads: $THREADS   duration: $DUR   rounds: $ROUNDS"
+    echo "  concurrency: $CONC   wrk threads: $TLIST   duration: $DUR   rounds: $ROUNDS"
+    [ -n "$INI_SCAN_DIR" ] && echo "  ini scan:    $INI_SCAN_DIR (PHP_INI_SCAN_DIR overridden)"
 } | tee "$META"
+
+# A matrix is only worth its slowest arm if the interpreter under test is the one
+# that actually loaded. On PHP 8.5 this is not academic: the distro build loads
+# xdebug 3.5 (mode=develop, i.e. every request instrumented) and an internal `psr`
+# extension whose untyped LoggerInterface fatals this bench app outright. Either
+# one turns the run into a measurement of something else, so both are refused
+# rather than reported. `INI_SCAN_DIR` is how the caller excludes them.
+check_interpreter() {
+    local out env_scan=()
+    [ -n "$INI_SCAN_DIR" ] && env_scan=(env "PHP_INI_SCAN_DIR=$INI_SCAN_DIR")
+    # php-cgi's argument parser rejects `-r` (it prints its usage instead), so the
+    # probe is a file for both SAPIs. That is also what verify_wrapper_modes does,
+    # for the same reason.
+    printf '<?php printf("%%s xdebug=%%s psr=%%s", PHP_VERSION, extension_loaded("xdebug")?"1":"0", extension_loaded("psr")?"1":"0");' \
+        > "$CFG/interp-probe.php"
+    for probe in "$PHP" "$PHP_CGI"; do
+        # php-cgi prefixes a `Content-type:` header, so the answer is extracted
+        # rather than taken as the whole of stdout.
+        out="$("${env_scan[@]}" "$probe" "$CFG/interp-probe.php" 2>/dev/null \
+            | grep -oE '[0-9]+\.[0-9]+\.[0-9]+ xdebug=[01] psr=[01]' | head -1)"
+        case "$out" in
+            *"xdebug=1"*)
+                fail "$probe reports $out - xdebug is loaded. A debugger in a
+       benchmark measures the debugger. Set INI_SCAN_DIR to a conf.d without it,
+       or use an interpreter that does not load it." ;;
+            *"psr=1"*)
+                fail "$probe reports $out - the internal 'psr' extension is loaded,
+       and its untyped LoggerInterface fatals this checkout's bench app
+       (App\\Azera\\Services\\MemoryLogger declares typed signatures). Exclude
+       15-psr.ini via INI_SCAN_DIR." ;;
+            *xdebug=*) ;;
+            *)
+                fail "$probe did not answer the interpreter probe (got '$out')" ;;
+        esac
+        echo "  interpreter: $out ($probe)" | tee -a "$META"
+    done
+}
 
 write_wrappers
 verify_wrapper_modes
+check_interpreter
 
 # opcache.file_update_protection defaults to 2 seconds and refuses to cache a file
 # whose mtime is newer than that. A checkout touched immediately before the run
@@ -697,7 +797,7 @@ PROBE
 cleanup_probe() { rm -f "$ROOT/public/.bench-ini-probe.php"; }
 trap 'stop_arm; cleanup_probe' EXIT
 
-printf 'arm\tworkers\topcache\tconc\tround\trps\tp50\tp99\terrors\n' >> "$RESULTS"
+printf 'arm\tworkers\topcache\tconc\tround\tthreads\trps\tp50\tp99\terrors\n' >> "$RESULTS"
 printf 'arm\tworkers\topcache\tphase\tconc\tpss_mb\trss_mb\tpids\n' >> "$MEMFILE"
 
 # ---------------------------------------------------------------------------
@@ -746,7 +846,17 @@ for arm in ${ARMS//,/ }; do
 
             for round in $(seq 1 "$ROUNDS"); do
                 for conc in ${CONC//,/ }; do
-                    run_cell "$arm" "$n" "$mode" "$conc" "$round"
+                    for tl in $TLIST; do
+                        # `tc` means "one client thread per concurrent request",
+                        # the historical harness convention; `tN` (or a bare `N`)
+                        # is a fixed count.
+                        if [ "$tl" = "tc" ]; then
+                            threads="$conc"
+                        else
+                            threads="${tl#t}"
+                        fi
+                        run_cell "$arm" "$n" "$mode" "$conc" "$round" "$threads"
+                    done
                 done
                 # After the hardest cell of the round, not between cells: a sample
                 # taken mid-round would describe a pool that is still warming.
