@@ -513,10 +513,30 @@ concurrency 32: minimum `MemAvailable` **2,842 MB**, the kernel's PSI memory-sta
 swap device at all, so a shortage would have shown up as an OOM kill rather than as silent
 throttling, and there were none. All 160 cells of the full sweep recorded a positive rps.
 
-The reason the headroom is that large is that the arms run one at a time and each needs about a
-gigabyte: **volucer 1,058 MB** and **RoadRunner 1,088 MB** for a twelve-worker pool (thirteen
-processes), **FrankenPHP 232 MB** (two processes, because its workers are threads). So three
-gigabytes is comfortable for this matrix. It would stop being comfortable if arms ran
+The reason the headroom is that large is that the arms run one at a time and each needs a few
+hundred megabytes. Measured as **PSS** summed over the process tree after a load burst — not RSS,
+which counts a shared page once per process and therefore charges twelve PHP processes twelve times
+for the interpreter they share:
+
+| server | 12 units | RSS (says this) | PSS (actually this) | marginal MB per extra unit |
+|---|---|---|---|---|
+| volucer, 12 workers | 13 processes | 568 MB | **208 MB** | 15.5 |
+| RoadRunner, 12 workers | 13 processes | 637 MB | **276 MB** | 18.1 |
+| FrankenPHP, 12 threads | 1 process | 134 MB | **134 MB** | **2.3** |
+
+**FrankenPHP is genuinely the most memory-efficient, and by more than a third.** Its 134 MB is all
+private, and a worker there costs 2.3 MB because a thread shares the interpreter, whereas a spawned
+PHP process costs 15.5 MB because it has its own copy. So twelve of them differ by about 170 MB.
+That is real — but it is also the *cost* side of the trade the throughput table shows the benefit
+of: the same design that makes a worker almost free is the one that plateaus at 20,810 rps.
+
+Two cautions on these numbers. RSS is what would have been quoted without checking, and it flatters
+FrankenPHP on the twelve-worker row (134 against 568, a 4.2× impression) while the honest figure is
+1.6×. And the marginal column is the one that generalises: a real deployment at 64 workers is
+better predicted by `2.3 × 64` and `15.5 × 64` than by scaling the twelve-worker totals, which
+carry a fixed base of 109 MB and 37 MB respectively.
+
+So three gigabytes is comfortable for this matrix. It would stop being comfortable if arms ran
 concurrently, which is exactly what the interleaved design avoids doing.
 
 **So the layer is now turned off for exactly those applications.** `Sites::from_config_with`

@@ -78,6 +78,29 @@ Why the ceiling exists is an open question, recorded in the plan rather than ans
 The measurements above localise it to the server's own concurrency handling and not to the
 interpreter's cost per request, and that is as far as the evidence goes.
 
+## What it does win: memory, by about a third
+
+The other half of the embedding trade, and the one the throughput tables cannot show. Measured
+after a load burst, as **PSS** summed over the whole process tree, because RSS counts a shared
+page once in every process that maps it and twelve spawned PHP processes therefore appear to cost
+twelve copies of an interpreter they actually share:
+
+| server | units | RSS | PSS | marginal MB per extra unit |
+|---|---|---|---|---|
+| volucer | 12 processes | 568 MB | 208 MB | 15.5 |
+| RoadRunner | 12 processes | 637 MB | 276 MB | 18.1 |
+| FrankenPHP | 12 threads | 134 MB | **134 MB** | **2.3** |
+
+Two runs agreed on every cell to within 1 MB. So the honest total is **1.6×** in FrankenPHP's
+favour against volucer, not the 4.2× the RSS column would suggest — and the 2.3 against 15.5 for
+one more concurrent request is the figure that matters when sizing a deployment, since it excludes
+the fixed base (109 MB and 37 MB respectively) that dominates at twelve units.
+
+This is the same trade the CPU table above describes from the other side. A thread sharing an
+interpreter is nearly free in memory and does not convert concurrency into throughput; a spawned
+process costs 15.5 MB each and does. Neither number is a defect in the other design — they are the
+two ends of one decision.
+
 ## What was verified, and what it cost to get wrong
 
 This arm's failure mode is silent, and it was worth a real amount of work to make it
