@@ -951,8 +951,36 @@ php scripts/fork-demo.php          # CHILDREN=16 REQUESTS=50
 **Forking works, and it is the whole difference.** −89% of PSS and −95% of private memory for
 a *warm* worker that keeps its booted container, and every forked child served the same page
 with the same opcache population as the parent — the cache survives because it is a shared
-segment mapped before the fork, so nothing has to be rebuilt. The 16.6 MB the exec model costs
-is not the container: it is the *interpreter*, paid 16 times.
+segment mapped before the fork, so nothing has to be rebuilt.
+
+Splitting the exec column with `OPCACHE=off` says what the 16.5 MB is actually made of:
+
+| 16 workers | PSS | per worker | of which opcache |
+|---|---|---|---|
+| exec, opcache on | 264.6 MB | 16.5 MB | |
+| exec, opcache off | 214.3 MB | 13.4 MB | |
+| **exec opcache difference** | **50.3 MB** | | **3.1 MB** |
+| fork, one boot | 28.4 MB | 1.8 MB | shared, not cloned |
+
+So the ~16 MB is **13.4 MB of interpreter plus 3.1 MB of OPcache**, and the OPcache part is
+paid **sixteen times** — 50 MB — for a segment that would have been sufficient once. That is
+the structural half of the argument, and it is measurable on Linux: an OPcache segment is
+`mmap`'d, and a process that did not `fork()` cannot attach to one somebody else created, so
+every `exec` compiles and maps its own.
+
+`scripts/diag-opcache-sharing.sh` shows the same thing from the other side, and the way the
+shared column *scales* is the proof: if the workers shared one segment, summing their shared
+pages would stay flat as children are added. Instead it grows in step with them, because each
+process has its own mapping.
+
+| children | PSS on | PSS off | opcache per child | summed shared pages |
+|---|---|---|---|---|
+| 4 | 79.0 MB | 66.3 MB | **3.15 MB** | 129 MB |
+| 8 | 142.2 MB | 117.4 MB | **3.10 MB** | 258 MB |
+
+APCu is cloned the same way. None of this is a volucer defect; it is why preforking is the
+standard answer, and it is why the fork column above is smaller than the exec one by more than
+a container's worth of memory.
 
 The exec column also validates the matrix against itself. Those 16 children cost **264.6 MB**,
 and the matrix measured volucer-worker at w=16 after load at **291.5 MB** for the whole
@@ -1083,6 +1111,46 @@ Until one of those lands, `fork()` in a worker is a memory win that cannot be ro
 is the useful outcome of measuring it: the saving is real, and the thing standing in the way is
 a single-process-per-slot assumption, not the memory model.
 
+### Before building any of it: the cheap order
+
+Two facts from the measurements above change which step comes first.
+
+**The `external` backend already is the attached model.** volucer has no relay/attach mode for
+its own protocol — `BackendConfig` documents exactly three shapes plus `Upstream`, and says the
+fourth (`spawn_fpm`) was *removed* rather than built, because "`external` attaches to the php-fpm
+that systemd already supervises, which is the better version of the same feature". `External`
+is FastCGI over a socket, so a PHP prefork supervisor that speaks FastCGI can be wired to
+volucer **today, with no server change at all** — nginx in front, or volucer in front of it, is
+a deployment choice. That makes the fork model testable end-to-end before any protocol work is
+committed to.
+
+**The win over `external` is the FastCGI hop, not the memory.** Both models fork and both share
+one OPcache; the difference is that `external` pays a request round trip through nginx or
+straight into php-fpm, while the `Worker` protocol is a warm pipe to a process that already holds
+the container. On this host at c=64 that is 24,336 rps against 8,292 — so a forked `Worker`
+backend is worth building only if it keeps the warm pipe, which is precisely what options 1–3
+above are about.
+
+So the order is:
+
+1. **Check what the matrix already says is cheap.** `opcache.enable_cli` is on in every warm arm
+   here (a CLI worker that leaves it at the distro default of `0` compiles per request), and
+   `opcache.preload` is not used. Each exec'd worker pays the preload itself, so preload is
+   worth checking *before* forking — it can move the same 3.1 MB per worker rather than the
+   model.
+2. **Measure recycled-worker cost, not just steady state.** `max_requests` is `0` in every arm
+   here. Forking makes recycling 1–3 ms instead of a boot, which is a different argument for
+   fork than memory — and it is measurable with this harness by setting `max_requests` and
+   comparing throughput, which has not been done yet.
+3. **Then the PoC, and only in the shape that keeps the warm pipe** (option 1 or 3 above).
+   The success criterion from the measurements is concrete: summed PSS down ≥30% at 8 workers,
+   worker start latency down >90%, throughput within the ±2% noise floor of the exec baseline.
+
+Two hazards the measurements already rule in or out, so they do not have to be rediscovered:
+the children **do** inherit one shared file description per fd, so a forked child must not share
+the master's channel (measured: 30 rps); and a forked master **does** survive its server being
+SIGKILLed, reparented to init, because nothing signals the group (measured: PPID 1).
+
 ## Reproducing
 
 ```bash
@@ -1150,6 +1218,8 @@ The two memory questions have their own short scripts, neither needing sudo:
 ```bash
 WORKERS=16 CONC=64 bash scripts/diag-fpm-memory.sh    # PSS vs RSS vs private, per child
 CHILDREN=16 php scripts/fork-demo.php                 # exec vs fork, one run, one host
+CHILDREN=16 OPCACHE=off php scripts/fork-demo.php     # ... split into cache vs interpreter
+CHILDREN=8 bash scripts/diag-opcache-sharing.sh       # does each exec'd worker clone it?
 bash scripts/probe-franken-php.sh                     # which PHP does FrankenPHP execute?
 
 CHILDREN=4 bash scripts/fork-worker-demo.sh           # a worker that forks, against volucer
@@ -1479,6 +1549,8 @@ scripts/diag-fpm-memory.sh per-child PSS vs RSS vs private, so the opcache memor
                         question is settled rather than argued
 scripts/fork-demo.php   exec vs fork process models, same host, same run:
                         what fork() would save and what it would cost
+                        (OPCACHE=off splits its cost into cache vs interpreter)
+scripts/diag-opcache-sharing.sh  do exec'd workers share OPcache, or clone it?
 scripts/fork-worker-demo.sh  the "forking worker" proposal against real volucer:
                         transport, liveness, teardown, and one process group
 scripts/probe-franken-php.sh asks the running FrankenPHP which PHP it executes,

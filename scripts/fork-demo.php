@@ -45,6 +45,11 @@ declare(strict_types=1);
  *   REQUESTS      requests each child serves         [50]
  *   PHP           interpreter for the exec'd model   [PHP_BINARY]
  *   INI_SCAN_DIR  PHP_INI_SCAN_DIR for both models   [unset]
+ *   OPCACHE       `on` or `off` for the exec'd side  [on]
+ *                 Forked children inherit the parent's opcache whatever this says
+ *                 and cannot be given a different one, so turning it off here is
+ *                 how the fork family's cost is split into "opcache" and "not
+ *                 opcache" - see the README.
  *
  * Requires ext-pcntl, and Linux /proc for the readings.
  */
@@ -114,11 +119,15 @@ register_shutdown_function(static function () use ($tmp, $parentPid): void {
 printf("php            %s\n", PHP_VERSION);
 printf("children       %d, %d requests each\n", $children, $requests);
 printf("ini scan       %s\n", $iniScan === '' ? '(host default)' : $iniScan);
+printf("exec opcache   %s\n", $ocMode);
 printf("exec model     %s\n\n", $phpBin);
 
-// The ON mode of the matrix, so the exec'd side is measured in the same
-// configuration the ~16 MB per worker figure came from.
-$childIni = ['-d', 'opcache.enable_cli=1', '-d', 'opcache.validate_timestamps=0',
+// The ON mode of the matrix by default, so the exec'd side is measured in the
+// same configuration the ~16 MB per worker figure came from. `OPCACHE=off` is the
+// control that separates opcache's share from the interpreter's.
+$ocMode = getenv('OPCACHE') ?: 'on';
+$ocFlag = $ocMode === 'off' ? '0' : '1';
+$childIni = ['-d', "opcache.enable_cli=$ocFlag", '-d', 'opcache.validate_timestamps=0',
              '-d', 'memory_limit=512M', '-d', 'date.timezone=UTC'];
 
 // ---------------------------------------------------------------------------
