@@ -1316,11 +1316,124 @@ lifecycle fix is required for `spawn_cgi` whether or not anyone forks; `attach` 
 server change that makes the fork real; and fair `accept()` distribution stops mattering once the
 master owns the accept.
 
-Still unmeasured, and the honest next question: **the cost of recycling**. Every arm here runs
-`max_requests = 0`, so nothing has measured what a worker's replacement costs - and for a forked
-pool it should be a `connect` and a handshake rather than a framework boot, which is the argument
-that would make aggressive recycling cheap enough to bound a leak. `attach` supports
-`max_requests` for exactly that experiment.
+## What recycling costs — and why it makes `attach` the only warm arm that can afford it
+
+Every number above was measured with `max_requests = 0`, so no arm was ever charged for replacing
+a worker. That is the question an operator actually has: an application leaks, and the choice is
+between tolerating the leak and recycling often enough to bound it. `scripts/recycle-cost.sh`
+measures the price of that choice.
+
+Two arms, because a throughput number alone cannot separate "the replacement cost throughput" from
+"the replacement cost one slot for a moment":
+
+- **Isolation** — `w = 1`, `c = 1`, `max_requests = 0` versus `= 1`. Every request either runs on a
+  long-lived worker or destroys it first, so subtracting the two per-request times gives the cost
+  of a replacement on its own. Nothing else is happening: no queueing, no other slot to hide in.
+- **Sweep** — `w = 16`, `c = 64`, `wrk -t12`, `max_requests` swept. A replacement happens in one
+  slot while fifteen others serve, which is what a deployment looks like.
+
+Cost of one replacement, `w=1`, `c=1`, median of three rounds:
+
+| arm | base | `mr=1` | replacement | share of the request | × base |
+| --- | --- | --- | --- | --- | --- |
+| `worker` (`exec`) | 0.43 ms | 79.49 ms | **79.06 ms** | 99% | 186× |
+| `attach` (fork) | 0.44 ms | 3.81 ms | **3.37 ms** | 89% | 8.7× |
+| php-fpm (`fork`) | 1.31 ms | 11.69 ms | **10.39 ms** | 89% | 9.0× |
+
+That is the whole argument in one table. `worker` pays **79 ms** to replace a worker: a new
+interpreter, a new OPcache segment, and the application boot — for the `/items` page, the boot is
+almost all of it. `attach` pays **3.4 ms**, because the supervisor forks a child that already
+inherited all three. php-fpm lands at 10.4 ms, which is the same model with a heavier pool behind
+it, and it is the reason 10 ms is a fair reference rather than an indictment.
+
+Under load, `w = 16`, `c = 64`, `wrk -t12`, median of three rounds:
+
+| arm | `mr=0` | `mr=100` | `mr=500` | `mr=2000` |
+| --- | --- | --- | --- | --- |
+| `worker` | 23,779 | 7,396 (**−69%**) | 15,572 (−35%) | 21,366 (−10%) |
+| `attach` | 25,107 | 18,448 (−27%) | 23,370 (−7%) | 24,945 (−1%) |
+| php-fpm | 8,057 | 7,292 (−10%) | 8,018 (−0.5%) | 8,081 (+0.3%) |
+
+Read the `mr=100` column as the worst case a real deployment would pick, and the difference is not
+a percentage — it is whether the option exists. On `worker`, recycling every 100 requests costs
+**69% of throughput**, so nobody would do it; the leak is cheaper to tolerate. On `attach` the same
+policy costs 27%, and every 500 requests costs 7%. The p99 tells the same story more sharply:
+`worker` at `mr=100` has a 84.7 ms tail against 7.5 ms unloaded, while `attach` stays at 10.1 ms
+against 6.8 ms — the difference between a stall and a rounding error.
+
+php-fpm is the control that keeps this honest. It is the reference implementation of cheap
+recycling, and it shows *no* throughput cost at all across the sweep, because its replacement is
+hidden behind 16 children that are each much cheaper to fork than volucer's. The `worker` column
+is the outlier, and it is the only one whose replacement is an `exec`.
+
+### What this does not say
+
+- **`worker` is still the right default.** It needs no supervisor, no second process and no socket
+  per slot, and at `max_requests = 0` it is 24,000 rps. What the table says is narrower: if you
+  need recycling, `worker` is the arm that cannot afford it.
+- **The 3.37 ms is not zero, and a deployment that recycles every request would notice.** The
+  isolation arm is a stress test, not a policy.
+- **`attach` recycling still cannot see the leak it is bounding.** `max_requests` is a count, not a
+  memory threshold: `memory_limit_mb` remains unavailable because a process volucer did not fork
+  has no signal volucer may send. The count is the proxy, and 3.4 ms is what makes it affordable.
+- **One host, one page, one run per cell.** The three-way agreement with the earlier tables
+  (`mr=0` reproduces 23,779 / 25,107 / 8,057 against 24,093 / 25,480 / 8,246) is the check that
+  this harness measures the same machine.
+
+### A third fork option already exists, and it is php-cgi's own prefork
+
+`php-cgi -b` with `PHP_FCGI_CHILDREN = n` is a real preforking server on Linux — measured here, not
+assumed: `n = 16` gives one master and 16 children, twelve sequential requests spread round-robin
+across four of them, and `SIGTERM` to the master leaves none behind. It is the same fork model as
+`attach`, with the master written by the PHP project.
+
+**It is already usable, with no new mode.** `kind = "external"` reaches an already-running FastCGI
+server, and a preforking `php-cgi` is one:
+
+```bash
+PHP_FCGI_CHILDREN=16 PHP_FCGI_MAX_REQUESTS=0 php-cgi8.5 -b 127.0.0.1:9000 &
+```
+
+```toml
+[backends.app]
+kind = "external"
+socket = "127.0.0.1:9000"
+```
+
+Measured at `w = 16`, `c = 64`, `wrk -t12`, PSS summed over the master, its children and volucer:
+
+| arm, 16 PHP processes | rps | PSS before load | PSS after load |
+| --- | --- | --- | --- |
+| `worker`, 16 `exec`ed | 23,937 – 24,228 | 263 MB | 314 MB |
+| `attach`, supervisor + fork | 25,322 – 25,981 | 48 MB | 69 MB |
+| **`external` → php-cgi prefork** | **8,202** | **35 MB** | **66 MB** |
+
+**The memory is the same and the throughput is a third.** That is the honest result, and it is not
+a defect in php-cgi: `external` speaks FastCGI, which means a cold interpreter per request and no
+channel, so it lands where `spawn_cgi` lands (8,292 rps) rather than where a warm worker does. Fork
+buys the memory; it does not buy the warm protocol. `attach` is the arm that has both, and that is
+the entire reason it exists as a backend rather than as advice to run `php-cgi -b`.
+
+### `attach` is not renamed, and the name is the honest one
+
+Considered: `worker-attach`, `worker-prefork`, `worker-pipe`. All three put the wrong word first.
+
+- **`worker-pipe` names the transport**, and `worker` already has a `transport` setting that
+  chooses pipe or socket. A `kind` that duplicates one of its own fields is two ways to say the
+  same thing and a third to contradict it. On Windows `worker` is not a pipe at all — it defaults
+  to a socket — so the name would be wrong on the platform where it matters most.
+- **`worker-prefork` names how the *supervisor* was built**, which volucer cannot see and does not
+  require. Nothing stops an attached worker from being a plain long-lived process that connects
+  itself (design "A" in the discussion that led here), or a supervisor using `posix_spawn`. The
+  backend's contract is `relay` + `workers`, and it never asks how the far side made them.
+- **`attach` names the actual asymmetry**, which is the only thing that differs from `worker`:
+  volucer **dials**, it does not spawn. That is why `workers` has no default, why `max_requests`
+  reconnects instead of killing, and why there is no `memory_limit_mb`. Every one of those
+  surprises is explained by the name rather than hidden by it.
+
+`attach` also keeps the family consistent: `external` attaches to a php-fpm somebody else runs,
+`attach` attaches to workers somebody else runs. Both are "the process is not ours", which is the
+distinction that changes behaviour.
 
 ## Reproducing
 

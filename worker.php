@@ -81,6 +81,19 @@ if (($argv[1] ?? '') === '--prefork') {
     fwrite(STDOUT, "listening\n");
     fflush(STDOUT);
 
+    // **Reaping is not optional here, and it is not the operating system's job.** A child that
+    // exits stays a zombie until its parent waits for it, and a supervisor that only accepts
+    // and forks grows one per connection — measured at exactly 10 zombies for 10 connections,
+    // which for a pool that recycles is a process table that fills up over a day. `SIGCHLD`
+    // with a `WNOHANG` loop is the standard answer: the handler must not block, because it runs
+    // between any two instructions of the accept loop.
+    pcntl_async_signals(true);
+    pcntl_signal(SIGCHLD, static function (): void {
+        while (pcntl_waitpid(-1, $status, WNOHANG) > 0) {
+            // Reap everything that has exited. php-fpm's answer for the same problem.
+        }
+    });
+
     // Accept in the master, fork per connection. The ordering is what keeps the assignment
     // exact: the kernel wakes one waiter per connection and does not do it fairly, so N children
     // sharing the listener can leave one holding two connections and another none — which for
@@ -88,10 +101,21 @@ if (($argv[1] ?? '') === '--prefork') {
     while (true) {
         $connection = @stream_socket_accept($listener, -1);
         if ($connection === false) {
+            // A signal interrupted the accept, which is expected once per exiting child. The
+            // signal handler has already reaped it; this loop just goes back to waiting.
             continue;
         }
 
         $pid = pcntl_fork();
+        if ($pid === -1) {
+            // Out of processes. Dropping the connection is the honest answer: volucer sees a
+            // closed socket on that slot and replaces it on the next request, where pretending
+            // to have forked would leave a slot waiting for an answer that never comes.
+            fclose($connection);
+
+            continue;
+        }
+
         if ($pid !== 0) {
             // The master must drop its copy, or the socket never reaches end-of-file when the
             // child exits and one fd leaks per connection.
