@@ -498,8 +498,54 @@ run, so the finding is not a property of the earlier one. The `/` figure exceeds
 concurrency for the reason recorded earlier: `/` resolves through the directory-index branch,
 `/items` names no file at all.
 
+### Why RoadRunner nearly catches up at concurrency 16
+
+The c=16 column is the odd one — +2.7% on `/` against +19% and +23% either side of it — and it is
+not noise: all five rounds agreed, 1.007, 1.048, 1.029, 1.027, 1.011. It is also not a crossover.
+RoadRunner's advantage is that **its cost per request falls as the pool gets busier**, and c=16 is
+simply the first point where a twelve-worker pool is busy enough to collect it.
+
+Measured directly, at fixed concurrency with the worker count varied, the server's CPU cost per
+request (`results/ab-workers-vs-concurrency.tsv`, two rounds agreeing to 1%):
+
+| workers | rr @ c=8 | rr @ c=16 | rr @ c=32 | volucer @ c=8 | c=16 | c=32 |
+|---|---|---|---|---|---|---|
+| 6 | 223 µs | 218 | 218 | 182 µs | 183 | 186 |
+| 12 | 267 µs | **230** | 224 | 184 µs | 190 | 196 |
+| 24 | 310 µs | 290 | 254 | 186 µs | 194 | 212 |
+
+Sorted by requests per worker per second, rr's cost is monotonic from **310 µs at 736 rps/worker
+down to 218 µs at 4,500** — a 42% swing driven by how much work each worker gets, not by
+concurrency as such. A worker that is woken for one request and put back to sleep pays for the
+wake-up; a worker kept warm does not. That is also why rr gets *worse* with 24 workers at c=8
+(310 µs, 17,640 rps against 24,100 at 6 workers): spreading a light load over more processes
+multiplies the wake-ups.
+
+Volucer shows the same direction an order of magnitude weaker (182 → 212 µs), which is why the
+gap narrows at 16 and reopens at 32 — at c=32 rr has already spent its improvement while volucer's
+pool is only just saturated. **The c=16 dip is rr converging on its floor, not volucer slowing
+down.**
+
+**A correction to what this section said before.** An earlier draft attributed the effect to a
+per-worker wake-up cost and read the magnitude off a measurement that turned out to be unusable: it
+recorded 18.3 CPU-seconds for a cell whose rps was within 1% of a run recording 47.0, so one of the
+two was not measuring the server. The cause was not isolated, so the fix was to remove the
+opportunities for it rather than to name it — a fresh port per cell, the server pid checked alive
+before and after, the worker count confirmed from the process tree, and CPU per request
+cross-checked two independent ways (by elapsed time and by completed request count), which agree to
+within 1%. The direction of the earlier conclusion survived; the magnitude did not.
+
+### Neither arm saturates this host, so c=32 is not a ceiling
+
+Worth stating because it bounds every reading above. volucer at c=32, 64, 128 and 256 served
+43,790, 45,175, 44,532 and 44,320 rps — flat, while its server tree used 8.8–9.0 of the host's 12
+cores and the load generator plus everything else accounted for only 0.5. So the plateau is not
+CPU exhaustion on either side, and **the c=32 cells are where the sweep stopped, not where the
+server stopped**. Comparing arms at c=32 compares them at a point neither has been pushed past.
+
 FrankenPHP is the only arm that does not gain from concurrency: **20,810 at c=16 against 22,880 at
-c=8** on `/`, and flat from 16 to 32 on `/items`. That plateau is the architectural result
+c=8** on `/`, and flat from 16 to 32 on `/items`. That plateau *is* a real ceiling rather than a
+stopping point — it stops while leaving 7.17 of 12 cores idle, which is the queueing signature
 `results/frankenphp.md` describes, reproduced on a different host and a newer binary. It is also
 the one arm ahead of volucer anywhere: **+17.5% on `/` at c=1** (0.825x), a cell where volucer
 wins on `/items` by −4.9% with a range crossing 1.00, so at concurrency 1 the two are close and
@@ -538,6 +584,12 @@ carry a fixed base of 109 MB and 37 MB respectively.
 
 So three gigabytes is comfortable for this matrix. It would stop being comfortable if arms ran
 concurrently, which is exactly what the interleaved design avoids doing.
+
+**Sizing it for something bigger than this matrix:** the numbers that matter are the marginal
+column and the memory limit each worker carries. At `memory_limit = 512M`, the worst case is not
+the 15.5 MB a worker *does* use but the 512 MB it is *allowed* to use, and twelve of those would be
+6 GB — which is why `memory_limit` is the setting to cut before RAM is the thing to add, if a run
+ever needs more workers than this host can hold. For the sweep as configured, 4 GB was never close.
 
 **So the layer is now turned off for exactly those applications.** `Sites::from_config_with`
 decides it, which is the table `serve` actually serves from, so there is one answer rather than a
