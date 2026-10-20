@@ -1979,3 +1979,93 @@ throughput delta of the same size is not.
 repository was made: a 10% throughput gap between two servers was a 3x difference
 in *server* CPU per request, invisible in wall clock, and fixing it moved the
 result by more than any configuration change in the history of the harness.
+
+## The two new arms: a unix worker socket, and prefork inside a cold slot
+
+`results/matrix85/report.md` answers "how many workers" for the five servers this
+repository compares. `results/matrix85-volucer-modes/report.md` answers a
+narrower and sharper question: **what is each part of volucer's warm model worth**,
+holding the server, the page and the host constant and changing one thing per row.
+
+| arm | transport | process model | what the row isolates |
+| --- | --- | --- | --- |
+| `worker` | pipe | one `exec` per worker | the baseline |
+| `worker` + `socket = "unix:…"` | unix socket | one `exec` per worker | the transport |
+| `attach` | unix relay | one boot, `fork()` per connection | the memory model |
+| `spawn_cgi` | unix socket | one `php-cgi` per slot | the per-request SAPI reset |
+| `spawn_cgi` + `children` | unix socket | `php-cgi` + `children` per slot | fork inside a cold slot |
+
+Measured on 12 cores / 3.8 GB, PHP 8.5.11, opcache on, `/items`, 5 s per cell,
+3 rounds, `wrk -t12`, 615 cells, **zero failed cells and zero dropped responses**.
+
+### The transport does not matter, and that is now a measurement rather than a claim
+
+`unix` against `worker` is the same process model with the address changed:
+**−7.1% to +0.5%** across all 30 worker-count and concurrency combinations, with PSS
+within **2.3%** at every one of them. That spread is the run-to-run noise floor, not
+an effect: the sign flips between adjacent cells at the same configuration. The unix
+socket is worth having because it removes a port and a TCP stack from the deployment,
+not because it is faster — and anyone who deploys it expecting throughput should know
+that from a measurement rather than from the name.
+
+### `fork()` is worth 85% of the memory, and at high worker counts it is also faster
+
+`attach` against `worker`, summed PSS after load:
+
+| workers | 1 | 4 | 8 | 16 | 24 | 32 |
+| --- | --- | --- | --- | --- | --- | --- |
+| `attach` vs `worker`, PSS | +3.1% | **−49.7%** | **−66.5%** | **−78.2%** | **−82.6%** | **−85.3%** |
+| `attach` vs `worker`, rps @ c=16 | −1.5% | −3.4% | −2.2% | +2.5% | +1.2% | −0.0% |
+| `attach` vs `worker`, rps @ c=64 | −3.5% | −3.2% | −2.6% | +9.2% | **+9.9%** | **+8.4%** |
+
+At 32 workers that is **580 MB against 85 MB** — 6.8× — because the interpreter and
+the OPcache segment exist once instead of 32 times. The marginal cost of one more
+worker is **17.3 MB/worker for `worker` against 1.3 MB/worker for `attach`**: a pipe
+worker is a whole PHP process, an attached one is a connection.
+
+Throughput is where this run corrects the earlier text rather than confirming it.
+Above w=8 `attach` is **not** slower — it is 6–10% *faster* at c=24 and c=64, which
+is the opposite of what the recycling section above assumes when it calls the
+connection "the cost this design pays". Below w=8 the ordering is reversed and small
+(1–4%). The reading that fits both halves is that `attach` loses a little on the
+per-request syscall and wins once 16 or more pipes are sharing 12 cores, where 32
+separate PHP processes cost more in cache and scheduler contention than the extra
+socket write costs in total. A 5% figure from a two-point comparison carried more
+weight than it could bear; this grid is what replaces it.
+
+### `children` buys concurrency out of a cold slot, and pays for it in processes
+
+`spawn_cgi` with `children = 1` is the control: it must measure like plain
+`spawn_cgi`, and it does — **−4.0% to +1.7% rps, within 0.8% PSS**, which is what
+makes `children = 1` a truthful alias for the default rather than a silent
+behaviour change.
+
+Where the extra processes are *not* the bottleneck, `children` is worth a great deal:
+at one slot it is **+304% (ch=4) to +690% (ch=8)**, because one `php-cgi` process
+serves one request at a time and children are the only way out of that. At 4 slots
+the gain is **+81% to +84%** and the cost is **+28% to +83%** PSS. By 8 slots it is
+**−4%**: twelve cores are already full, so more processes per socket add nothing and
+the run says so rather than reporting a win it did not find.
+
+The same total process count reached two ways is the point of the second axis:
+
+| configuration | PHP processes | rps @ c=64 | PSS after load | rps per MB |
+| --- | --- | --- | --- | --- |
+| `spawn_cgi`, w=16, children=1 | 17 | 6,988 | 310 MB | 23 |
+| `spawn_cgi`, w=4, children=4 | 21 | 7,982 | 131 MB | 61 |
+| `spawn_cgi`, w=1, children=16 | 18 | 8,564 | 70 MB | 122 |
+| `attach`, w=16 | 18 | 26,054 | 68 MB | 383 |
+
+**One socket with 16 children beats 16 sockets with one each by 23% at c=64, on 4.4×
+less memory** — and it is still a third of `attach`, because `attach` speaks the warm
+framed protocol while `spawn_cgi` pays a cold interpreter per request. That is the
+honest reading: prefork makes the cold arm respectable, it does not make it warm.
+`attach` is the only shape here that has both the sharing and the warm loop.
+
+### What the run could not measure, and why
+
+`children` multiplies the process count, so cells whose total exceeded 96 were
+skipped rather than started — a run that swaps measures the swap. The 19 skipped
+cells and the six lost to a harness bug in the first pass are listed verbatim in
+`results/matrix85-volucer-modes/meta.txt`, because a matrix whose skipped cells are
+invisible can be read as complete.

@@ -24,10 +24,35 @@
 # The arms are the same five `bench.sh` measures, with the same application:
 #
 #     volucer-worker   volucer `worker` backend       warm, pipe
-#     volucer-fastcgi  volucer `spawn_cgi` backend    cold, unix socket
+#     volucer-unix     volucer `worker` backend       warm, unix socket
+#     volucer-attach   volucer `attach` backend       warm, unix relay, one boot forked
+#     volucer-fastcgi  volucer `spawn_cgi` backend    cold, unix socket, 1 process/slot
+#     volucer-prefork  volucer `spawn_cgi` backend    cold, unix socket, n children/slot
 #     rr               RoadRunner `worker`            warm, pipe
 #     frankenphp       FrankenPHP worker mode         warm, embedded (PHP 8.5)
 #     fpm              nginx + php-fpm                cold, unix socket
+#
+# The four volucer arms are one server in four shapes, so a difference between
+# them is the shape and nothing else:
+#
+#     unix  vs worker    the transport alone: same process model, same SDK call
+#     attach vs worker   the memory model alone: fork() shares one OPcache instead
+#                        of mapping one per worker; `workers` stays the connection
+#                        count, and the supervisor forks exactly that many
+#     prefork vs fastcgi the process model inside a slot: `children` forks under one
+#                        listening socket, so a slot serves that many at once
+#
+# Two of them cannot be swept over `workers` the way the others are:
+#
+#     attach    `workers` is the number of connections volucer dials, and the
+#               supervisor has already forked a fixed number of children. A value
+#               that differs from the fork count is either idle children or
+#               requests queued behind a connection nobody reads, so this arm
+#               starts `$n` children *and* dials `$n` — one number, both sides.
+#     prefork   `workers` is listening sockets and `children` is processes per
+#               socket. Sweeping `workers` alone would sweep total processes to
+#               32x64 on this host, so CHILDREN_LIST is an independent axis and the
+#               default sweeps it at a fixed worker count.
 #
 # Three things about the setup are deliberate and are the difference between a
 # matrix and a table of numbers that only look comparable:
@@ -68,8 +93,14 @@
 #   ARMS=volucer-worker,fpm WORKERS_LIST=12 CONC=16 ROUNDS=1 DUR=3s bash scripts/matrix.sh
 #
 # Environment (defaults in brackets):
-#   ARMS          comma list of arms                      [all five]
+#   ARMS          comma list of arms                      [all eight]
 #   WORKERS_LIST  worker counts to sweep                  [12,16,20,24]
+#   CHILDREN_LIST processes per spawn_cgi slot, volucer-prefork  [none: 4]
+#                 A second axis, because `workers` there is sockets and this is
+#                 processes per socket. Cells whose product exceeds
+#                 MAX_PHP_PROCESSES are skipped and recorded in meta.txt, rather
+#                 than starting 512 PHP processes on a 12-core host.
+#   MAX_PHP_PROCESSES  cap for the product above          [128]
 #   OPCACHE_MODES on,off                                  [on,off]
 #   CONC          concurrency levels                      [16,32,48,64]
 #   DUR           wrk duration per cell                   [5s]
@@ -137,16 +168,19 @@ PHP_FPM="${PHP_FPM:-$(default_fpm)}"
 NGINX="${NGINX:-$(command -v nginx || true)}"
 RUNDIR="${RUNDIR:-$HOME/matrix-run}"
 
-ARMS="${ARMS:-volucer-worker,volucer-fastcgi,rr,frankenphp,fpm}"
+ARMS="${ARMS:-volucer-worker,volucer-unix,volucer-attach,volucer-fastcgi,volucer-prefork,rr,frankenphp,fpm}"
 WORKERS_LIST="${WORKERS_LIST:-12,16,20,24}"
+# `children` is a second axis and not a second worker list: on `volucer-prefork`
+# `workers` counts listening sockets and `children` counts processes behind each,
+# so sweeping both freely would ask this host for 32x64 processes. The product is
+# capped below, per cell, and a skipped cell is recorded rather than silently
+# started.
+CHILDREN_LIST="${CHILDREN_LIST:-}"
+MAX_PHP_PROCESSES="${MAX_PHP_PROCESSES:-128}"
 OPCACHE_MODES="${OPCACHE_MODES:-on,off}"
 CONC="${CONC:-16,32,48,64}"
 DUR="${DUR:-5s}"
 ROUNDS="${ROUNDS:-3}"
-# Normalise the thread sweep to a list. Empty => the single fixed THREADS, which
-# keeps every existing invocation and the committed 8.3 run identical.
-TLIST="${THREADS_LIST//,/ }"
-[ -n "$TLIST" ] || TLIST="$THREADS"
 # wrk's thread count is FIXED rather than `-t$conc`. Every harness in this
 # repository used `-t$c`, which makes concurrency the CLIENT's thread count too:
 # `diag-slots.sh` measured that as a p99 artifact once concurrency exceeds the
@@ -161,6 +195,13 @@ THREADS="${THREADS:-12}"
 # threads on 12 cores once `-c` exceeds the worker count, so the tail may be the
 # client's. Both are recorded side by side rather than argued about.
 THREADS_LIST="${THREADS_LIST:-}"
+# Normalise the thread sweep to a list. Empty => the single fixed THREADS, which
+# keeps every existing invocation and the committed 8.3 run identical. This is
+# after THREADS on purpose: under `set -u`, expanding THREADS before its default
+# is an error, and the error would only appear for a caller that left
+# THREADS_LIST unset - i.e. the ordinary case.
+TLIST="${THREADS_LIST//,/ }"
+[ -n "$TLIST" ] || TLIST="$THREADS"
 ENDPOINT="${ENDPOINT:-/items}"
 WARMUP="${WARMUP:-2s}"
 # Passed straight through to every PHP process this script starts. Unset means
@@ -174,6 +215,13 @@ PORT_T=$((PORT_BASE + 1))
 PORT_R=$((PORT_BASE + 3))
 PORT_Z=$((PORT_BASE + 4))
 PORT_F=$((PORT_BASE + 5))
+# The three new volucer shapes get their own ports for the same reason the first
+# two did: a cell that fails to stop must not be reachable from the next cell's
+# URL, because every request would then be served by a stale pool at the wrong
+# configuration and recorded as the new one.
+PORT_U=$((PORT_BASE + 6))
+PORT_A=$((PORT_BASE + 7))
+PORT_P=$((PORT_BASE + 8))
 
 CFG="$RUNDIR/cfg"
 LOG="$RUNDIR/log"
@@ -296,15 +344,16 @@ mem_sample() {
     echo "$pss $rss $n"
 }
 
-record_mem() { # arm workers mode phase conc
+record_mem() { # arm workers mode phase conc [children]
     local arm="$1" n="$2" mode="$3" phase="$4" conc="$5"
+    local children="${6:-${CHILDREN:-}}"
     local pss rss pids
     read -r pss rss pids <<< "$(mem_sample "${ROOTS[@]}")"
-    printf '%s\t%s\t%s\t%s\t%s\t%.1f\t%.1f\t%s\n' \
+    printf '%s\t%s\t%s\t%s\t%s\t%.1f\t%.1f\t%s\t%s\n' \
         "$arm" "$n" "$mode" "$phase" "${conc:-0}" \
         "$(awk -v k="${pss:-0}" 'BEGIN{printf "%.1f", k/1024}')" \
         "$(awk -v k="${rss:-0}" 'BEGIN{printf "%.1f", k/1024}')" \
-        "${pids:-0}" >> "$MEMFILE"
+        "${pids:-0}" "${children}" >> "$MEMFILE"
 }
 
 # ---------------------------------------------------------------------------
@@ -322,7 +371,6 @@ start_bg() { # logfile, then the command
 # php-cgi and nginx can accept a connection before the application is reachable,
 # and a 502 arriving mid-cell would be recorded as a throughput number.
 wait_ready() { # port
-    local code
     for _ in $(seq 1 240); do
         code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 \
             "http://127.0.0.1:$1$ENDPOINT" 2>/dev/null)"
@@ -374,6 +422,77 @@ stop_arm() {
     ROOTS=()
 }
 
+# The `children` values to sweep for an arm.
+#
+# Only `volucer-prefork` has the second axis: its `workers` counts listening
+# sockets and its `children` counts processes behind each, so sweeping `workers`
+# alone would conflate "more sockets" with "more processes per socket". Every other
+# arm gets the single sentinel `-`, which is what keeps the loop uniform: an empty
+# word would be no iteration at all, and those arms would silently vanish from the
+# grid rather than being measured once with no `children` setting.
+children_list_for() { # arm
+    if [ "$1" = "volucer-prefork" ]; then
+        # Space-separated, because the caller iterates it with an unquoted
+        # expansion: echoing the comma list verbatim produced one "value"
+        # `1,4,8,16,24,32`, which went into the TOML as a single integer and made
+        # every prefork cell fail to parse. The comma form stays the input
+        # convention because it matches WORKERS_LIST.
+        echo "${CHILDREN_LIST:-4}" | tr ',' ' '
+    else
+        echo "-"
+    fi
+}
+
+# The value to record in the TSVs: empty when the arm has no such setting.
+#
+# `-` is a loop sentinel, not a measurement. Writing it into the column would make
+# seven arms look like they were configured at some children value instead of like
+# the key not existing for them.
+recorded_children() { # children
+    [ "$1" = "-" ] && echo "" || echo "$1"
+}
+
+# How many PHP processes this cell will start, for the cap in the grid.
+#
+# `attach` is the exception and the reason this cannot be `workers` times
+# something: volucer starts no PHP there at all, and the supervisor forks one child
+# per connection volucer dials, so the count is `workers` — plus the master, which
+# is one more, and the same for the preforked `spawn_cgi` slots.
+php_processes() { # arm workers children
+    case "$1" in
+        volucer-prefork)
+            # `children = 0` and `1` both mean one process per socket, and the pool
+            # maps them to PHP_FCGI_CHILDREN=0 for that reason; anything above adds
+            # one master plus `children` per socket.
+            if [ "${3:-0}" -gt 1 ]; then
+                echo $(( $2 * $3 + $2 ))
+            else
+                echo $(( $2 ))
+            fi
+            ;;
+        volucer-fastcgi) echo $(( $2 )) ;;
+        volucer-attach)  echo $(( $2 + 1 )) ;;
+        *)               echo $(( $2 )) ;;
+    esac
+}
+
+# Wait for a unix socket the measured server only *dials*.
+#
+# `attach` is the one arm where the server under test is not the first process
+# started: volucer only dials, so if it starts first its pool fails on a missing
+# socket and the cell is recorded as "attach does not work" rather than as "the
+# harness started the two sides in the wrong order". Existence is enough here and
+# connecting would not be: an extra connect is an extra connection for the
+# supervisor to fork a child for, which is a probe that perturbs the thing it
+# measures. `wait_ready` is what proves the pair actually serves.
+wait_socket() { # path
+    for _ in $(seq 1 240); do
+        [ -S "$1" ] && return 0
+        sleep 0.25
+    done
+    return 1
+}
+
 # ---------------------------------------------------------------------------
 # Config generation. Every parameter of the matrix is a placeholder here, and the
 # reason for each setting sits with the value.
@@ -419,6 +538,90 @@ kind = "spawn_cgi"
 binary = "$CFG/php-cgi-$4"
 workers = $3
 socket = "unix:$SOCK/cgi"
+max_requests = 0
+EOF
+}
+
+cfg_volucer_unix() { # file port workers mode
+    cat > "$1" <<EOF
+# volucer + resident worker over a unix socket: the same warm process model as
+# volucer-worker, with the address changed and nothing else. \`transport\` keeps its
+# existing meaning ("not a pipe"); \`socket\` is what decides *where* the worker
+# listens, and it is a PREFIX — slot i binds <prefix>.<i>.sock, which is what keeps
+# each slot recyclable and individually readable.
+default_backend = "app"
+
+[server]
+http = "127.0.0.1:$2"
+document_root = "$ROOT/public"
+
+[server.static_files]
+enabled = false
+
+[backends.app]
+kind = "worker"
+command = "$CFG/php-worker-$4 $ROOT/worker.php"
+workers = $3
+transport = "socket"
+socket = "unix:$SOCK/worker"
+working_dir = "$ROOT"
+max_requests = 0
+EOF
+}
+
+cfg_volucer_attach() { # file port workers mode
+    cat > "$1" <<EOF
+# volucer + attach: volucer starts no PHP and dials a relay that a prefork
+# supervisor listens on. The supervisor boots the application once and forks, so
+# the interpreter and the OPcache segment exist once for the whole pool — the
+# memory model, measured, not the process count.
+#
+# \`workers\` is the number of connections volucer dials and has no default: a
+# supervisor has already forked a specific number, and a connection count that
+# differs is either idle children or requests queued behind a child that is not
+# there. The harness therefore passes the same $3 to both sides.
+default_backend = "app"
+
+[server]
+http = "127.0.0.1:$2"
+document_root = "$ROOT/public"
+
+[server.static_files]
+enabled = false
+
+[backends.app]
+kind = "attach"
+relay = "unix:$SOCK/relay"
+workers = $3
+EOF
+}
+
+cfg_volucer_prefork() { # file port workers mode children
+    cat > "$1" <<EOF
+# volucer + spawn_cgi with \`children\`: one listening socket per slot, and
+# \`children\` php-cgi processes behind it, forked from one master that inherited
+# the listening descriptor and the OPcache segment. This is the only shape that
+# serves more than one request at a time out of a cold slot without paying a
+# second interpreter and a second OPcache.
+#
+# \`children\` counts children, not processes: php-cgi forks them *in addition to
+# itself*, and the pool maps 0 and 1 to PHP_FCGI_CHILDREN=0 so that 1 means one
+# process rather than a hidden second one.
+default_backend = "cgi"
+
+[server]
+http = "127.0.0.1:$2"
+document_root = "$ROOT/public"
+
+[server.static_files]
+enabled = false
+
+[backends.cgi]
+kind = "spawn_cgi"
+binary = "$CFG/php-cgi-$4"
+workers = $3
+children = $5
+socket = "unix:$SOCK/cgi-prefork"
 max_requests = 0
 EOF
 }
@@ -578,6 +781,35 @@ start_arm() { # arm workers mode
             cfg_volucer_cgi "$CFG/$arm-$n-$mode.toml" "$PORT_T" "$n" "$mode"
             start_bg "$LOG/$arm-$n-$mode.log" "$BIN" serve -c "$CFG/$arm-$n-$mode.toml"
             ;;
+        volucer-unix)
+            cfg_volucer_unix "$CFG/$arm-$n-$mode.toml" "$PORT_U" "$n" "$mode"
+            start_bg "$LOG/$arm-$n-$mode.log" "$BIN" serve -c "$CFG/$arm-$n-$mode.toml"
+            ;;
+        volucer-attach)
+            rm -f "$SOCK/relay"
+            cfg_volucer_attach "$CFG/$arm-$n-$mode.toml" "$PORT_A" "$n" "$mode"
+            # The supervisor first, because volucer only dials: starting it second
+            # would make the pool's boot fail on a socket that is not there yet,
+            # which looks like an attach bug and is an ordering bug in the harness.
+            #
+            # `workers` is the number of connections volucer dials, and the
+            # supervisor forks one child per connection it accepts, so the two
+            # sides agree by construction — no second number to keep in sync. The
+            # supervisor creates the listener before it serves, which is what
+            # wait_socket below proves rather than assumes.
+            start_bg "$LOG/$arm-$n-$mode-supervisor.log" \
+                "$CFG/php-worker-$mode" "$ROOT/worker.php" --prefork "unix:$SOCK/relay"
+            if ! wait_socket "$SOCK/relay"; then
+                echo "  $arm: the supervisor never created $SOCK/relay" | tee -a "$META" >&2
+                tail -4 "$LOG/$arm-$n-$mode-supervisor.log" 2>/dev/null | sed 's/^/    /' >&2
+                return 1
+            fi
+            start_bg "$LOG/$arm-$n-$mode.log" "$BIN" serve -c "$CFG/$arm-$n-$mode.toml"
+            ;;
+        volucer-prefork)
+            cfg_volucer_prefork "$CFG/$arm-$n-$mode.toml" "$PORT_P" "$n" "$mode" "$(recorded_children "${CHILDREN:-0}")"
+            start_bg "$LOG/$arm-$n-$mode.log" "$BIN" serve -c "$CFG/$arm-$n-$mode.toml"
+            ;;
         rr)
             cfg_rr "$CFG/$arm-$n-$mode.yaml" "$PORT_R" "$n" "$mode"
             # RoadRunner resolves the worker command relative to its CWD.
@@ -614,7 +846,10 @@ start_arm() { # arm workers mode
 port_of() {
     case "$1" in
         volucer-worker)  echo "$PORT_W" ;;
+        volucer-unix)    echo "$PORT_U" ;;
+        volucer-attach)  echo "$PORT_A" ;;
         volucer-fastcgi) echo "$PORT_T" ;;
+        volucer-prefork) echo "$PORT_P" ;;
         rr)              echo "$PORT_R" ;;
         frankenphp)      echo "$PORT_Z" ;;
         fpm)             echo "$PORT_F" ;;
@@ -671,14 +906,97 @@ assert_mode_live() { # arm workers mode
 }
 
 # ---------------------------------------------------------------------------
+# Prove the arm's own SHAPE, from the config it is actually running on.
+#
+# Three of the eight arms are new and each one is a different claim about what was
+# measured: a unix socket rather than a pipe, a fork rather than 16 execs, and
+# `children` rather than one process per slot. A cell whose config silently fell
+# back to the default would still answer 200 and still produce a throughput number
+# under the new arm's name — the same failure mode `assert_mode_live` exists to
+# prevent for opcache. `volucer check` resolves the configuration, so it is the
+# right question to ask of the file the live server was started from.
+# ---------------------------------------------------------------------------
+assert_arm_shape() { # arm workers mode children
+    local arm="$1" n="$2" mode="$3" children="$4"
+    case "$arm" in
+        volucer-unix|volucer-attach|volucer-prefork) ;;
+        *) return 0 ;;
+    esac
+
+    local cfg="$CFG/$arm-$n-$mode.toml" out
+    [ -f "$cfg" ] || { echo "  shape check [$arm]: no config at $cfg" | tee -a "$META" >&2; return 1; }
+    out="$("$BIN" check -c "$cfg" 2>&1)"
+
+    case "$arm" in
+        volucer-unix)
+            case "$out" in
+                *"transport:         socket on unix:"*) ;;
+                *) echo "  shape check [$arm]: not a unix socket transport:" | tee -a "$META" >&2
+                   echo "$out" | grep -i transport | sed 's/^/    /' >&2
+                   return 1 ;;
+            esac
+            ;;
+        volucer-attach)
+            case "$out" in
+                *"relay:             unix:$SOCK/relay"*) ;;
+                *) echo "  shape check [$arm]: relay is not $SOCK/relay" | tee -a "$META" >&2
+                   echo "$out" | grep -i relay | sed 's/^/    /' >&2
+                   return 1 ;;
+            esac
+            # The dialled count and the forked count must be the same number, or
+            # the arm measures a mismatch rather than the fork model.
+            case "$out" in
+                *"connections:       $n"*) ;;
+                *) echo "  shape check [$arm]: connections != workers ($n)" | tee -a "$META" >&2
+                   echo "$out" | grep -i connections | sed 's/^/    /' >&2
+                   return 1 ;;
+            esac
+            ;;
+        volucer-prefork)
+            local want; want=$(( n * children + n ))
+            case "$out" in
+                *"children = $children per slot"*) ;;
+                *) echo "  shape check [$arm]: children is not $children per slot" | tee -a "$META" >&2
+                   echo "$out" | grep -i prefork | sed 's/^/    /' >&2
+                   return 1 ;;
+            esac
+            # The process total is checked against the process count rather than
+            # against a phrase, because `volucer check` writes "1 slot" and
+            # "16 slots" — the plural is the program's wording, not a property to
+            # depend on in a gate.
+            local got
+            got="$(echo "$out" | grep -oE '\([0-9]+ PHP processes' | grep -oE '[0-9]+' | head -1)"
+            if [ "${got:-}" != "$want" ]; then
+                echo "  shape check [$arm]: expected $want PHP processes across $n slots, check reports ${got:-nothing}" |
+                    tee -a "$META" >&2
+                echo "$out" | grep -i prefork | sed 's/^/    /' >&2
+                return 1
+            fi
+            ;;
+    esac
+    return 0
+}
+
+# ---------------------------------------------------------------------------
 # One cell: wrk for DUR at a fixed concurrency, then the memory sample.
 # ---------------------------------------------------------------------------
-run_cell() { # arm workers mode conc round [threads]
+run_cell() { # arm workers mode conc round [threads] [children]
     local arm="$1" n="$2" mode="$3" conc="$4" round="$5"
     local threads="${6:-$THREADS}"
+    local children="${7:-${CHILDREN:-}}"
     local port; port="$(port_of "$arm")"
     local out="$LOG/wrk-$arm-$n-$mode-t$threads-c$conc-r$round.txt"
     local rps p50 p99 p999 errs
+
+    # `wrk` refuses `-c` below `-t` ("number of connections must be >= threads"),
+    # and every concurrency level below the fixed 12 therefore failed outright
+    # rather than measuring: c=8 wrote its usage text where a throughput number
+    # belongs, which the harness recorded as "incomplete wrk output". Clamping the
+    # thread count *per cell* keeps the low levels measurable and changes nothing
+    # at c>=12, so the fixed-thread convention holds everywhere it can.
+    if [ "$threads" -gt "$conc" ]; then
+        threads="$conc"
+    fi
 
     wrk -t"$threads" -c"$conc" -d"$DUR" --latency "http://127.0.0.1:$port$ENDPOINT" \
         > "$out" 2>&1
@@ -691,17 +1009,17 @@ run_cell() { # arm workers mode conc round [threads]
     errs="$(grep -cE 'Non-2xx or 3xx responses|Socket errors' "$out" 2>/dev/null)"
 
     if [ -z "$rps" ] || [ -z "$p50" ] || [ -z "$p99" ]; then
-        printf '%s\t%s\t%s\t%s\t%s\t%s\tFAIL\t?\t?\t%s\n' \
-            "$arm" "$n" "$mode" "$conc" "$round" "$threads" "$errs" >> "$RESULTS"
-        printf '    %-15s w=%-2s %-3s t=%-3s c=%-3s r=%s  FAILED (incomplete wrk output)\n' \
-            "$arm" "$n" "$mode" "$threads" "$conc" "$round"
+        printf '%s\t%s\t%s\t%s\t%s\t%s\tFAIL\t?\t?\t%s\t%s\n' \
+            "$arm" "$n" "$mode" "$conc" "$round" "$threads" "$errs" "$children" >> "$RESULTS"
+        printf '    %-15s w=%-2s %-3s ch=%-2s t=%-3s c=%-3s r=%s  FAILED (incomplete wrk output)\n' \
+            "$arm" "$n" "$mode" "${children:--}" "$threads" "$conc" "$round"
         return 1
     fi
 
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-        "$arm" "$n" "$mode" "$conc" "$round" "$threads" "$rps" "$p50" "$p99" "$errs" >> "$RESULTS"
-    printf '    %-15s w=%-2s %-3s t=%-3s c=%-3s r=%s  %9s rps  p50 %8s  p99 %8s\n' \
-        "$arm" "$n" "$mode" "$threads" "$conc" "$round" "$rps" "$p50" "$p99"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        "$arm" "$n" "$mode" "$conc" "$round" "$threads" "$rps" "$p50" "$p99" "$errs" "$children" >> "$RESULTS"
+    printf '    %-15s w=%-2s %-3s ch=%-2s t=%-3s c=%-3s r=%s  %9s rps  p50 %8s  p99 %8s\n' \
+        "$arm" "$n" "$mode" "${children:--}" "$threads" "$conc" "$round" "$rps" "$p50" "$p99"
 }
 
 # ---------------------------------------------------------------------------
@@ -797,8 +1115,8 @@ PROBE
 cleanup_probe() { rm -f "$ROOT/public/.bench-ini-probe.php"; }
 trap 'stop_arm; cleanup_probe' EXIT
 
-printf 'arm\tworkers\topcache\tconc\tround\tthreads\trps\tp50\tp99\terrors\n' >> "$RESULTS"
-printf 'arm\tworkers\topcache\tphase\tconc\tpss_mb\trss_mb\tpids\n' >> "$MEMFILE"
+printf 'arm\tworkers\topcache\tconc\tround\tthreads\trps\tp50\tp99\terrors\tchildren\n' >> "$RESULTS"
+printf 'arm\tworkers\topcache\tphase\tconc\tpss_mb\trss_mb\tpids\tchildren\n' >> "$MEMFILE"
 
 # ---------------------------------------------------------------------------
 # The grid.
@@ -810,9 +1128,21 @@ for arm in ${ARMS//,/ }; do
     echo "=============================================================="
     for n in ${WORKERS_LIST//,/ }; do
         for mode in ${OPCACHE_MODES//,/ }; do
+            for children in $(children_list_for "$arm"); do
             echo "--------------------------------------------------------------"
-            echo " $arm  workers=$n  opcache=$mode"
+            echo " $arm  workers=$n  opcache=$mode  children=$children"
             echo "--------------------------------------------------------------"
+
+            php_processes="$(php_processes "$arm" "$n" "$children")"
+            if [ "$php_processes" -gt "$MAX_PHP_PROCESSES" ]; then
+                echo "  NOT MEASURED: $php_processes PHP processes exceeds MAX_PHP_PROCESSES=$MAX_PHP_PROCESSES"
+                echo "SKIP $arm w=$n $mode c=$children: $php_processes processes over the cap" >> "$META"
+                continue
+            fi
+            # `-` is the sentinel for "this arm has no children axis", so the value
+            # that reaches a config or a TSV is `recorded_children`, never the
+            # sentinel itself.
+            CHILDREN="$(recorded_children "$children")"
 
             start_arm "$arm" "$n" "$mode"
 
@@ -834,10 +1164,15 @@ for arm in ${ARMS//,/ }; do
                 stop_arm
                 continue
             fi
+            if ! assert_arm_shape "$arm" "$n" "$mode" "$CHILDREN"; then
+                echo "  NOT MEASURED: the arm's own shape could not be proved"
+                stop_arm
+                continue
+            fi
 
             # Boot footprint: what this configuration costs before it serves
             # anything. That is the number a host is sized from.
-            record_mem "$arm" "$n" "$mode" boot 0
+            record_mem "$arm" "$n" "$mode" boot 0 "$CHILDREN"
 
             # First touch: compiles every file under the ON modes, wakes every
             # worker under the cold ones. Not part of any measurement.
@@ -855,17 +1190,18 @@ for arm in ${ARMS//,/ }; do
                         else
                             threads="${tl#t}"
                         fi
-                        run_cell "$arm" "$n" "$mode" "$conc" "$round" "$threads"
+                        run_cell "$arm" "$n" "$mode" "$conc" "$round" "$threads" "$CHILDREN"
                     done
                 done
                 # After the hardest cell of the round, not between cells: a sample
                 # taken mid-round would describe a pool that is still warming.
                 record_mem "$arm" "$n" "$mode" post \
-                    "$(echo "${CONC//,/ }" | awk '{print $NF}')"
+                    "$(echo "${CONC//,/ }" | awk '{print $NF}')" "$CHILDREN"
             done
 
             stop_arm
-            echo "  done: $arm workers=$n opcache=$mode"
+            echo "  done: $arm workers=$n opcache=$mode children=$children"
+            done
         done
     done
 done
