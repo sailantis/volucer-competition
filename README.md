@@ -33,6 +33,17 @@ Six arms is not six questions. Each pair isolates one variable:
 
 - **T vs U** — the transport. Same server, same model, same SAPI, same page. A
   difference here is the transport and nothing else.
+- **Uf vs U** — the fork shape, and **not one of the six arms above**: it is the pair the
+  `spawn_cgi` `children` key rests on, measured before that key existed. Same arm, same
+  transport, same total PHP process count; `Uf` is `spawn_cgi` with `children = n`, so one
+  preforked master serves instead of n separate slots. The measurement used `external` as
+  the stand-in, because it already attaches to a preforking `php-cgi`, so it needs no code
+  to answer "what is sharing the OPcache segment worth?" — **4.5× less memory for the same
+  16 PHP processes, throughput within noise**, in
+  [results/prefork-vs-slots.md](results/prefork-vs-slots.md). The runnable shape is
+  [conf/volucer-cgi-prefork.toml.template](conf/volucer-cgi-prefork.toml.template); it is
+  not yet in `scripts/bench.sh`'s `ARMS`, so reproducing it means stamping it by hand. See
+  volucer's `docs/plan.md` hazard 86.
 - **P vs T/U** — the deployment model. A difference here is what the framework
   boot costs when it is paid per request instead of once.
 - **F vs T/U** — the server implementation at the same cold model.

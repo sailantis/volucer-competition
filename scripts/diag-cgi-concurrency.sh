@@ -20,8 +20,12 @@
 # "Content-type: ...\r\n\r\n".
 #
 # `PHP_FCGI_CHILDREN` is varied as well, because it is the flag that looks like it answers
-# the question. On Linux it does not: `sapi/cgi/cgi_main.c` reads it under `#ifdef
-# PHP_WIN32`, so it is accepted and ignored - which is what the two blocks below show.
+# the question. On Linux it does fork children (`cgi_main.c:1995-2081` is the
+# `#ifndef PHP_WIN32` path, and `2083-2216` is the `CreateProcess` one for Windows) — an
+# earlier version of this comment claimed it was read only under `#ifdef PHP_WIN32`, which is
+# wrong and is corrected in `docs/plan.md` hazard 86. What is true, and what the two blocks
+# below show, is that a php-cgi with **no** children serves its connections one at a time,
+# so varying the count is what tells the two explanations apart.
 #
 # Usage:
 #   bash scripts/diag-cgi-concurrency.sh

@@ -30,6 +30,9 @@ results/*.tsv
 # A superseded sweep is kept, not deleted: the report quotes ratios that only a
 # later build can be compared against, and a comparison needs both sides.
 !results/raw-*.tsv
+# Prefork against one-process-per-slot: the evidence behind `spawn_cgi`'s `children` key,
+# and the only measurement in this repository of what forked children save.
+!results/prefork-vs-slots.tsv
 # The two interleaved A/B passes are named deliverables for the same reason the
 # crossover and latency rows are: they answer questions the sweep cannot ask.
 # `ab-perf.tsv` is the warm arm's throughput, measured in rotating order inside each

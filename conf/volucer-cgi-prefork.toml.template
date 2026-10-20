@@ -1,0 +1,49 @@
+# ARM Uf — volucer + spawn_cgi over a UNIX SOCKET, with PREFORKED children.
+#
+# The same arm as `volucer-cgi-unix.toml.template` with one key added, which is the
+# point: U and Uf are the same server, model, transport and SAPI, so a difference
+# between them is the fork shape and nothing else. That pair is how this repository
+# answers the question `docs/plan.md` hazard 86 asks — whether forked children really
+# buy the OPcache memory they are supposed to.
+#
+#   children = 12  PHP processes per slot, sharing that slot's listening socket AND
+#                  its OPcache segment. 0 (the default, and what ARM U runs) means one
+#                  process per slot. Held equal at 12 here so the comparison is
+#                  "one process per core" against "one preforked master per core".
+#
+# Measured on the development host before this arm existed, holding the PHP process
+# count equal at 16 and with opcache on: 44 MB PSS against 311 MB, throughput within
+# noise. See hazard 86 for the table and for the four things the measurement
+# corrected.
+#
+# `max_requests` stays slot-wide, not per child: each child counts its own requests
+# and php-cgi offers no way to read those from outside. Recycling replaces the whole
+# group, which is the unit `killpg` can express anyway.
+#
+# Note that `workers = 1` and `children = 12` is **13** processes, not 12: php-cgi spawns
+# its children *in addition to* itself, which is why `children = 1` measures as two
+# processes and volucer maps `children <= 1` to `PHP_FCGI_CHILDREN=0`. Size `workers` to
+# the sockets you want and `children` to the processes one master should hold, minus one.
+#
+# This template is NOT an arm in `scripts/bench.sh` — `ARMS` has no `Uf`, and nothing
+# stamps the counts, so they are literals here rather than `{{WORKERS}}`-style
+# placeholders. It is the runnable shape behind hazard 86, kept so the claim in
+# `README.md` can be reproduced by hand.
+
+default_backend = "cgi"
+
+[server]
+http = "127.0.0.1:{{PORT}}"
+document_root = "{{ROOT}}/public"
+
+# Off for the same reason as every other arm here; see `volucer-pipe.toml.template`.
+[server.static_files]
+enabled = false
+
+[backends.cgi]
+kind = "spawn_cgi"
+binary = "{{PHP_CGI}}"
+workers = 1
+children = 12
+socket = "unix:{{SOCKET_DIR}}/cgi"
+max_requests = 0
