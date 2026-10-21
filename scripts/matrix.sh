@@ -95,6 +95,13 @@
 # Environment (defaults in brackets):
 #   ARMS          comma list of arms                      [all eight]
 #   WORKERS_LIST  worker counts to sweep                  [12,16,20,24]
+#   ARM_WORKERS   per-arm override of WORKERS_LIST        [empty]
+#                 arm=count[,count] pairs, arms separated
+#                 by `;`. On `volucer-prefork` `workers`
+#                 counts listening sockets, so the shared
+#                 list cannot hold the shape it is best at;
+#                 this gives that arm its own socket count.
+#                 e.g. ARM_WORKERS="volucer-prefork=1"
 #   CHILDREN_LIST processes per spawn_cgi slot, volucer-prefork  [none: 4]
 #                 A second axis, because `workers` there is sockets and this is
 #                 processes per socket. Cells whose product exceeds
@@ -170,6 +177,36 @@ RUNDIR="${RUNDIR:-$HOME/matrix-run}"
 
 ARMS="${ARMS:-volucer-worker,volucer-unix,volucer-attach,volucer-fastcgi,volucer-prefork,rr,frankenphp,fpm}"
 WORKERS_LIST="${WORKERS_LIST:-12,16,20,24}"
+# `WORKERS_LIST` applies to every arm, and on most arms it means one thing: the
+# number of PHP processes serving the site. It cannot mean that everywhere.
+#
+# On `volucer-prefork` `workers` counts *listening sockets*, and `children`
+# counts the processes behind each socket - so the number of PHP processes is
+# the product, and `workers` on its own does not describe the amount of server.
+# Worse, `children` above 1 adds a master per socket, so `workers=16` with
+# `children=32` asks the host for 16 x (32 + 1) = 528 processes: over the cap
+# on this 3.8 GB box, and the cell is skipped rather than measured.
+#
+# The consequence is that the *best* prefork shape - one socket with many
+# children behind it - is unreachable in a grid whose `workers` is shared with
+# the other arms, because the shared value is 16 and 16 sockets cannot hold 32
+# children each.
+#
+# `ARM_WORKERS` gives one arm its own worker list, so a run can hold the other
+# arms at a fixed worker count and still measure prefork at the shape it is
+# actually best at. It is a per-arm override of `WORKERS_LIST`, nothing more:
+# an arm not named here keeps the shared list, and an arm named here is the
+# only one whose `workers` changes.
+#
+#   ARM_WORKERS=volucer-prefork=1        one socket, many children
+#   ARM_WORKERS="volucer-prefork=1,2,4"  three socket counts
+#   ARM_WORKERS="volucer-prefork=1;volucer-attach=2"   two arms
+#
+# `volucer-attach` has the same shape of problem for a different reason: its
+# `workers` is the number of connections volucer dials AND the number of
+# children the supervisor forks, and the harness already starts `$n` children
+# and dials `$n` - one number, both sides. So it needs no override.
+ARM_WORKERS="${ARM_WORKERS:-}"
 # `children` is a second axis and not a second worker list: on `volucer-prefork`
 # `workers` counts listening sockets and `children` counts processes behind each,
 # so sweeping both freely would ask this host for 32x64 processes. The product is
@@ -383,15 +420,24 @@ wait_ready() { # port
 # A 200 is not evidence the right page was served: an nginx `try_files` mistake in
 # this repository's history served the front controller's SOURCE with a happy 200.
 sanity_page() { # port
-    local body
+    local body marker
     body="$(curl -sS --max-time 20 "http://127.0.0.1:$1$ENDPOINT" 2>/dev/null)"
+    # The marker is a property of the page, not of the harness. `/items` renders
+    # a list of items and `/` renders the landing page, so the check follows the
+    # endpoint rather than insisting on one page's marker - otherwise a run
+    # against a different endpoint is refused for rendering the wrong page
+    # correctly.
+    case "$ENDPOINT" in
+        /)  marker="<title>" ;;
+        *)  marker="Benchmark Item" ;;
+    esac
     case "$body" in
-        *"Benchmark Item"*) return 0 ;;
+        *"$marker"*) return 0 ;;
         "") echo "  sanity FAILED: empty body" >&2; return 1 ;;
     esac
     case "$body" in
         *"<?php"*) echo "  sanity FAILED: got PHP SOURCE (a file server served the script)" >&2 ;;
-        *) echo "  sanity FAILED: 200 but no 'Benchmark Item' (${#body} bytes)" >&2 ;;
+        *) echo "  sanity FAILED: 200 but no '$marker' (${#body} bytes)" >&2 ;;
     esac
     echo "  body: $(echo "$body" | head -c 200)" >&2
     return 1
@@ -441,6 +487,51 @@ children_list_for() { # arm
     else
         echo "-"
     fi
+}
+
+# The worker counts to sweep for one arm.
+#
+# `ARM_WORKERS` overrides the shared `WORKERS_LIST` for the arms it names, so a
+# run can hold the other arms at one worker count and still measure a shape
+# whose worker count means something else. The override is per arm and per
+# sweep: `ARM_WORKERS=volucer-prefork=1,2` sweeps prefork at one and two
+# sockets while every other arm stays at the shared list.
+#
+# The arms are separated by a semicolon, not a comma, because a comma already
+# separates the *counts* inside one arm's list. With a comma between the arms
+# too, `volucer-prefork=1,2,4` parsed as three entries - one arm, then two
+# nameless ones - and the arm kept only its first count. A comma-separated
+# value is therefore a count list, and a semicolon-separated value is the set
+# of arms.
+#
+#   ARM_WORKERS="volucer-prefork=1"        one socket, many children
+#   ARM_WORKERS="volucer-prefork=1,2,4"    three socket counts
+#   ARM_WORKERS="volucer-prefork=1;volucer-attach=2"   two arms
+workers_list_for() { # arm
+    if [ -z "$ARM_WORKERS" ]; then
+        # Comma to space, like the shared list has always been expanded. The
+        # caller iterates with an unquoted expansion, which splits on
+        # whitespace only: a `1,16` left intact is one token, not two, and an
+        # arm configured with a worker count of "1,16" fails in a way that
+        # reads as a server problem rather than a list problem.
+        echo "$WORKERS_LIST" | tr ',' ' '
+        return
+    fi
+    local entry rest name value
+    rest="$ARM_WORKERS"
+    while [ -n "$rest" ]; do
+        entry="${rest%%;*}"
+        rest="${rest#*;}"
+        [ "$rest" = "$entry" ] && rest=""
+        name="${entry%%=*}"
+        value="${entry#*=}"
+        [ "$name" = "$entry" ] && continue
+        if [ "$name" = "$1" ]; then
+            echo "$value" | tr ',' ' '
+            return
+        fi
+    done
+    echo "$WORKERS_LIST" | tr ',' ' '
 }
 
 # The value to record in the TSVs: empty when the arm has no such setting.
@@ -1025,6 +1116,35 @@ run_cell() { # arm workers mode conc round [threads] [children]
 # ---------------------------------------------------------------------------
 # Header + preflight
 # ---------------------------------------------------------------------------
+
+# The commit the server under test was built from.
+#
+# `volucer version` prints the version, not the commit, and a version number
+# does not say which source produced it. The binary lives in a cargo target
+# directory, so the checkout that built it is found from the binary's own
+# path - the `target/release/volucer` inside it.
+#
+# A run whose binary cannot be traced to a commit says so, rather than
+# leaving the reader to assume one. An untraceable build is a measurement
+# nobody can reproduce, and saying so is the honest record.
+volucer_ref() {
+    local dir
+    dir="$(cd "$(dirname "$BIN")/../.." 2>/dev/null && pwd)"
+    if [ -n "$dir" ] && [ -d "$dir/.git" ]; then
+        local ref
+        ref="$(cd "$dir" && git rev-parse --short HEAD 2>/dev/null)"
+        local dirty
+        dirty="$(cd "$dir" && git status --porcelain 2>/dev/null | head -1)"
+        if [ -n "$ref" ]; then
+            # A dirty checkout means the binary may not be the commit's code.
+            [ -n "$dirty" ] && echo "$ref (working tree modified)" && return 0
+            echo "$ref"
+            return 0
+        fi
+    fi
+    echo "(untraceable: no git checkout at $dir)"
+}
+
 : > "$RESULTS"
 : > "$MEMFILE"
 : > "$META"
@@ -1038,15 +1158,40 @@ run_cell() { # arm workers mode conc round [threads] [children]
     echo "  php-fpm:     $($PHP_FPM -v | head -1)"
     echo "  nginx:       $($NGINX -v 2>&1 | head -1)"
     echo "  volucer:     $($BIN version 2>/dev/null | head -1)"
+    # The commit the server under test was built from. `volucer version` prints
+    # the version, not the commit, so the commit is read from the checkout the
+    # binary was built in - and a run whose binary cannot be traced to a
+    # commit says so, rather than leaving the reader to assume one.
+    echo "  volucer ref: $(volucer_ref)"
     echo "  roadrunner:  $($RR --version 2>/dev/null | head -1)"
     echo "  frankenphp:  $($FP version 2>/dev/null | head -1)"
     echo "  app:         $ROOT"
     echo "  app ref:     $(cd "$ROOT" && git rev-parse --short HEAD 2>/dev/null || echo '(no git)')"
     echo "  arms:        $ARMS"
     echo "  workers:     $WORKERS_LIST"
+    # The per-arm worker override, when there is one. It changes what
+    # `workers` means for that arm, so a reader who takes the shared line
+    # above as the grid would misread that arm's shape.
+    [ -n "$ARM_WORKERS" ] && echo "  arm workers: $ARM_WORKERS"
     echo "  opcache:     $OPCACHE_MODES"
     echo "  endpoint:    $ENDPOINT"
     echo "  concurrency: $CONC   wrk threads: $TLIST   duration: $DUR   rounds: $ROUNDS"
+    # The order the cells ran in. A cross-arm ratio is a ratio between two
+    # measurements made the same way, and the order is part of the method:
+    # the blocked order measures one arm's whole grid and then the next, so a
+    # host that drifts over the run charges the drift to whichever arm ran
+    # last; the interleaved order rotates which arm goes first, so a drift of
+    # any shape lands on every arm equally often.
+    #
+    # The order was not recorded by the earlier runs, and a reader cannot
+    # recover it from the rows - the harness appends a row when a cell
+    # finishes, so the FILE order is the execution order, but only someone
+    # who knows the harness reads it that way. It is stated here instead.
+    if [ "$ORDER" = "interleaved" ]; then
+        echo "  order:       interleaved (rotating across rounds)"
+    else
+        echo "  order:       blocked (one arm's grid, then the next)"
+    fi
     [ -n "$INI_SCAN_DIR" ] && echo "  ini scan:    $INI_SCAN_DIR (PHP_INI_SCAN_DIR overridden)"
 } | tee "$META"
 
@@ -1121,91 +1266,158 @@ printf 'arm\tworkers\topcache\tphase\tconc\tpss_mb\trss_mb\tpids\tchildren\n' >>
 # ---------------------------------------------------------------------------
 # The grid.
 # ---------------------------------------------------------------------------
-for arm in ${ARMS//,/ }; do
-    echo
-    echo "=============================================================="
-    echo " ARM $arm"
-    echo "=============================================================="
-    for n in ${WORKERS_LIST//,/ }; do
+# Two orders are available, and the difference between them is the difference
+# between a measurement and an artefact.
+#
+# **Blocked** (the default) measures one arm's whole grid, then the next
+# arm's. That is the right layout for a survey of independent arms, and the
+# wrong one for a *ratio* between them: a host that drifts monotonically over
+# the twenty minutes the grid takes charges the drift to whichever arm ran
+# last. This repository has already published a 22% "effect" that reversed
+# sign when the same two binaries were interleaved instead of blocked
+# (hazard 49), and the same trap caught the `worker_pool.rs` split, which read
+# as -3.3% until the two binaries were alternated `A,B,B,A`.
+#
+# **Interleaved** (`ORDER=interleaved`) starts every arm inside every round
+# and rotates which arm goes first, so a drift of *any* shape lands on every
+# arm equally often. A cross-server ratio is a ratio, so it wants the
+# interleaved order. The survey of one server's own shapes does not compare
+# arms against each other, so it is happy either way - and blocked, because it
+# makes one arm's memory profile a contiguous run rather than something
+# interleaved with four others.
+ORDER="${ORDER:-blocked}"
+
+ARMS_LIST=(${ARMS//,/ })
+
+# The cells, as (arm|workers|opcache|children). Built once, so the rotation
+# has a stable order to work with.
+declare -a CELLS=()
+for arm in "${ARMS_LIST[@]}"; do
+    for n in $(workers_list_for "$arm"); do
         for mode in ${OPCACHE_MODES//,/ }; do
             for children in $(children_list_for "$arm"); do
-            echo "--------------------------------------------------------------"
-            echo " $arm  workers=$n  opcache=$mode  children=$children"
-            echo "--------------------------------------------------------------"
-
-            php_processes="$(php_processes "$arm" "$n" "$children")"
-            if [ "$php_processes" -gt "$MAX_PHP_PROCESSES" ]; then
-                echo "  NOT MEASURED: $php_processes PHP processes exceeds MAX_PHP_PROCESSES=$MAX_PHP_PROCESSES"
-                echo "SKIP $arm w=$n $mode c=$children: $php_processes processes over the cap" >> "$META"
-                continue
-            fi
-            # `-` is the sentinel for "this arm has no children axis", so the value
-            # that reaches a config or a TSV is `recorded_children`, never the
-            # sentinel itself.
-            CHILDREN="$(recorded_children "$children")"
-
-            start_arm "$arm" "$n" "$mode"
-
-            if ! wait_ready "$(port_of "$arm")"; then
-                echo "  NOT MEASURED: never answered 200 on $(port_of "$arm")$ENDPOINT"
-                tail -6 "$LOG/$arm-$n-$mode.log" 2>/dev/null | sed 's/^/    /'
-                echo "SKIP $arm w=$n $mode: not ready" >> "$META"
-                stop_arm
-                continue
-            fi
-            if ! sanity_page "$(port_of "$arm")"; then
-                echo "  NOT MEASURED: the page did not render"
-                echo "SKIP $arm w=$n $mode: bad page" >> "$META"
-                stop_arm
-                continue
-            fi
-            if ! assert_mode_live "$arm" "$n" "$mode"; then
-                echo "  NOT MEASURED: the opcache mode could not be proved"
-                stop_arm
-                continue
-            fi
-            if ! assert_arm_shape "$arm" "$n" "$mode" "$CHILDREN"; then
-                echo "  NOT MEASURED: the arm's own shape could not be proved"
-                stop_arm
-                continue
-            fi
-
-            # Boot footprint: what this configuration costs before it serves
-            # anything. That is the number a host is sized from.
-            record_mem "$arm" "$n" "$mode" boot 0 "$CHILDREN"
-
-            # First touch: compiles every file under the ON modes, wakes every
-            # worker under the cold ones. Not part of any measurement.
-            wrk -t"$THREADS" -c"$THREADS" -d"$WARMUP" \
-                "http://127.0.0.1:$(port_of "$arm")$ENDPOINT" >/dev/null 2>&1
-
-            for round in $(seq 1 "$ROUNDS"); do
-                for conc in ${CONC//,/ }; do
-                    for tl in $TLIST; do
-                        # `tc` means "one client thread per concurrent request",
-                        # the historical harness convention; `tN` (or a bare `N`)
-                        # is a fixed count.
-                        if [ "$tl" = "tc" ]; then
-                            threads="$conc"
-                        else
-                            threads="${tl#t}"
-                        fi
-                        run_cell "$arm" "$n" "$mode" "$conc" "$round" "$threads" "$CHILDREN"
-                    done
-                done
-                # After the hardest cell of the round, not between cells: a sample
-                # taken mid-round would describe a pool that is still warming.
-                record_mem "$arm" "$n" "$mode" post \
-                    "$(echo "${CONC//,/ }" | awk '{print $NF}')" "$CHILDREN"
-            done
-
-            stop_arm
-            echo "  done: $arm workers=$n opcache=$mode children=$children"
+                CELLS+=("$arm|$n|$mode|$children")
             done
         done
     done
 done
+N_CELLS=${#CELLS[@]}
+[ "$N_CELLS" -gt 0 ] || fail "no cells to measure"
 
+ROUND_NOW=1
+
+run_cell_blocked() { # arm n mode children
+    local arm="$1" n="$2" mode="$3" children="$4"
+
+    echo
+    echo "=============================================================="
+    echo " ARM $arm"
+    echo "=============================================================="
+    echo "--------------------------------------------------------------"
+    echo " $arm  workers=$n  opcache=$mode  children=$children"
+    echo "--------------------------------------------------------------"
+
+    php_processes="$(php_processes "$arm" "$n" "$children")"
+    if [ "$php_processes" -gt "$MAX_PHP_PROCESSES" ]; then
+        echo "  NOT MEASURED: $php_processes PHP processes exceeds MAX_PHP_PROCESSES=$MAX_PHP_PROCESSES"
+        echo "SKIP $arm w=$n $mode c=$children: $php_processes processes over the cap" >> "$META"
+        return 0
+    fi
+    # `-` is the sentinel for "this arm has no children axis", so the value
+    # that reaches a config or a TSV is `recorded_children`, never the
+    # sentinel itself.
+    CHILDREN="$(recorded_children "$children")"
+
+    start_arm "$arm" "$n" "$mode"
+
+    if ! wait_ready "$(port_of "$arm")"; then
+        echo "  NOT MEASURED: never answered 200 on $(port_of "$arm")$ENDPOINT"
+        tail -6 "$LOG/$arm-$n-$mode.log" 2>/dev/null | sed 's/^/    /'
+        echo "SKIP $arm w=$n $mode: not ready" >> "$META"
+        stop_arm
+        return 0
+    fi
+    if ! sanity_page "$(port_of "$arm")"; then
+        echo "  NOT MEASURED: the page did not render"
+        echo "SKIP $arm w=$n $mode: bad page" >> "$META"
+        stop_arm
+        return 0
+    fi
+    if ! assert_mode_live "$arm" "$n" "$mode"; then
+        echo "  NOT MEASURED: the opcache mode could not be proved"
+        stop_arm
+        return 0
+    fi
+    if ! assert_arm_shape "$arm" "$n" "$mode" "$CHILDREN"; then
+        echo "  NOT MEASURED: the arm's own shape could not be proved"
+        stop_arm
+        return 0
+    fi
+
+    # Boot footprint: what this configuration costs before it serves
+    # anything. That is the number a host is sized from.
+    record_mem "$arm" "$n" "$mode" boot 0 "$CHILDREN"
+
+    # First touch: compiles every file under the ON modes, wakes every
+    # worker under the cold ones. Not part of any measurement.
+    wrk -t"$THREADS" -c"$THREADS" -d"$WARMUP" \
+        "http://127.0.0.1:$(port_of "$arm")$ENDPOINT" >/dev/null 2>&1
+
+    for conc in ${CONC//,/ }; do
+        for tl in $TLIST; do
+            # `tc` means "one client thread per concurrent request",
+            # the historical harness convention; `tN` (or a bare `N`)
+            # is a fixed count.
+            if [ "$tl" = "tc" ]; then
+                threads="$conc"
+            else
+                threads="${tl#t}"
+            fi
+            # `ROUND_NOW` is the round this invocation measures. The blocked
+            # order runs the rounds inside one cell; the interleaved order
+            # runs one round of every cell before the next, which is the
+            # whole point of the interleaving.
+            run_cell "$arm" "$n" "$mode" "$conc" "$ROUND_NOW" "$threads" "$CHILDREN"
+        done
+    done
+    # After the hardest cell of the round, not between cells: a sample
+    # taken mid-round would describe a pool that is still warming.
+    record_mem "$arm" "$n" "$mode" post \
+        "$(echo "${CONC//,/ }" | awk '{print $NF}')" "$CHILDREN"
+
+    stop_arm
+    echo "  done: $arm workers=$n opcache=$mode children=$children"
+}
+
+if [ "$ORDER" = "interleaved" ]; then
+    # The rotation: round r starts at cell (r-1) mod N, so no cell is always
+    # first and no cell is always last.
+    for round in $(seq 1 "$ROUNDS"); do
+        echo
+        echo "=============================================================="
+        echo " ROUND $round of $ROUNDS (interleaved, $N_CELLS cells, rotating)"
+        echo "=============================================================="
+        for k in $(seq 0 $((N_CELLS - 1))); do
+            index=$(( (k + round - 1) % N_CELLS ))
+            IFS='|' read -r arm n mode children <<< "${CELLS[$index]}"
+            ROUND_NOW="$round"
+            run_cell_blocked "$arm" "$n" "$mode" "$children"
+        done
+    done
+else
+    for arm in "${ARMS_LIST[@]}"; do
+        for n in $(workers_list_for "$arm"); do
+            for mode in ${OPCACHE_MODES//,/ }; do
+                for children in $(children_list_for "$arm"); do
+                    for round in $(seq 1 "$ROUNDS"); do
+                        ROUND_NOW="$round"
+                        run_cell_blocked "$arm" "$n" "$mode" "$children"
+                    done
+                done
+            done
+        done
+    done
+fi
 stop_arm
 cleanup_probe
 

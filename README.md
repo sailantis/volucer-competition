@@ -14,7 +14,7 @@ ClarityEngine template, through a controller with middleware. It is the cheapest
 route that still boots the container.
 
 The design memory behind volucer itself — the numbered hazards, the step list and
-the open decisions — is [`volucer/docs/plan.md`](https://github.com/sailantis/volucer/blob/main/docs/plan.md).
+the open decisions — is [`volucer/internal/plan.md`](https://github.com/sailantis/volucer/blob/main/internal/plan.md).
 Where this README says "hazard 46" it means entry 46 there, and its section 10
 ("Where the work stands") is the current state of the build.
 
@@ -43,7 +43,7 @@ Six arms is not six questions. Each pair isolates one variable:
   [results/prefork-vs-slots.md](results/prefork-vs-slots.md). The runnable shape is
   [conf/volucer-cgi-prefork.toml.template](conf/volucer-cgi-prefork.toml.template); it is
   not yet in `scripts/bench.sh`'s `ARMS`, so reproducing it means stamping it by hand. See
-  volucer's `docs/plan.md` hazard 86.
+  volucer's `internal/plan.md` hazard 86.
 - **P vs T/U** — the deployment model. A difference here is what the framework
   boot costs when it is paid per request instead of once.
 - **F vs T/U** — the server implementation at the same cold model.
@@ -634,7 +634,7 @@ and `GET /assets/app.css` is then served from disk with its MIME type.
 Raw rows: `results/ab-perf-baseline.tsv` (before the layer became self-deciding) and
 `results/ab-perf-autostat.tsv` (after, with both controls). Harness: `scripts/ab-perf.sh` with the
 `baseline`, `new-nostat` and `new-static` variants; report at `scripts/ab-report.py`; record at
-volucer `docs/plan.md` hazard 85:
+volucer `internal/plan.md` hazard 85:
 
 ```bash
 # The original attribution: what the default cost, against the published build.
@@ -1599,6 +1599,24 @@ bash scripts/verify-fixes.sh                          # all three fixes, end to 
 #   wrk -t12 -c64 -d5s --latency --unix-socket /tmp/volucer-relay.sock http://localhost/items
 ```
 
+The scale grid — 16, 32 and 64 serving processes at c=8, 16, 32 and 64 — is the same
+script with a wider grid, and it needs the headroom the 64-process cells ask for:
+
+```bash
+INI_SCAN_DIR=$HOME/php85-clean/conf.d \
+ARMS=volucer-worker,volucer-unix,volucer-attach,volucer-fastcgi,volucer-prefork,rr,frankenphp,fpm \
+WORKERS_LIST=16,32,64 ARM_WORKERS="volucer-prefork=1" CHILDREN_LIST=16,32,64 \
+CONC=8,16,32,64 OPCACHE_MODES=on THREADS=12 DUR=5s ROUNDS=3 ORDER=interleaved \
+RUNDIR=$HOME/run85-scale-items ENDPOINT=/items \
+    bash scripts/matrix.sh
+```
+
+`ORDER=interleaved` is the one to reach for when the grid compares arms with each
+other: the blocked order measures one arm's whole grid and then the next, so a host
+that drifts over the run charges the drift to whichever arm ran last. `ENDPOINT=/` and
+a second `RUNDIR` produce the landing-page run.
+
+
 ## Four measurements, four questions
 
 The repository runs four passes, and reading the wrong one is the mistake this
@@ -2069,3 +2087,79 @@ skipped rather than started — a run that swaps measures the swap. The 19 skipp
 cells and the six lost to a harness bug in the first pass are listed verbatim in
 `results/matrix85-volucer-modes/meta.txt`, because a matrix whose skipped cells are
 invisible can be read as complete.
+
+## The scale run: 16, 32 and 64 processes, at c=8, 16, 32 and 64
+
+The published server comparison measures **one** process count — 16 — at c=16, 32, 48
+and 64. That answers "how do the servers compare" and not "how does one server behave as
+the host is given more of it". The scale run in `results/run85-scale-items` and
+`results/run85-scale-root` answers the second question: the same eight arms, at **16,
+32 and 64 serving PHP processes**, at **c=8, 16, 32 and 64**.
+
+| | published run | scale run |
+|---|---|---|
+| arms | eight, all of them | the same eight |
+| serving PHP processes | 16 | 16, 32, 64 |
+| concurrency | 16, 32, 48, 64 | 8, 16, 32, 64 |
+| rounds | 3 | 3 |
+| client | `wrk -t12` | `wrk -t12` |
+| cell | 5 s | 5 s |
+| host | 12 cores / 3.9 GB | 12 cores / **7.9 GB** |
+| order | interleaved, rotating | interleaved, rotating |
+
+Everything else is held equal: the same harness, the same interpreters (PHP 8.5.11,
+`xdebug` and the internal `psr` extension excluded through `INI_SCAN_DIR`), the same
+application, the same opcache mode, the same per-cell wall clock. A ratio between the
+published run and the scale run is therefore a ratio between two measurements made the
+same way, and the 16-process tier of the scale run is a **control**: it is the same
+configuration the published run measured, and it agrees with it to within the run's own
+spread.
+
+**The host is bigger, and that is stated rather than hidden.** The published run was
+measured on a 3.9 GB host; this one on a 7.9 GB host, because 64 serving processes
+need the headroom. The number that would make the two hosts incomparable is the memory
+the run actually used, and it is measured per cell: the heaviest configuration —
+RoadRunner with 64 workers — peaked at **3296 MB of RSS** (1196 MB of PSS) against
+7910 MB of RAM, and the arms run one at a time, so no two of them are resident
+together. There is no swap device on the host, so a shortage would have appeared as an
+OOM kill rather than as silent throttling, and there were none: the kernel log has no
+OOM entry, and all 288 cells of each run produced a clean measurement.
+
+**Every arm reaches every process count, and the shape check proves it.** The prefork
+arm is the awkward one — its `workers` counts listening sockets and its `children`
+counts the processes behind each — so it is measured as one socket with 16, 32 and 64
+children, and the harness's own `volucer check` gate asserts the resulting process
+count before every cell. The run covers 88 distinct cells per endpoint: eight arms,
+three process counts, four concurrency levels, three rounds, and no skipped cell.
+
+**The order is recorded, because the order is part of the method.** The harness can run
+the grid blocked (one arm's whole grid, then the next) or interleaved (every arm inside
+every round, with the starting arm rotating). The published run used the interleaved
+order — a host that drifts over a twenty-minute grid otherwise charges the drift to
+whichever arm ran last — and so does this one. The earlier runs did not record which
+order they used, and it cannot be recovered from the rows by a reader who does not know
+the harness; `meta.txt` now states it.
+
+### The c=8 level, and a bug it uncovered
+
+`wrk` refuses `-c` below `-t` ("number of connections must be >= threads"), so a
+concurrency level below the client's thread count cannot be measured with the same
+thread count as the levels above it. The harness clamps the thread count to the
+concurrency level for those cells — c=8 is measured at `-t8`, and c=16/32/64 at `-t12` —
+and the clamp is the right answer: it keeps the low level measurable without changing
+anything at or above the fixed count.
+
+The report generator, however, resolved the client thread count **once for the whole
+run**. No single count covered every row, so it fell back to "the most common", and
+every row whose thread count differed became invisible: the c=8 cells were measured,
+and the page printed none of them. A level missing from the page because of a
+bookkeeping detail in the report is indistinguishable from a level that was never
+measured — and the second is a claim, while the first is a bug. The thread count is
+now resolved per concurrency level, and the fix is pinned by a test
+(`ClampedThreadTest` in `tests/test_bench_report.py`).
+
+The fix changes nothing for the published run, and that is checked rather than assumed:
+its cells all share one thread count, so the per-level resolution and the run-wide one
+return the same number, and the published dataset renders **byte-for-byte identically**
+before and after the fix — the same 21 charts, the same Markdown, checked by rendering
+both trees and diffing them.

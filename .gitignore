@@ -33,6 +33,30 @@ results/*.tsv
 # Prefork against one-process-per-slot: the evidence behind `spawn_cgi`'s `children` key,
 # and the only measurement in this repository of what forked children save.
 !results/prefork-vs-slots.tsv
+# The matrix runs are deliverables for the same reason: each directory is one
+# interleaved measurement of a grid, and the published benchmark pages are
+# generated from these exact rows. `matrix85` is the server comparison, on
+# PHP 8.5, every arm through one harness; `matrix85-root` is the same grid on
+# the landing page; `matrix85-volucer-modes` is one server in five shapes;
+# `matrix85-prefork` is the cold path against php-fpm at an equal number of
+# serving processes. A published chart that cannot be traced to the rows
+# behind it is a chart nobody can check.
+!results/matrix85/
+!results/matrix85-root/
+!results/matrix85-volucer-modes/
+!results/matrix85-prefork/
+# The scale grid: the same eight arms at 16, 32 and 64 serving PHP processes, at
+# c=8, 16, 32 and 64. `run85-scale-items` is the ORM page and `run85-scale-root`
+# is the landing page - one run each, because the harness measures one endpoint
+# per run. They are deliverables for the same reason as the rows above: the
+# published pages are generated from these exact rows, and a chart that cannot
+# be traced to the rows behind it is a chart nobody can check.
+!results/run85-scale-items/
+!results/run85-scale-root/
+# The generated report tree is a build output, not a deliverable: it is
+# reproduced by `scripts/bench-report.py` from the rows above, and the pages it
+# produces are published into the volucer repository's documentation.
+results/bench-report/
 # The two interleaved A/B passes are named deliverables for the same reason the
 # crossover and latency rows are: they answer questions the sweep cannot ask.
 # `ab-perf.tsv` is the warm arm's throughput, measured in rotating order inside each
@@ -87,6 +111,12 @@ results/*.log
 .vscode/
 .DS_Store
 Thumbs.db
+
+# The Python report generator's bytecode cache. The generator is a
+# measurement instrument like the shell scripts, and its cache is not part of
+# any measurement.
+__pycache__/
+*.pyc
 
 # The TLS-off A/B's harness is a Node script, because it was measured on a Windows host where
 # `wrk` does not exist. Only the harness is here; its dependencies are not, for the same reason the
