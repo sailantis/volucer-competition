@@ -2,15 +2,15 @@
 
 Raw rows: [`results/prefork-vs-slots.tsv`](../results/prefork-vs-slots.tsv).
 
-The question `docs/plan.md` hazard 86 in the volucer repository asks: `spawn_cgi` could
+The question `internal/plan.md` hazard 86 in the volucer repository asks: `spawn_cgi` could
 set `PHP_FCGI_CHILDREN`, and forked children share the OPcache segment — is that worth a
 new configuration key and a pool that admits more than one request per slot?
 
 It was measured **before any of it was written**, because `external` already attaches to a
 preforking `php-cgi -b`, so the comparison needs no code. Two shapes, PHP process count
 held equal at **16**, opcache **on** (the production case, and the only case in which
-shared compiled scripts exist — [matrix85](matrix85/report.md) records opcache at ~10× for
-this arm, so measuring with it off would measure the wrong thing):
+shared compiled scripts exist — [matrix85-opcache](matrix85-opcache/report.md) records
+opcache at ~10× for this arm, so measuring with it off would measure the wrong thing):
 
 | shape | config | PHP processes |
 | --- | --- | --- |

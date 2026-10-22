@@ -1,0 +1,37 @@
+arm	workers	opcache	phase	conc	pss_mb	rss_mb	pids	children
+volucer-prefork	1	on	boot	0	39.7	246.1	18	16
+volucer-prefork	1	on	post	64	71.1	495.7	18	16
+volucer-prefork	1	on	boot	0	41.0	420.7	34	32
+volucer-prefork	1	on	post	64	86.2	923.0	34	32
+fpm	1	on	boot	0	39.0	97.6	7	
+fpm	1	on	post	64	39.8	98.5	7	
+fpm	16	on	boot	0	44.5	309.3	22	
+fpm	16	on	post	64	60.7	503.1	22	
+rr	1	on	boot	0	70.6	90.3	2	
+rr	1	on	post	64	89.7	109.4	2	
+rr	16	on	boot	0	298.2	790.0	17	
+rr	16	on	post	64	370.0	881.3	17	
+volucer-prefork	1	on	boot	0	40.9	421.9	34	32
+volucer-prefork	1	on	post	64	86.8	919.6	34	32
+fpm	1	on	boot	0	39.1	97.7	7	
+fpm	1	on	post	64	39.8	98.7	7	
+fpm	16	on	boot	0	44.6	309.3	22	
+fpm	16	on	post	64	61.1	501.2	22	
+rr	1	on	boot	0	71.6	91.4	2	
+rr	1	on	post	64	90.4	110.2	2	
+rr	16	on	boot	0	298.7	789.6	17	
+rr	16	on	post	64	377.1	887.2	17	
+volucer-prefork	1	on	boot	0	39.5	245.1	18	16
+volucer-prefork	1	on	post	64	71.6	493.5	18	16
+fpm	1	on	boot	0	39.2	98.0	7	
+fpm	1	on	post	64	40.0	98.6	7	
+fpm	16	on	boot	0	44.7	308.6	22	
+fpm	16	on	post	64	60.8	502.1	22	
+rr	1	on	boot	0	71.1	90.9	2	
+rr	1	on	post	64	91.4	111.1	2	
+rr	16	on	boot	0	298.0	789.2	17	
+rr	16	on	post	64	371.9	882.3	17	
+volucer-prefork	1	on	boot	0	39.7	245.7	18	16
+volucer-prefork	1	on	post	64	67.8	489.4	18	16
+volucer-prefork	1	on	boot	0	41.1	421.8	34	32
+volucer-prefork	1	on	post	64	86.8	915.9	34	32

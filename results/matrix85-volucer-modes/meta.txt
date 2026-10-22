@@ -1,89 +1,41 @@
-=== worker x children x concurrency matrix, PHP 8.5, volucer only ===
+=== worker x opcache x concurrency matrix ===
   host:        12 cores, 3884 MB
   kernel:      Linux 6.8.0-139-generic
   php:         PHP 8.5.11 (cli) (built: Sep 24 2026 13:49:29) (NTS)
   php-cgi:     PHP 8.5.11 (cgi-fcgi) (built: Sep 24 2026 13:49:29) (NTS)
   php-fpm:     PHP 8.5.11 (fpm-fcgi) (built: Sep 24 2026 13:49:29) (NTS)
   nginx:       nginx version: nginx/1.24.0 (Ubuntu)
-  volucer:     volucer 0.1.0, built from c3da7ff
+  volucer:     volucer 0.1.0
+  volucer ref: c3da7ff
+  roadrunner:  rr version 2025.1.15 (build time: 2026-06-17T16:05:22+0000, go1.26.4), OS: linux, arch: amd64
+  frankenphp:  FrankenPHP v1.13.0 PHP 8.5.11 Caddy v2.11.7 h1:yj0Y4fYZGPkSvibBJ1sTWE33xC0fxztVyXEW5iIdUT4=
   app:         /home/competition/volucer-competition
-  app ref:     df9f765
-  sdk:         sailantis/volucer-worker dev-main#fbb8dd0
+  app ref:     a4d44df
   arms:        volucer-worker,volucer-unix,volucer-attach,volucer-fastcgi,volucer-prefork
   workers:     1,4,8,16,24,32
-  children:    1,4,8,16,24,32   (volucer-prefork only; every other arm has no such key)
-  opcache:     on   (the production case, and the only one where a shared segment exists)
+  opcache:     on
   endpoint:    /items
-  concurrency: 8,16,24,32,64   wrk threads: 12, clamped to -c below 12   duration: 5s   rounds: 3
+  concurrency: 8,16,24,32,64   wrk threads: 12   duration: 5s   rounds: 3
   ini scan:    /home/competition/php85-clean/conf.d (PHP_INI_SCAN_DIR overridden)
   opcache on: cli wrapper active=1, cgi wrapper active=1
   interpreter: 8.5.11 xdebug=0 psr=0 (/usr/bin/php8.5)
   interpreter: 8.5.11 xdebug=0 psr=0 (/usr/bin/php-cgi8.5)
-
-=== what was proved per cell, and not assumed ===
-  A cell is only measured if its configuration can be read back from the running
-  shape. Three arms are new here and each is a different claim, so each is checked
-  with `volucer check` on the file the live server was started from:
-
-    volucer-unix     transport reported as `socket on unix:<prefix>.<slot>.sock`
-    volucer-attach   `relay` is the harness's socket, and `connections` == workers
-    volucer-prefork  `children = N per slot`, and the PHP process total is
-                     workers * N + workers
-
-  opcache is proved the same way the committed 8.5 matrix proves it: the wrapper's
-  own interpreter reports `active=1` before any cell runs.
-
-=== two passes, and why ===
-  The first pass measured volucer-worker, -unix, -attach and -fastcgi completely:
-  90 cells each, 24 memory samples each, zero failures. It lost volucer-prefork
-  entirely to a harness bug — the `children` sweep was echoed comma-joined, so
-  `children = 1,4,8,16,24,32` reached the TOML as one integer and every one of
-  those cells failed to parse before it started:
-
-    SKIP volucer-prefork w=1  on: not ready      <- this pass, and it was the harness
-    SKIP volucer-prefork w=4  on: not ready
-    SKIP volucer-prefork w=8  on: not ready
-    SKIP volucer-prefork w=16 on: not ready
-    SKIP volucer-prefork w=24 on: not ready
-    SKIP volucer-prefork w=32 on: not ready
-
-  Those six lines are kept above rather than deleted because a matrix whose
-  skipped cells are invisible is a matrix that can be read as complete. Each arm
-  is started, measured and stopped on its own, so the prefork pass is the same
-  measurement the first pass would have produced had the bug not been there; the
-  two TSVs are concatenated on the `arm` column.
-
-=== cells the host could not hold ===
-  `children` multiplies the process count, and this host has 3.8 GB. Cells whose
-  PHP process total exceeded MAX_PHP_PROCESSES=96 were skipped rather than started,
-  because a run that swaps measures the swap:
-
-    SKIP volucer-prefork w=4  on c=24: 100 processes over the cap
-    SKIP volucer-prefork w=4  on c=32: 132 processes over the cap
-    SKIP volucer-prefork w=8  on c=16: 136 processes over the cap
-    SKIP volucer-prefork w=8  on c=24: 200 processes over the cap
-    SKIP volucer-prefork w=8  on c=32: 264 processes over the cap
-    SKIP volucer-prefork w=16 on c=8:  144 processes over the cap
-    SKIP volucer-prefork w=16 on c=16: 272 processes over the cap
-    SKIP volucer-prefork w=16 on c=24: 400 processes over the cap
-    SKIP volucer-prefork w=16 on c=32: 528 processes over the cap
-    SKIP volucer-prefork w=24 on c=4:  120 processes over the cap
-    SKIP volucer-prefork w=24 on c=8:  216 processes over the cap
-    SKIP volucer-prefork w=24 on c=16: 408 processes over the cap
-    SKIP volucer-prefork w=24 on c=24: 600 processes over the cap
-    SKIP volucer-prefork w=24 on c=32: 792 processes over the cap
-    SKIP volucer-prefork w=32 on c=4:  160 processes over the cap
-    SKIP volucer-prefork w=32 on c=8:  288 processes over the cap
-    SKIP volucer-prefork w=32 on c=16: 544 processes over the cap
-    SKIP volucer-prefork w=32 on c=24: 800 processes over the cap
-    SKIP volucer-prefork w=32 on c=32: 1056 processes over the cap
-
-  The measured prefork configurations are therefore the 17 (workers, children)
-  pairs whose product fits: every `children` at w=1, children <= 16 at w=4,
-  children <= 8 at w=8, and children = 1 at w=16, 24 and 32. That is enough to
-  separate the two things `children` trades — more processes per socket versus
-  more sockets — because both ladders are present at the same total.
-
-=== teardown ===
-  stray php-cgi processes after the last cell: 0
-  Cells with a non-2xx response or a socket error: 0 of 615
+SKIP volucer-prefork w=4 on c=24: 100 processes over the cap
+SKIP volucer-prefork w=4 on c=32: 132 processes over the cap
+SKIP volucer-prefork w=8 on c=16: 136 processes over the cap
+SKIP volucer-prefork w=8 on c=24: 200 processes over the cap
+SKIP volucer-prefork w=8 on c=32: 264 processes over the cap
+SKIP volucer-prefork w=16 on c=8: 144 processes over the cap
+SKIP volucer-prefork w=16 on c=16: 272 processes over the cap
+SKIP volucer-prefork w=16 on c=24: 400 processes over the cap
+SKIP volucer-prefork w=16 on c=32: 528 processes over the cap
+SKIP volucer-prefork w=24 on c=4: 120 processes over the cap
+SKIP volucer-prefork w=24 on c=8: 216 processes over the cap
+SKIP volucer-prefork w=24 on c=16: 408 processes over the cap
+SKIP volucer-prefork w=24 on c=24: 600 processes over the cap
+SKIP volucer-prefork w=24 on c=32: 792 processes over the cap
+SKIP volucer-prefork w=32 on c=4: 160 processes over the cap
+SKIP volucer-prefork w=32 on c=8: 288 processes over the cap
+SKIP volucer-prefork w=32 on c=16: 544 processes over the cap
+SKIP volucer-prefork w=32 on c=24: 800 processes over the cap
+SKIP volucer-prefork w=32 on c=32: 1056 processes over the cap

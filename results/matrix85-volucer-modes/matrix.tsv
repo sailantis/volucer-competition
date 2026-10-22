@@ -1,616 +1,616 @@
 arm	workers	opcache	conc	round	threads	rps	p50	p99	errors	children
-volucer-worker	1	on	8	1	8	3373.49	2.31ms	3.16ms	0	
-volucer-worker	1	on	16	1	12	3363.73	3.49ms	4.73ms	0	
-volucer-worker	1	on	24	1	12	3354.76	7.01ms	9.20ms	0	
-volucer-worker	1	on	32	1	12	3333.64	7.00ms	9.52ms	0	
-volucer-worker	1	on	64	1	12	3326.28	17.68ms	21.51ms	0	
-volucer-worker	1	on	8	2	8	3338.24	2.32ms	3.49ms	0	
-volucer-worker	1	on	16	2	12	3293.90	3.52ms	4.79ms	0	
-volucer-worker	1	on	24	2	12	3331.09	7.07ms	9.39ms	0	
-volucer-worker	1	on	32	2	12	3345.11	7.02ms	9.33ms	0	
-volucer-worker	1	on	64	2	12	3366.41	17.58ms	20.96ms	0	
-volucer-worker	1	on	8	3	8	3359.83	2.31ms	3.27ms	0	
-volucer-worker	1	on	16	3	12	3239.94	3.58ms	5.11ms	0	
-volucer-worker	1	on	24	3	12	3332.68	7.03ms	9.23ms	0	
-volucer-worker	1	on	32	3	12	3321.38	7.10ms	9.82ms	0	
-volucer-worker	1	on	64	3	12	3264.50	18.03ms	24.07ms	0	
-volucer-worker	4	on	8	1	8	12371.47	613.00us	1.23ms	0	
-volucer-worker	4	on	16	1	12	12709.90	0.90ms	2.13ms	0	
-volucer-worker	4	on	24	1	12	12994.80	1.82ms	5.22ms	0	
-volucer-worker	4	on	32	1	12	12586.83	1.88ms	5.34ms	0	
-volucer-worker	4	on	64	1	12	12606.66	4.73ms	14.69ms	0	
-volucer-worker	4	on	8	2	8	12941.01	587.00us	1.17ms	0	
-volucer-worker	4	on	16	2	12	12865.86	0.89ms	2.14ms	0	
-volucer-worker	4	on	24	2	12	12640.38	1.86ms	5.28ms	0	
-volucer-worker	4	on	32	2	12	12932.81	1.81ms	5.24ms	0	
-volucer-worker	4	on	64	2	12	12809.98	4.63ms	14.73ms	0	
-volucer-worker	4	on	8	3	8	13060.21	583.00us	1.16ms	0	
-volucer-worker	4	on	16	3	12	13057.43	0.88ms	2.13ms	0	
-volucer-worker	4	on	24	3	12	12938.55	1.82ms	5.32ms	0	
-volucer-worker	4	on	32	3	12	12883.08	1.81ms	5.22ms	0	
-volucer-worker	4	on	64	3	12	12981.30	4.58ms	14.50ms	0	
-volucer-worker	8	on	8	1	8	14812.93	514.00us	0.99ms	0	
-volucer-worker	8	on	16	1	12	20129.90	562.00us	1.12ms	0	
-volucer-worker	8	on	24	1	12	20984.20	1.08ms	3.23ms	0	
-volucer-worker	8	on	32	1	12	21262.14	1.05ms	3.13ms	0	
-volucer-worker	8	on	64	1	12	20089.07	2.94ms	11.46ms	0	
-volucer-worker	8	on	8	2	8	14449.41	520.00us	1.01ms	0	
-volucer-worker	8	on	16	2	12	19122.38	591.00us	1.20ms	0	
-volucer-worker	8	on	24	2	12	20364.06	1.12ms	3.33ms	0	
-volucer-worker	8	on	32	2	12	21020.70	1.06ms	3.19ms	0	
-volucer-worker	8	on	64	2	12	21264.43	2.77ms	10.70ms	0	
-volucer-worker	8	on	8	3	8	14157.39	533.00us	1.03ms	0	
-volucer-worker	8	on	16	3	12	19427.96	581.00us	1.18ms	0	
-volucer-worker	8	on	24	3	12	20462.44	1.11ms	3.29ms	0	
-volucer-worker	8	on	32	3	12	20369.59	1.09ms	3.32ms	0	
-volucer-worker	8	on	64	3	12	20653.93	2.86ms	11.05ms	0	
-volucer-worker	16	on	8	1	8	14198.68	534.00us	1.02ms	0	
-volucer-worker	16	on	16	1	12	15820.07	712.00us	1.45ms	0	
-volucer-worker	16	on	24	1	12	21924.91	1.03ms	2.24ms	0	
-volucer-worker	16	on	32	1	12	22067.34	1.02ms	2.16ms	0	
-volucer-worker	16	on	64	1	12	23850.73	2.38ms	7.45ms	0	
-volucer-worker	16	on	8	2	8	13955.15	542.00us	1.05ms	0	
-volucer-worker	16	on	16	2	12	15682.05	720.00us	1.46ms	0	
-volucer-worker	16	on	24	2	12	22091.88	1.02ms	2.17ms	0	
-volucer-worker	16	on	32	2	12	21913.46	1.02ms	2.16ms	0	
-volucer-worker	16	on	64	2	12	24089.70	2.36ms	7.34ms	0	
-volucer-worker	16	on	8	3	8	14101.76	538.00us	1.06ms	0	
-volucer-worker	16	on	16	3	12	15947.90	709.00us	1.44ms	0	
-volucer-worker	16	on	24	3	12	22090.91	1.02ms	2.15ms	0	
-volucer-worker	16	on	32	3	12	22001.52	1.02ms	2.16ms	0	
-volucer-worker	16	on	64	3	12	23775.06	2.39ms	7.40ms	0	
-volucer-worker	24	on	8	1	8	14397.71	525.00us	1.02ms	0	
-volucer-worker	24	on	16	1	12	15809.69	711.00us	1.44ms	0	
-volucer-worker	24	on	24	1	12	20334.80	1.10ms	2.72ms	0	
-volucer-worker	24	on	32	1	12	20350.41	1.10ms	2.37ms	0	
-volucer-worker	24	on	64	1	12	24091.27	2.34ms	5.74ms	0	
-volucer-worker	24	on	8	2	8	13875.56	543.00us	1.05ms	0	
-volucer-worker	24	on	16	2	12	15708.31	717.00us	1.44ms	0	
-volucer-worker	24	on	24	2	12	20272.34	1.11ms	2.38ms	0	
-volucer-worker	24	on	32	2	12	20420.53	1.10ms	2.35ms	0	
-volucer-worker	24	on	64	2	12	23728.56	2.35ms	5.78ms	0	
-volucer-worker	24	on	8	3	8	13979.08	543.00us	1.05ms	0	
-volucer-worker	24	on	16	3	12	15700.88	717.00us	1.45ms	0	
-volucer-worker	24	on	24	3	12	20177.63	1.11ms	2.36ms	0	
-volucer-worker	24	on	32	3	12	19979.00	1.12ms	2.40ms	0	
-volucer-worker	24	on	64	3	12	24216.28	2.30ms	5.72ms	0	
-volucer-worker	32	on	8	1	8	14510.42	522.00us	1.00ms	0	
-volucer-worker	32	on	16	1	12	15767.75	715.00us	1.44ms	0	
-volucer-worker	32	on	24	1	12	19649.42	1.13ms	2.84ms	0	
-volucer-worker	32	on	32	1	12	20000.73	1.12ms	2.39ms	0	
-volucer-worker	32	on	64	1	12	24042.68	2.38ms	5.44ms	0	
-volucer-worker	32	on	8	2	8	14231.23	530.00us	1.04ms	0	
-volucer-worker	32	on	16	2	12	15582.77	719.00us	1.45ms	0	
-volucer-worker	32	on	24	2	12	20196.04	1.12ms	2.38ms	0	
-volucer-worker	32	on	32	2	12	20315.77	1.10ms	2.37ms	0	
-volucer-worker	32	on	64	2	12	23630.64	2.39ms	5.24ms	0	
-volucer-worker	32	on	8	3	8	14438.25	521.00us	1.01ms	0	
-volucer-worker	32	on	16	3	12	15743.95	712.00us	1.45ms	0	
-volucer-worker	32	on	24	3	12	20499.45	1.09ms	2.33ms	0	
-volucer-worker	32	on	32	3	12	20545.20	1.09ms	2.33ms	0	
-volucer-worker	32	on	64	3	12	23957.19	2.36ms	5.27ms	0	
-volucer-unix	1	on	8	1	8	3205.26	2.42ms	3.31ms	0	
-volucer-unix	1	on	16	1	12	3314.19	3.54ms	4.79ms	0	
-volucer-unix	1	on	24	1	12	3272.56	7.18ms	9.52ms	0	
-volucer-unix	1	on	32	1	12	3285.02	7.16ms	9.17ms	0	
-volucer-unix	1	on	64	1	12	3225.13	18.39ms	22.04ms	0	
-volucer-unix	1	on	8	2	8	3296.63	2.37ms	3.35ms	0	
-volucer-unix	1	on	16	2	12	3267.29	3.57ms	4.89ms	0	
-volucer-unix	1	on	24	2	12	3188.13	7.36ms	9.81ms	0	
-volucer-unix	1	on	32	2	12	3281.54	7.19ms	9.28ms	0	
-volucer-unix	1	on	64	2	12	3232.30	18.43ms	22.63ms	0	
-volucer-unix	1	on	8	3	8	3342.76	2.36ms	3.34ms	0	
-volucer-unix	1	on	16	3	12	3269.34	3.60ms	4.85ms	0	
-volucer-unix	1	on	24	3	12	3259.27	7.23ms	9.34ms	0	
-volucer-unix	1	on	32	3	12	3290.16	7.13ms	9.16ms	0	
-volucer-unix	1	on	64	3	12	3231.51	18.17ms	26.34ms	0	
-volucer-unix	4	on	8	1	8	12508.23	616.00us	1.20ms	0	
-volucer-unix	4	on	16	1	12	12593.63	0.92ms	2.21ms	0	
-volucer-unix	4	on	24	1	12	12015.25	1.94ms	5.52ms	0	
-volucer-unix	4	on	32	1	12	12282.04	1.91ms	5.37ms	0	
-volucer-unix	4	on	64	1	12	12153.56	4.87ms	15.23ms	0	
-volucer-unix	4	on	8	2	8	12169.93	625.00us	1.24ms	0	
-volucer-unix	4	on	16	2	12	12018.94	0.96ms	2.29ms	0	
-volucer-unix	4	on	24	2	12	11869.29	1.98ms	5.50ms	0	
-volucer-unix	4	on	32	2	12	12149.23	1.94ms	5.43ms	0	
-volucer-unix	4	on	64	2	12	12208.46	4.85ms	14.95ms	0	
-volucer-unix	4	on	8	3	8	11972.06	633.00us	1.26ms	0	
-volucer-unix	4	on	16	3	12	12019.21	0.96ms	2.27ms	0	
-volucer-unix	4	on	24	3	12	12257.65	1.93ms	5.52ms	0	
-volucer-unix	4	on	32	3	12	11948.51	1.96ms	5.46ms	0	
-volucer-unix	4	on	64	3	12	12081.38	4.90ms	15.15ms	0	
-volucer-unix	8	on	8	1	8	14187.33	533.00us	1.04ms	0	
-volucer-unix	8	on	16	1	12	18898.47	595.00us	1.21ms	0	
-volucer-unix	8	on	24	1	12	19534.15	1.17ms	3.44ms	0	
-volucer-unix	8	on	32	1	12	19747.26	1.13ms	3.43ms	0	
-volucer-unix	8	on	64	1	12	19271.07	3.06ms	11.84ms	0	
-volucer-unix	8	on	8	2	8	14283.61	530.00us	1.04ms	0	
-volucer-unix	8	on	16	2	12	18677.61	603.00us	1.23ms	0	
-volucer-unix	8	on	24	2	12	20163.56	1.12ms	3.38ms	0	
-volucer-unix	8	on	32	2	12	19939.69	1.12ms	3.41ms	0	
-volucer-unix	8	on	64	2	12	20130.84	2.94ms	11.41ms	0	
-volucer-unix	8	on	8	3	8	13800.45	547.00us	1.07ms	0	
-volucer-unix	8	on	16	3	12	18564.84	604.00us	1.24ms	0	
-volucer-unix	8	on	24	3	12	19670.48	1.16ms	3.53ms	0	
-volucer-unix	8	on	32	3	12	19296.37	1.16ms	3.49ms	0	
-volucer-unix	8	on	64	3	12	19012.61	3.11ms	11.80ms	0	
-volucer-unix	16	on	8	1	8	14353.27	529.00us	1.01ms	0	
-volucer-unix	16	on	16	1	12	15919.45	701.00us	1.47ms	0	
-volucer-unix	16	on	24	1	12	21892.45	1.02ms	2.31ms	0	
-volucer-unix	16	on	32	1	12	21968.67	1.01ms	2.22ms	0	
-volucer-unix	16	on	64	1	12	23964.61	2.37ms	7.39ms	0	
-volucer-unix	16	on	8	2	8	14005.94	540.00us	1.07ms	0	
-volucer-unix	16	on	16	2	12	15542.28	722.00us	1.48ms	0	
-volucer-unix	16	on	24	2	12	21642.06	1.04ms	2.23ms	0	
-volucer-unix	16	on	32	2	12	21895.03	1.02ms	2.23ms	0	
-volucer-unix	16	on	64	2	12	24112.79	2.35ms	7.30ms	0	
-volucer-unix	16	on	8	3	8	13921.55	538.00us	1.07ms	0	
-volucer-unix	16	on	16	3	12	15217.44	728.00us	1.52ms	0	
-volucer-unix	16	on	24	3	12	21393.06	1.05ms	2.30ms	0	
-volucer-unix	16	on	32	3	12	21656.92	1.04ms	2.27ms	0	
-volucer-unix	16	on	64	3	12	23660.42	2.38ms	7.34ms	0	
-volucer-unix	24	on	8	1	8	13874.11	542.00us	1.05ms	0	
-volucer-unix	24	on	16	1	12	15485.55	720.00us	1.48ms	0	
-volucer-unix	24	on	24	1	12	19891.38	1.12ms	2.81ms	0	
-volucer-unix	24	on	32	1	12	19949.64	1.11ms	2.45ms	0	
-volucer-unix	24	on	64	1	12	23527.12	2.38ms	5.86ms	0	
-volucer-unix	24	on	8	2	8	14033.26	538.00us	1.06ms	0	
-volucer-unix	24	on	16	2	12	15580.16	715.00us	1.49ms	0	
-volucer-unix	24	on	24	2	12	20053.05	1.12ms	2.47ms	0	
-volucer-unix	24	on	32	2	12	20054.97	1.11ms	2.44ms	0	
-volucer-unix	24	on	64	2	12	23638.42	2.38ms	5.86ms	0	
-volucer-unix	24	on	8	3	8	14174.76	533.00us	1.06ms	0	
-volucer-unix	24	on	16	3	12	15372.38	723.00us	1.53ms	0	
-volucer-unix	24	on	24	3	12	19984.03	1.12ms	2.46ms	0	
-volucer-unix	24	on	32	3	12	20156.25	1.11ms	2.46ms	0	
-volucer-unix	24	on	64	3	12	23567.44	2.38ms	5.86ms	0	
-volucer-unix	32	on	8	1	8	14675.78	512.00us	1.00ms	0	
-volucer-unix	32	on	16	1	12	15928.24	697.00us	1.46ms	0	
-volucer-unix	32	on	24	1	12	20195.09	1.11ms	2.85ms	0	
-volucer-unix	32	on	32	1	12	20147.87	1.10ms	2.44ms	0	
-volucer-unix	32	on	64	1	12	22713.33	2.48ms	5.90ms	0	
-volucer-unix	32	on	8	2	8	14065.88	537.00us	1.06ms	0	
-volucer-unix	32	on	16	2	12	15604.71	715.00us	1.49ms	0	
-volucer-unix	32	on	24	2	12	19870.98	1.12ms	2.48ms	0	
-volucer-unix	32	on	32	2	12	19825.61	1.12ms	2.46ms	0	
-volucer-unix	32	on	64	2	12	22758.24	2.49ms	5.51ms	0	
-volucer-unix	32	on	8	3	8	13720.98	551.00us	1.08ms	0	
-volucer-unix	32	on	16	3	12	15455.96	723.00us	1.50ms	0	
-volucer-unix	32	on	24	3	12	19684.83	1.14ms	2.52ms	0	
-volucer-unix	32	on	32	3	12	19993.86	1.12ms	2.47ms	0	
-volucer-unix	32	on	64	3	12	22696.15	2.50ms	5.54ms	0	
-volucer-attach	1	on	8	1	8	3211.29	2.43ms	3.33ms	0	
-volucer-attach	1	on	16	1	12	3201.85	3.65ms	4.85ms	0	
-volucer-attach	1	on	24	1	12	3201.17	7.30ms	9.94ms	0	
-volucer-attach	1	on	32	1	12	3224.85	7.29ms	9.58ms	0	
-volucer-attach	1	on	64	1	12	3208.43	18.52ms	22.72ms	0	
-volucer-attach	1	on	8	2	8	3246.61	2.40ms	3.33ms	0	
-volucer-attach	1	on	16	2	12	3299.71	3.53ms	5.26ms	0	
-volucer-attach	1	on	24	2	12	3250.10	7.22ms	9.52ms	0	
-volucer-attach	1	on	32	2	12	3193.02	7.37ms	9.35ms	0	
-volucer-attach	1	on	64	2	12	3193.63	18.60ms	22.14ms	0	
-volucer-attach	1	on	8	3	8	3227.69	2.41ms	3.35ms	0	
-volucer-attach	1	on	16	3	12	3244.01	3.60ms	4.89ms	0	
-volucer-attach	1	on	24	3	12	3326.76	7.13ms	9.25ms	0	
-volucer-attach	1	on	32	3	12	3262.76	7.19ms	9.26ms	0	
-volucer-attach	1	on	64	3	12	3244.33	18.26ms	22.78ms	0	
-volucer-attach	4	on	8	1	8	12668.71	603.00us	1.18ms	0	
-volucer-attach	4	on	16	1	12	12620.51	0.92ms	2.16ms	0	
-volucer-attach	4	on	24	1	12	12376.99	1.92ms	5.41ms	0	
-volucer-attach	4	on	32	1	12	12354.51	1.90ms	5.25ms	0	
-volucer-attach	4	on	64	1	12	12399.61	4.81ms	14.70ms	0	
-volucer-attach	4	on	8	2	8	12322.36	618.00us	1.23ms	0	
-volucer-attach	4	on	16	2	12	12242.42	0.94ms	2.22ms	0	
-volucer-attach	4	on	24	2	12	12374.56	1.92ms	5.35ms	0	
-volucer-attach	4	on	32	2	12	12309.22	1.91ms	5.36ms	0	
-volucer-attach	4	on	64	2	12	12450.48	4.78ms	14.54ms	0	
-volucer-attach	4	on	8	3	8	12530.85	610.00us	1.21ms	0	
-volucer-attach	4	on	16	3	12	12428.21	0.93ms	2.21ms	0	
-volucer-attach	4	on	24	3	12	12562.22	1.90ms	5.34ms	0	
-volucer-attach	4	on	32	3	12	12519.24	1.87ms	5.23ms	0	
-volucer-attach	4	on	64	3	12	12366.92	4.82ms	14.74ms	0	
-volucer-attach	8	on	8	1	8	14622.82	514.00us	0.99ms	0	
-volucer-attach	8	on	16	1	12	19394.48	580.00us	1.18ms	0	
-volucer-attach	8	on	24	1	12	20162.71	1.13ms	3.38ms	0	
-volucer-attach	8	on	32	1	12	20344.26	1.09ms	3.31ms	0	
-volucer-attach	8	on	64	1	12	20219.54	2.92ms	11.19ms	0	
-volucer-attach	8	on	8	2	8	14441.91	526.00us	1.02ms	0	
-volucer-attach	8	on	16	2	12	18581.37	605.00us	1.22ms	0	
-volucer-attach	8	on	24	2	12	20175.46	1.13ms	3.39ms	0	
-volucer-attach	8	on	32	2	12	19925.13	1.12ms	3.36ms	0	
-volucer-attach	8	on	64	2	12	19839.81	2.97ms	11.58ms	0	
-volucer-attach	8	on	8	3	8	13860.35	538.00us	1.03ms	0	
-volucer-attach	8	on	16	3	12	19009.16	592.00us	1.19ms	0	
-volucer-attach	8	on	24	3	12	20395.38	1.11ms	3.34ms	0	
-volucer-attach	8	on	32	3	12	20451.23	1.09ms	3.30ms	0	
-volucer-attach	8	on	64	3	12	20112.32	2.94ms	11.35ms	0	
-volucer-attach	16	on	8	1	8	14344.22	529.00us	1.03ms	0	
-volucer-attach	16	on	16	1	12	16293.80	683.00us	1.42ms	0	
-volucer-attach	16	on	24	1	12	23078.35	0.98ms	2.16ms	0	
-volucer-attach	16	on	32	1	12	23001.91	0.97ms	2.15ms	0	
-volucer-attach	16	on	64	1	12	25569.63	2.20ms	6.76ms	0	
-volucer-attach	16	on	8	2	8	14171.27	534.00us	1.04ms	0	
-volucer-attach	16	on	16	2	12	16215.51	692.00us	1.44ms	0	
-volucer-attach	16	on	24	2	12	22717.40	0.98ms	2.16ms	0	
-volucer-attach	16	on	32	2	12	23214.39	0.97ms	2.13ms	0	
-volucer-attach	16	on	64	2	12	26515.54	2.13ms	6.79ms	0	
-volucer-attach	16	on	8	3	8	14330.12	526.00us	1.03ms	0	
-volucer-attach	16	on	16	3	12	16123.84	691.00us	1.44ms	0	
-volucer-attach	16	on	24	3	12	23075.18	0.98ms	2.13ms	0	
-volucer-attach	16	on	32	3	12	22926.34	0.98ms	2.19ms	0	
-volucer-attach	16	on	64	3	12	26054.07	2.17ms	6.78ms	0	
-volucer-attach	24	on	8	1	8	14391.10	527.00us	1.01ms	0	
-volucer-attach	24	on	16	1	12	16244.27	688.00us	1.43ms	0	
-volucer-attach	24	on	24	1	12	21609.99	1.03ms	2.27ms	0	
-volucer-attach	24	on	32	1	12	21859.91	1.02ms	2.26ms	0	
-volucer-attach	24	on	64	1	12	26380.12	2.12ms	5.29ms	0	
-volucer-attach	24	on	8	2	8	13725.86	546.00us	1.06ms	0	
-volucer-attach	24	on	16	2	12	15863.22	704.00us	1.44ms	0	
-volucer-attach	24	on	24	2	12	22016.49	1.02ms	2.25ms	0	
-volucer-attach	24	on	32	2	12	21889.85	1.02ms	2.27ms	0	
-volucer-attach	24	on	64	2	12	26481.22	2.12ms	5.24ms	0	
-volucer-attach	24	on	8	3	8	14193.94	536.00us	1.04ms	0	
-volucer-attach	24	on	16	3	12	15902.65	702.00us	1.46ms	0	
-volucer-attach	24	on	24	3	12	21669.09	1.04ms	2.28ms	0	
-volucer-attach	24	on	32	3	12	21716.77	1.02ms	2.28ms	0	
-volucer-attach	24	on	64	3	12	26646.16	2.10ms	5.20ms	0	
-volucer-attach	32	on	8	1	8	13904.58	544.00us	1.05ms	0	
-volucer-attach	32	on	16	1	12	16108.77	692.00us	1.43ms	0	
-volucer-attach	32	on	24	1	12	21526.66	1.04ms	2.33ms	0	
-volucer-attach	32	on	32	1	12	21489.91	1.03ms	2.30ms	0	
-volucer-attach	32	on	64	1	12	25976.64	2.17ms	4.99ms	0	
-volucer-attach	32	on	8	2	8	14165.67	531.00us	1.03ms	0	
-volucer-attach	32	on	16	2	12	15737.41	709.00us	1.47ms	0	
-volucer-attach	32	on	24	2	12	21708.61	1.04ms	2.29ms	0	
-volucer-attach	32	on	32	2	12	21708.07	1.02ms	2.26ms	0	
-volucer-attach	32	on	64	2	12	26221.51	2.15ms	4.95ms	0	
-volucer-attach	32	on	8	3	8	13943.92	542.00us	1.06ms	0	
-volucer-attach	32	on	16	3	12	15704.43	708.00us	1.47ms	0	
-volucer-attach	32	on	24	3	12	21339.35	1.05ms	2.31ms	0	
-volucer-attach	32	on	32	3	12	21515.15	1.04ms	2.29ms	0	
-volucer-attach	32	on	64	3	12	25857.04	2.17ms	4.99ms	0	
-volucer-fastcgi	1	on	8	1	8	799.40	9.85ms	12.15ms	0	
-volucer-fastcgi	1	on	16	1	12	795.64	14.82ms	19.23ms	0	
-volucer-fastcgi	1	on	24	1	12	792.55	30.00ms	34.66ms	0	
-volucer-fastcgi	1	on	32	1	12	794.49	29.82ms	36.02ms	0	
-volucer-fastcgi	1	on	64	1	12	785.14	75.75ms	88.76ms	0	
-volucer-fastcgi	1	on	8	2	8	792.41	9.86ms	12.32ms	0	
-volucer-fastcgi	1	on	16	2	12	794.66	14.84ms	20.63ms	0	
-volucer-fastcgi	1	on	24	2	12	795.81	29.87ms	34.03ms	0	
-volucer-fastcgi	1	on	32	2	12	794.18	29.95ms	33.94ms	0	
-volucer-fastcgi	1	on	64	2	12	782.61	74.74ms	93.78ms	0	
-volucer-fastcgi	1	on	8	3	8	803.09	9.81ms	11.95ms	0	
-volucer-fastcgi	1	on	16	3	12	805.74	14.72ms	17.50ms	0	
-volucer-fastcgi	1	on	24	3	12	801.53	29.62ms	34.20ms	0	
-volucer-fastcgi	1	on	32	3	12	801.00	29.48ms	34.12ms	0	
-volucer-fastcgi	1	on	64	3	12	792.36	74.37ms	80.42ms	0	
-volucer-fastcgi	4	on	8	1	8	3013.74	2.31ms	6.91ms	0	
-volucer-fastcgi	4	on	16	1	12	3072.41	3.40ms	11.48ms	0	
-volucer-fastcgi	4	on	24	1	12	3138.08	7.20ms	27.01ms	0	
-volucer-fastcgi	4	on	32	1	12	3204.09	7.14ms	17.64ms	0	
-volucer-fastcgi	4	on	64	1	12	3146.72	18.44ms	58.59ms	0	
-volucer-fastcgi	4	on	8	2	8	3110.01	2.30ms	6.83ms	0	
-volucer-fastcgi	4	on	16	2	12	3099.69	3.16ms	11.50ms	0	
-volucer-fastcgi	4	on	24	2	12	3162.07	7.39ms	20.88ms	0	
-volucer-fastcgi	4	on	32	2	12	3169.97	6.53ms	22.68ms	0	
-volucer-fastcgi	4	on	64	2	12	3190.84	18.94ms	61.53ms	0	
-volucer-fastcgi	4	on	8	3	8	3089.89	2.31ms	6.76ms	0	
-volucer-fastcgi	4	on	16	3	12	3121.95	3.51ms	10.96ms	0	
-volucer-fastcgi	4	on	24	3	12	3158.56	6.96ms	25.94ms	0	
-volucer-fastcgi	4	on	32	3	12	3168.99	6.86ms	21.88ms	0	
-volucer-fastcgi	4	on	64	3	12	3152.77	18.50ms	53.55ms	0	
-volucer-fastcgi	8	on	8	1	8	5128.05	1.38ms	3.21ms	0	
-volucer-fastcgi	8	on	16	1	12	5786.86	1.51ms	6.44ms	0	
-volucer-fastcgi	8	on	24	1	12	5968.77	3.40ms	16.67ms	0	
-volucer-fastcgi	8	on	32	1	12	6051.90	2.91ms	15.26ms	0	
-volucer-fastcgi	8	on	64	1	12	6093.88	8.42ms	37.63ms	0	
-volucer-fastcgi	8	on	8	2	8	5052.34	1.38ms	3.31ms	0	
-volucer-fastcgi	8	on	16	2	12	5572.01	1.51ms	7.02ms	0	
-volucer-fastcgi	8	on	24	2	12	6031.02	3.30ms	18.12ms	0	
-volucer-fastcgi	8	on	32	2	12	5981.40	2.76ms	16.87ms	0	
-volucer-fastcgi	8	on	64	2	12	6079.01	8.30ms	38.05ms	0	
-volucer-fastcgi	8	on	8	3	8	4965.69	1.41ms	3.54ms	0	
-volucer-fastcgi	8	on	16	3	12	5721.08	1.52ms	6.91ms	0	
-volucer-fastcgi	8	on	24	3	12	5856.12	3.22ms	19.98ms	0	
-volucer-fastcgi	8	on	32	3	12	5823.76	2.97ms	15.31ms	0	
-volucer-fastcgi	8	on	64	3	12	6106.98	8.39ms	42.95ms	0	
-volucer-fastcgi	16	on	8	1	8	4165.16	1.74ms	3.77ms	0	
-volucer-fastcgi	16	on	16	1	12	5313.29	2.10ms	4.66ms	0	
-volucer-fastcgi	16	on	24	1	12	6729.26	3.01ms	14.01ms	0	
-volucer-fastcgi	16	on	32	1	12	6660.61	2.87ms	13.44ms	0	
-volucer-fastcgi	16	on	64	1	12	7003.81	6.21ms	55.41ms	0	
-volucer-fastcgi	16	on	8	2	8	4137.02	1.75ms	3.77ms	0	
-volucer-fastcgi	16	on	16	2	12	5333.47	2.07ms	4.57ms	0	
-volucer-fastcgi	16	on	24	2	12	6738.84	3.03ms	13.01ms	0	
-volucer-fastcgi	16	on	32	2	12	6762.73	2.86ms	12.63ms	0	
-volucer-fastcgi	16	on	64	2	12	6988.30	6.04ms	56.22ms	0	
-volucer-fastcgi	16	on	8	3	8	4099.22	1.75ms	4.14ms	0	
-volucer-fastcgi	16	on	16	3	12	5307.04	2.07ms	4.63ms	0	
-volucer-fastcgi	16	on	24	3	12	6608.71	3.05ms	14.45ms	0	
-volucer-fastcgi	16	on	32	3	12	6591.01	2.87ms	15.54ms	0	
-volucer-fastcgi	16	on	64	3	12	6953.19	5.94ms	67.73ms	0	
-volucer-fastcgi	24	on	8	1	8	3925.52	1.84ms	4.04ms	0	
-volucer-fastcgi	24	on	16	1	12	4909.85	2.25ms	5.26ms	0	
-volucer-fastcgi	24	on	24	1	12	6753.03	3.30ms	9.46ms	0	
-volucer-fastcgi	24	on	32	1	12	6830.57	3.22ms	8.45ms	0	
-volucer-fastcgi	24	on	64	1	12	7525.22	5.66ms	48.69ms	0	
-volucer-fastcgi	24	on	8	2	8	3953.11	1.84ms	3.92ms	0	
-volucer-fastcgi	24	on	16	2	12	4921.10	2.24ms	5.06ms	0	
-volucer-fastcgi	24	on	24	2	12	6739.07	3.30ms	9.37ms	0	
-volucer-fastcgi	24	on	32	2	12	6867.14	3.19ms	8.85ms	0	
-volucer-fastcgi	24	on	64	2	12	7495.33	5.53ms	46.02ms	0	
-volucer-fastcgi	24	on	8	3	8	3943.47	1.83ms	4.04ms	0	
-volucer-fastcgi	24	on	16	3	12	4976.86	2.22ms	4.95ms	0	
-volucer-fastcgi	24	on	24	3	12	6901.55	3.17ms	9.82ms	0	
-volucer-fastcgi	24	on	32	3	12	6914.10	3.15ms	9.16ms	0	
-volucer-fastcgi	24	on	64	3	12	7319.58	5.85ms	45.62ms	0	
-volucer-fastcgi	32	on	8	1	8	3715.30	1.97ms	4.54ms	0	
-volucer-fastcgi	32	on	16	1	12	4672.90	2.37ms	5.31ms	0	
-volucer-fastcgi	32	on	24	1	12	6444.65	3.44ms	10.40ms	0	
-volucer-fastcgi	32	on	32	1	12	6602.54	3.29ms	9.29ms	0	
-volucer-fastcgi	32	on	64	1	12	7482.99	5.92ms	48.96ms	0	
-volucer-fastcgi	32	on	8	2	8	3886.29	1.85ms	4.37ms	0	
-volucer-fastcgi	32	on	16	2	12	4776.92	2.33ms	5.23ms	0	
-volucer-fastcgi	32	on	24	2	12	6583.91	3.36ms	21.94ms	0	
-volucer-fastcgi	32	on	32	2	12	6547.85	3.32ms	9.81ms	0	
-volucer-fastcgi	32	on	64	2	12	7493.39	5.83ms	54.37ms	0	
-volucer-fastcgi	32	on	8	3	8	3879.13	1.88ms	3.86ms	0	
-volucer-fastcgi	32	on	16	3	12	4728.99	2.33ms	5.28ms	0	
-volucer-fastcgi	32	on	24	3	12	6698.46	3.33ms	8.48ms	0	
-volucer-fastcgi	32	on	32	3	12	6629.53	3.32ms	8.65ms	0	
-volucer-fastcgi	32	on	64	3	12	7643.99	5.86ms	45.60ms	0	
-volucer-prefork	1	on	8	1	8	804.26	9.83ms	12.12ms	0	1
-volucer-prefork	1	on	16	1	12	797.13	14.78ms	17.86ms	0	1
-volucer-prefork	1	on	24	1	12	803.19	29.55ms	32.65ms	0	1
-volucer-prefork	1	on	32	1	12	803.62	29.70ms	33.02ms	0	1
-volucer-prefork	1	on	64	1	12	798.46	74.54ms	80.54ms	0	1
-volucer-prefork	1	on	8	2	8	794.06	9.89ms	12.84ms	0	1
-volucer-prefork	1	on	16	2	12	798.26	14.88ms	17.51ms	0	1
-volucer-prefork	1	on	24	2	12	802.92	29.58ms	32.91ms	0	1
-volucer-prefork	1	on	32	2	12	801.72	29.74ms	33.30ms	0	1
-volucer-prefork	1	on	64	2	12	799.85	74.32ms	79.61ms	0	1
-volucer-prefork	1	on	8	3	8	802.38	9.78ms	12.58ms	0	1
-volucer-prefork	1	on	16	3	12	806.86	14.74ms	17.36ms	0	1
-volucer-prefork	1	on	24	3	12	791.80	29.93ms	34.45ms	0	1
-volucer-prefork	1	on	32	3	12	801.55	29.74ms	33.63ms	0	1
-volucer-prefork	1	on	64	3	12	795.11	74.83ms	85.29ms	0	1
-volucer-prefork	1	on	8	1	8	3210.73	2.37ms	4.55ms	0	4
-volucer-prefork	1	on	16	1	12	3182.78	3.62ms	7.12ms	0	4
-volucer-prefork	1	on	24	1	12	3200.39	7.32ms	18.38ms	0	4
-volucer-prefork	1	on	32	1	12	3251.57	7.22ms	14.39ms	0	4
-volucer-prefork	1	on	64	1	12	3210.97	18.51ms	38.62ms	0	4
-volucer-prefork	1	on	8	2	8	3114.28	2.40ms	4.35ms	0	4
-volucer-prefork	1	on	16	2	12	3235.93	3.60ms	6.67ms	0	4
-volucer-prefork	1	on	24	2	12	3188.11	7.32ms	14.67ms	0	4
-volucer-prefork	1	on	32	2	12	3216.22	7.29ms	17.47ms	0	4
-volucer-prefork	1	on	64	2	12	3219.47	18.49ms	37.86ms	0	4
-volucer-prefork	1	on	8	3	8	3187.16	2.40ms	4.27ms	0	4
-volucer-prefork	1	on	16	3	12	3221.73	3.59ms	7.15ms	0	4
-volucer-prefork	1	on	24	3	12	3210.84	7.30ms	16.33ms	0	4
-volucer-prefork	1	on	32	3	12	3231.85	7.28ms	14.40ms	0	4
-volucer-prefork	1	on	64	3	12	3111.64	18.78ms	49.63ms	0	4
-volucer-prefork	1	on	8	1	8	5737.53	1.30ms	2.58ms	0	8
-volucer-prefork	1	on	16	1	12	6424.94	1.85ms	3.13ms	0	8
-volucer-prefork	1	on	24	1	12	6374.15	3.72ms	7.77ms	0	8
-volucer-prefork	1	on	32	1	12	6342.68	3.67ms	7.82ms	0	8
-volucer-prefork	1	on	64	1	12	6446.54	9.26ms	24.11ms	0	8
-volucer-prefork	1	on	8	2	8	5641.02	1.31ms	2.51ms	0	8
-volucer-prefork	1	on	16	2	12	6176.04	1.86ms	3.62ms	0	8
-volucer-prefork	1	on	24	2	12	6257.61	3.77ms	8.61ms	0	8
-volucer-prefork	1	on	32	2	12	6354.67	3.69ms	8.42ms	0	8
-volucer-prefork	1	on	64	2	12	6448.13	9.28ms	24.45ms	0	8
-volucer-prefork	1	on	8	3	8	5602.96	1.32ms	2.83ms	0	8
-volucer-prefork	1	on	16	3	12	6306.84	1.84ms	3.14ms	0	8
-volucer-prefork	1	on	24	3	12	6417.46	3.69ms	7.80ms	0	8
-volucer-prefork	1	on	32	3	12	6360.67	3.72ms	7.89ms	0	8
-volucer-prefork	1	on	64	3	12	6407.77	9.32ms	24.36ms	0	8
-volucer-prefork	1	on	8	1	8	5793.73	1.30ms	2.40ms	0	16
-volucer-prefork	1	on	16	1	12	6116.92	1.78ms	3.83ms	0	16
-volucer-prefork	1	on	24	1	12	8416.44	2.77ms	5.38ms	0	16
-volucer-prefork	1	on	32	1	12	8451.14	2.74ms	5.38ms	0	16
-volucer-prefork	1	on	64	1	12	8568.49	6.89ms	16.81ms	0	16
-volucer-prefork	1	on	8	2	8	5676.30	1.32ms	2.48ms	0	16
-volucer-prefork	1	on	16	2	12	6070.19	1.80ms	3.86ms	0	16
-volucer-prefork	1	on	24	2	12	8338.47	2.76ms	7.33ms	0	16
-volucer-prefork	1	on	32	2	12	8436.99	2.74ms	5.75ms	0	16
-volucer-prefork	1	on	64	2	12	8563.88	6.86ms	16.84ms	0	16
-volucer-prefork	1	on	8	3	8	5565.20	1.32ms	2.79ms	0	16
-volucer-prefork	1	on	16	3	12	6057.54	1.79ms	3.85ms	0	16
-volucer-prefork	1	on	24	3	12	8390.11	2.75ms	5.50ms	0	16
-volucer-prefork	1	on	32	3	12	8285.46	2.78ms	6.27ms	0	16
-volucer-prefork	1	on	64	3	12	8481.52	6.92ms	16.74ms	0	16
-volucer-prefork	1	on	8	1	8	5662.81	1.30ms	2.46ms	0	24
-volucer-prefork	1	on	16	1	12	6109.66	1.77ms	4.07ms	0	24
-volucer-prefork	1	on	24	1	12	7958.76	2.86ms	6.23ms	0	24
-volucer-prefork	1	on	32	1	12	8047.28	2.80ms	6.14ms	0	24
-volucer-prefork	1	on	64	1	12	8596.92	6.70ms	15.35ms	0	24
-volucer-prefork	1	on	8	2	8	5546.46	1.34ms	3.68ms	0	24
-volucer-prefork	1	on	16	2	12	6028.65	1.82ms	3.90ms	0	24
-volucer-prefork	1	on	24	2	12	8064.50	2.82ms	6.13ms	0	24
-volucer-prefork	1	on	32	2	12	8136.68	2.77ms	6.19ms	0	24
-volucer-prefork	1	on	64	2	12	9025.42	6.45ms	16.12ms	0	24
-volucer-prefork	1	on	8	3	8	5601.39	1.33ms	2.82ms	0	24
-volucer-prefork	1	on	16	3	12	6102.60	1.78ms	3.87ms	0	24
-volucer-prefork	1	on	24	3	12	8017.70	2.83ms	6.34ms	0	24
-volucer-prefork	1	on	32	3	12	8041.49	2.81ms	6.13ms	0	24
-volucer-prefork	1	on	64	3	12	9071.96	6.44ms	14.11ms	0	24
-volucer-prefork	1	on	8	1	8	5792.01	1.30ms	2.45ms	0	32
-volucer-prefork	1	on	16	1	12	6221.77	1.74ms	3.82ms	0	32
-volucer-prefork	1	on	24	1	12	8001.66	2.84ms	6.24ms	0	32
-volucer-prefork	1	on	32	1	12	7988.17	2.82ms	6.20ms	0	32
-volucer-prefork	1	on	64	1	12	9056.65	6.45ms	13.00ms	0	32
-volucer-prefork	1	on	8	2	8	5601.56	1.32ms	2.50ms	0	32
-volucer-prefork	1	on	16	2	12	5963.67	1.83ms	4.11ms	0	32
-volucer-prefork	1	on	24	2	12	7938.07	2.86ms	6.27ms	0	32
-volucer-prefork	1	on	32	2	12	7879.26	2.87ms	6.23ms	0	32
-volucer-prefork	1	on	64	2	12	9269.99	6.29ms	12.33ms	0	32
-volucer-prefork	1	on	8	3	8	5656.91	1.33ms	2.53ms	0	32
-volucer-prefork	1	on	16	3	12	5995.63	1.81ms	4.50ms	0	32
-volucer-prefork	1	on	24	3	12	7951.64	2.85ms	6.41ms	0	32
-volucer-prefork	1	on	32	3	12	8004.91	2.82ms	6.24ms	0	32
-volucer-prefork	1	on	64	3	12	9286.49	6.31ms	12.31ms	0	32
-volucer-prefork	4	on	8	1	8	3050.46	2.28ms	6.94ms	0	1
-volucer-prefork	4	on	16	1	12	3111.16	3.35ms	10.79ms	0	1
-volucer-prefork	4	on	24	1	12	3135.02	7.36ms	22.37ms	0	1
-volucer-prefork	4	on	32	1	12	3151.52	7.00ms	20.68ms	0	1
-volucer-prefork	4	on	64	1	12	3184.87	18.14ms	58.39ms	0	1
-volucer-prefork	4	on	8	2	8	3076.42	2.30ms	7.09ms	0	1
-volucer-prefork	4	on	16	2	12	3166.50	3.38ms	11.75ms	0	1
-volucer-prefork	4	on	24	2	12	3203.25	7.20ms	24.48ms	0	1
-volucer-prefork	4	on	32	2	12	3082.61	6.26ms	24.95ms	0	1
-volucer-prefork	4	on	64	2	12	3075.07	18.15ms	56.55ms	0	1
-volucer-prefork	4	on	8	3	8	3008.42	2.32ms	6.96ms	0	1
-volucer-prefork	4	on	16	3	12	3063.12	3.24ms	11.46ms	0	1
-volucer-prefork	4	on	24	3	12	3223.41	7.08ms	27.01ms	0	1
-volucer-prefork	4	on	32	3	12	3234.92	7.00ms	19.66ms	0	1
-volucer-prefork	4	on	64	3	12	3176.21	15.36ms	69.73ms	0	1
-volucer-prefork	4	on	8	1	8	4963.47	1.44ms	3.10ms	0	4
-volucer-prefork	4	on	16	1	12	5735.92	1.89ms	4.33ms	0	4
-volucer-prefork	4	on	24	1	12	7961.62	2.76ms	7.70ms	0	4
-volucer-prefork	4	on	32	1	12	7955.67	2.77ms	7.14ms	0	4
-volucer-prefork	4	on	64	1	12	7982.01	4.36ms	43.32ms	0	4
-volucer-prefork	4	on	8	2	8	4826.14	1.48ms	3.19ms	0	4
-volucer-prefork	4	on	16	2	12	5670.55	1.91ms	4.41ms	0	4
-volucer-prefork	4	on	24	2	12	7926.54	2.81ms	8.28ms	0	4
-volucer-prefork	4	on	32	2	12	7930.92	2.73ms	8.36ms	0	4
-volucer-prefork	4	on	64	2	12	8109.37	4.35ms	43.40ms	0	4
-volucer-prefork	4	on	8	3	8	4834.73	1.48ms	3.16ms	0	4
-volucer-prefork	4	on	16	3	12	5598.25	1.93ms	4.38ms	0	4
-volucer-prefork	4	on	24	3	12	7861.75	2.78ms	8.10ms	0	4
-volucer-prefork	4	on	32	3	12	7756.23	2.70ms	8.01ms	0	4
-volucer-prefork	4	on	64	3	12	7938.81	4.30ms	44.29ms	0	4
-volucer-prefork	4	on	8	1	8	4967.41	1.44ms	3.05ms	0	8
-volucer-prefork	4	on	16	1	12	5752.69	1.88ms	4.33ms	0	8
-volucer-prefork	4	on	24	1	12	7629.86	2.96ms	6.89ms	0	8
-volucer-prefork	4	on	32	1	12	7556.38	2.96ms	7.45ms	0	8
-volucer-prefork	4	on	64	1	12	8747.84	5.99ms	22.08ms	0	8
-volucer-prefork	4	on	8	2	8	4886.40	1.46ms	3.16ms	0	8
-volucer-prefork	4	on	16	2	12	5708.89	1.89ms	4.37ms	0	8
-volucer-prefork	4	on	24	2	12	7505.52	3.03ms	6.84ms	0	8
-volucer-prefork	4	on	32	2	12	7561.83	2.96ms	6.84ms	0	8
-volucer-prefork	4	on	64	2	12	8776.00	6.03ms	21.69ms	0	8
-volucer-prefork	4	on	8	3	8	4827.34	1.47ms	3.21ms	0	8
-volucer-prefork	4	on	16	3	12	5494.02	1.94ms	4.49ms	0	8
-volucer-prefork	4	on	24	3	12	7400.24	3.06ms	7.03ms	0	8
-volucer-prefork	4	on	32	3	12	7506.76	2.99ms	6.83ms	0	8
-volucer-prefork	4	on	64	3	12	8762.14	5.86ms	23.89ms	0	8
-volucer-prefork	4	on	8	1	8	4912.42	1.46ms	3.18ms	0	16
-volucer-prefork	4	on	16	1	12	5708.42	1.90ms	4.35ms	0	16
-volucer-prefork	4	on	24	1	12	7580.50	2.98ms	7.08ms	0	16
-volucer-prefork	4	on	32	1	12	7572.87	2.96ms	7.07ms	0	16
-volucer-prefork	4	on	64	1	12	8389.13	6.80ms	16.81ms	0	16
-volucer-prefork	4	on	8	2	8	4818.92	1.48ms	3.19ms	0	16
-volucer-prefork	4	on	16	2	12	5606.19	1.94ms	4.41ms	0	16
-volucer-prefork	4	on	24	2	12	7522.72	3.01ms	7.37ms	0	16
-volucer-prefork	4	on	32	2	12	7759.74	2.90ms	6.53ms	0	16
-volucer-prefork	4	on	64	2	12	8296.57	6.89ms	15.79ms	0	16
-volucer-prefork	4	on	8	3	8	4862.04	1.48ms	3.12ms	0	16
-volucer-prefork	4	on	16	3	12	5634.50	1.91ms	4.82ms	0	16
-volucer-prefork	4	on	24	3	12	7568.28	2.99ms	7.33ms	0	16
-volucer-prefork	4	on	32	3	12	7579.96	2.95ms	7.36ms	0	16
-volucer-prefork	4	on	64	3	12	8304.18	6.82ms	15.90ms	0	16
-volucer-prefork	8	on	8	1	8	5132.25	1.38ms	3.39ms	0	1
-volucer-prefork	8	on	16	1	12	5729.45	1.49ms	6.35ms	0	1
-volucer-prefork	8	on	24	1	12	6082.44	3.32ms	15.67ms	0	1
-volucer-prefork	8	on	32	1	12	6041.64	2.77ms	16.79ms	0	1
-volucer-prefork	8	on	64	1	12	6271.20	8.11ms	53.33ms	0	1
-volucer-prefork	8	on	8	2	8	5061.28	1.40ms	3.41ms	0	1
-volucer-prefork	8	on	16	2	12	5544.66	1.51ms	7.28ms	0	1
-volucer-prefork	8	on	24	2	12	5840.36	3.26ms	20.52ms	0	1
-volucer-prefork	8	on	32	2	12	5994.26	2.82ms	15.72ms	0	1
-volucer-prefork	8	on	64	2	12	6180.22	8.31ms	57.05ms	0	1
-volucer-prefork	8	on	8	3	8	5075.91	1.39ms	4.19ms	0	1
-volucer-prefork	8	on	16	3	12	5611.64	1.52ms	6.83ms	0	1
-volucer-prefork	8	on	24	3	12	5887.62	3.36ms	16.48ms	0	1
-volucer-prefork	8	on	32	3	12	5883.52	2.75ms	18.79ms	0	1
-volucer-prefork	8	on	64	3	12	6149.87	8.80ms	44.31ms	0	1
-volucer-prefork	8	on	8	1	8	4565.53	1.55ms	3.57ms	0	4
-volucer-prefork	8	on	16	1	12	5394.01	2.03ms	4.61ms	0	4
-volucer-prefork	8	on	24	1	12	7340.42	3.10ms	7.01ms	0	4
-volucer-prefork	8	on	32	1	12	7304.25	3.08ms	6.97ms	0	4
-volucer-prefork	8	on	64	1	12	8440.29	5.85ms	31.59ms	0	4
-volucer-prefork	8	on	8	2	8	4576.54	1.54ms	3.54ms	0	4
-volucer-prefork	8	on	16	2	12	5366.62	2.05ms	4.63ms	0	4
-volucer-prefork	8	on	24	2	12	7245.42	3.13ms	7.08ms	0	4
-volucer-prefork	8	on	32	2	12	7351.29	3.06ms	6.99ms	0	4
-volucer-prefork	8	on	64	2	12	8486.68	5.89ms	27.20ms	0	4
-volucer-prefork	8	on	8	3	8	4591.22	1.54ms	3.49ms	0	4
-volucer-prefork	8	on	16	3	12	5423.85	2.03ms	4.56ms	0	4
-volucer-prefork	8	on	24	3	12	7271.44	3.12ms	7.08ms	0	4
-volucer-prefork	8	on	32	3	12	7310.26	3.08ms	7.00ms	0	4
-volucer-prefork	8	on	64	3	12	8351.92	5.74ms	35.80ms	0	4
-volucer-prefork	8	on	8	1	8	4639.25	1.50ms	4.76ms	0	8
-volucer-prefork	8	on	16	1	12	5473.44	2.01ms	4.57ms	0	8
-volucer-prefork	8	on	24	1	12	7230.89	3.11ms	7.33ms	0	8
-volucer-prefork	8	on	32	1	12	7276.84	3.07ms	7.21ms	0	8
-volucer-prefork	8	on	64	1	12	8165.59	7.04ms	16.06ms	0	8
-volucer-prefork	8	on	8	2	8	4646.27	1.52ms	3.43ms	0	8
-volucer-prefork	8	on	16	2	12	5378.12	2.04ms	4.99ms	0	8
-volucer-prefork	8	on	24	2	12	7194.69	3.15ms	7.43ms	0	8
-volucer-prefork	8	on	32	2	12	7305.81	3.04ms	7.64ms	0	8
-volucer-prefork	8	on	64	2	12	8229.25	6.97ms	16.13ms	0	8
-volucer-prefork	8	on	8	3	8	4617.57	1.53ms	3.47ms	0	8
-volucer-prefork	8	on	16	3	12	5354.64	2.06ms	4.61ms	0	8
-volucer-prefork	8	on	24	3	12	7250.31	3.11ms	7.88ms	0	8
-volucer-prefork	8	on	32	3	12	7230.67	3.08ms	7.97ms	0	8
-volucer-prefork	8	on	64	3	12	8055.83	7.12ms	17.46ms	0	8
-volucer-prefork	16	on	8	1	8	4076.91	1.78ms	3.82ms	0	1
-volucer-prefork	16	on	16	1	12	5247.69	2.12ms	4.61ms	0	1
-volucer-prefork	16	on	24	1	12	6609.05	3.06ms	13.16ms	0	1
-volucer-prefork	16	on	32	1	12	6628.10	2.91ms	12.20ms	0	1
-volucer-prefork	16	on	64	1	12	6911.96	6.61ms	44.10ms	0	1
-volucer-prefork	16	on	8	2	8	4049.77	1.78ms	3.86ms	0	1
-volucer-prefork	16	on	16	2	12	5181.34	2.13ms	4.99ms	0	1
-volucer-prefork	16	on	24	2	12	6542.57	3.08ms	13.90ms	0	1
-volucer-prefork	16	on	32	2	12	6434.22	2.96ms	16.28ms	0	1
-volucer-prefork	16	on	64	2	12	6910.25	6.31ms	50.90ms	0	1
-volucer-prefork	16	on	8	3	8	4033.93	1.80ms	5.57ms	0	1
-volucer-prefork	16	on	16	3	12	5231.69	2.11ms	4.65ms	0	1
-volucer-prefork	16	on	24	3	12	6607.08	3.07ms	12.88ms	0	1
-volucer-prefork	16	on	32	3	12	6596.03	2.90ms	13.22ms	0	1
-volucer-prefork	16	on	64	3	12	6921.53	6.46ms	52.83ms	0	1
-volucer-prefork	16	on	8	1	8	4064.93	1.79ms	4.29ms	0	4
-volucer-prefork	16	on	16	1	12	5169.13	2.15ms	4.99ms	0	4
-volucer-prefork	16	on	24	1	12	6740.16	3.34ms	7.88ms	0	4
-volucer-prefork	16	on	32	1	12	6875.32	3.25ms	7.62ms	0	4
-volucer-prefork	16	on	64	1	12	8058.25	7.12ms	17.15ms	0	4
-volucer-prefork	16	on	8	2	8	4088.75	1.78ms	3.78ms	0	4
-volucer-prefork	16	on	16	2	12	5046.38	2.18ms	5.08ms	0	4
-volucer-prefork	16	on	24	2	12	6778.51	3.34ms	7.77ms	0	4
-volucer-prefork	16	on	32	2	12	6893.91	3.23ms	7.68ms	0	4
-volucer-prefork	16	on	64	2	12	7873.16	7.31ms	16.59ms	0	4
-volucer-prefork	16	on	8	3	8	4095.70	1.76ms	4.08ms	0	4
-volucer-prefork	16	on	16	3	12	5099.81	2.20ms	4.88ms	0	4
-volucer-prefork	16	on	24	3	12	6867.75	3.29ms	7.58ms	0	4
-volucer-prefork	16	on	32	3	12	6888.42	3.23ms	7.69ms	0	4
-volucer-prefork	16	on	64	3	12	7777.61	7.36ms	16.69ms	0	4
-volucer-prefork	24	on	8	1	8	3916.30	1.86ms	4.04ms	0	1
-volucer-prefork	24	on	16	1	12	4911.12	2.26ms	5.23ms	0	1
-volucer-prefork	24	on	24	1	12	6786.81	3.26ms	9.48ms	0	1
-volucer-prefork	24	on	32	1	12	6801.35	3.22ms	9.37ms	0	1
-volucer-prefork	24	on	64	1	12	7193.29	5.96ms	44.89ms	0	1
-volucer-prefork	24	on	8	2	8	3866.33	1.89ms	4.02ms	0	1
-volucer-prefork	24	on	16	2	12	4833.84	2.29ms	5.09ms	0	1
-volucer-prefork	24	on	24	2	12	6708.56	3.31ms	9.19ms	0	1
-volucer-prefork	24	on	32	2	12	6884.20	3.15ms	9.41ms	0	1
-volucer-prefork	24	on	64	2	12	7282.34	6.06ms	41.33ms	0	1
-volucer-prefork	24	on	8	3	8	3869.34	1.88ms	3.99ms	0	1
-volucer-prefork	24	on	16	3	12	4830.65	2.30ms	5.04ms	0	1
-volucer-prefork	24	on	24	3	12	6767.99	3.28ms	8.92ms	0	1
-volucer-prefork	24	on	32	3	12	6778.45	3.23ms	8.82ms	0	1
-volucer-prefork	24	on	64	3	12	7302.77	6.01ms	40.58ms	0	1
-volucer-prefork	32	on	8	1	8	3765.08	1.95ms	4.02ms	0	1
-volucer-prefork	32	on	16	1	12	4604.87	2.41ms	5.71ms	0	1
-volucer-prefork	32	on	24	1	12	6454.66	3.47ms	8.94ms	0	1
-volucer-prefork	32	on	32	1	12	6337.09	3.48ms	8.97ms	0	1
-volucer-prefork	32	on	64	1	12	7251.67	6.15ms	44.85ms	0	1
-volucer-prefork	32	on	8	2	8	3784.28	1.93ms	3.96ms	0	1
-volucer-prefork	32	on	16	2	12	4635.56	2.38ms	5.44ms	0	1
-volucer-prefork	32	on	24	2	12	6382.04	3.47ms	11.94ms	0	1
-volucer-prefork	32	on	32	2	12	6309.67	3.47ms	9.18ms	0	1
-volucer-prefork	32	on	64	2	12	7223.20	6.16ms	40.74ms	0	1
-volucer-prefork	32	on	8	3	8	3756.80	1.96ms	4.01ms	0	1
-volucer-prefork	32	on	16	3	12	4589.87	2.41ms	5.38ms	0	1
-volucer-prefork	32	on	24	3	12	6404.65	3.48ms	8.99ms	0	1
-volucer-prefork	32	on	32	3	12	6472.72	3.40ms	8.92ms	0	1
-volucer-prefork	32	on	64	3	12	7082.00	5.97ms	46.00ms	0	1
+volucer-worker	1	on	8	1	8	3369.61	2.30ms	3.19ms	0	
+volucer-worker	1	on	16	1	12	3346.02	3.50ms	4.63ms	0	
+volucer-worker	1	on	24	1	12	3356.88	6.98ms	9.15ms	0	
+volucer-worker	1	on	32	1	12	3373.91	6.99ms	8.63ms	0	
+volucer-worker	1	on	64	1	12	3437.86	17.21ms	20.85ms	0	
+volucer-worker	1	on	8	2	8	3434.46	2.27ms	3.22ms	0	
+volucer-worker	1	on	16	2	12	3315.89	3.50ms	4.79ms	0	
+volucer-worker	1	on	24	2	12	3351.23	7.00ms	9.07ms	0	
+volucer-worker	1	on	32	2	12	3356.30	7.01ms	9.16ms	0	
+volucer-worker	1	on	64	2	12	3348.91	17.74ms	21.25ms	0	
+volucer-worker	1	on	8	3	8	3526.69	2.20ms	3.09ms	0	
+volucer-worker	1	on	16	3	12	3352.27	3.48ms	4.73ms	0	
+volucer-worker	1	on	24	3	12	3285.75	7.12ms	10.01ms	0	
+volucer-worker	1	on	32	3	12	3387.87	6.97ms	9.02ms	0	
+volucer-worker	1	on	64	3	12	3307.66	17.93ms	21.81ms	0	
+volucer-worker	4	on	8	1	8	12897.42	590.00us	1.19ms	0	
+volucer-worker	4	on	16	1	12	12977.12	0.89ms	2.11ms	0	
+volucer-worker	4	on	24	1	12	12797.28	1.84ms	5.19ms	0	
+volucer-worker	4	on	32	1	12	12894.98	1.82ms	5.15ms	0	
+volucer-worker	4	on	64	1	12	12883.14	4.62ms	15.20ms	0	
+volucer-worker	4	on	8	2	8	12777.34	595.00us	1.20ms	0	
+volucer-worker	4	on	16	2	12	12888.33	0.89ms	2.18ms	0	
+volucer-worker	4	on	24	2	12	13136.18	1.80ms	5.25ms	0	
+volucer-worker	4	on	32	2	12	12992.79	1.81ms	5.12ms	0	
+volucer-worker	4	on	64	2	12	12858.92	4.62ms	14.55ms	0	
+volucer-worker	4	on	8	3	8	12894.86	591.00us	1.18ms	0	
+volucer-worker	4	on	16	3	12	12754.45	0.90ms	2.15ms	0	
+volucer-worker	4	on	24	3	12	12643.54	1.86ms	5.27ms	0	
+volucer-worker	4	on	32	3	12	12655.98	1.84ms	5.20ms	0	
+volucer-worker	4	on	64	3	12	13044.86	4.54ms	14.53ms	0	
+volucer-worker	8	on	8	1	8	14809.57	512.00us	1.00ms	0	
+volucer-worker	8	on	16	1	12	19897.00	566.00us	1.16ms	0	
+volucer-worker	8	on	24	1	12	21354.44	1.06ms	3.16ms	0	
+volucer-worker	8	on	32	1	12	21586.51	1.03ms	3.10ms	0	
+volucer-worker	8	on	64	1	12	21097.72	2.80ms	11.03ms	0	
+volucer-worker	8	on	8	2	8	14636.07	516.00us	0.99ms	0	
+volucer-worker	8	on	16	2	12	19890.13	566.00us	1.15ms	0	
+volucer-worker	8	on	24	2	12	21238.58	1.08ms	3.21ms	0	
+volucer-worker	8	on	32	2	12	20669.73	1.08ms	3.26ms	0	
+volucer-worker	8	on	64	2	12	20387.51	2.90ms	11.08ms	0	
+volucer-worker	8	on	8	3	8	14752.15	512.00us	0.99ms	0	
+volucer-worker	8	on	16	3	12	19417.34	580.00us	1.18ms	0	
+volucer-worker	8	on	24	3	12	20576.12	1.10ms	3.28ms	0	
+volucer-worker	8	on	32	3	12	21556.11	1.03ms	3.14ms	0	
+volucer-worker	8	on	64	3	12	21375.67	2.75ms	10.52ms	0	
+volucer-worker	16	on	8	1	8	15081.95	502.00us	0.96ms	0	
+volucer-worker	16	on	16	1	12	16184.70	694.00us	1.40ms	0	
+volucer-worker	16	on	24	1	12	22447.78	1.01ms	2.21ms	0	
+volucer-worker	16	on	32	1	12	22338.15	1.00ms	2.14ms	0	
+volucer-worker	16	on	64	1	12	24202.77	2.33ms	7.25ms	0	
+volucer-worker	16	on	8	2	8	14486.75	520.00us	1.01ms	0	
+volucer-worker	16	on	16	2	12	15891.14	711.00us	1.44ms	0	
+volucer-worker	16	on	24	2	12	22304.68	1.02ms	2.13ms	0	
+volucer-worker	16	on	32	2	12	22419.66	1.01ms	2.14ms	0	
+volucer-worker	16	on	64	2	12	24461.20	2.33ms	7.22ms	0	
+volucer-worker	16	on	8	3	8	14593.77	516.00us	0.99ms	0	
+volucer-worker	16	on	16	3	12	15682.79	717.00us	1.44ms	0	
+volucer-worker	16	on	24	3	12	22097.87	1.02ms	2.16ms	0	
+volucer-worker	16	on	32	3	12	22133.66	1.01ms	2.14ms	0	
+volucer-worker	16	on	64	3	12	24233.85	2.35ms	7.21ms	0	
+volucer-worker	24	on	8	1	8	14659.16	517.00us	1.01ms	0	
+volucer-worker	24	on	16	1	12	16248.13	692.00us	1.40ms	0	
+volucer-worker	24	on	24	1	12	19941.27	1.12ms	2.93ms	0	
+volucer-worker	24	on	32	1	12	20425.01	1.10ms	2.36ms	0	
+volucer-worker	24	on	64	1	12	23584.08	2.36ms	5.82ms	0	
+volucer-worker	24	on	8	2	8	14037.45	541.00us	1.05ms	0	
+volucer-worker	24	on	16	2	12	15636.70	715.00us	1.46ms	0	
+volucer-worker	24	on	24	2	12	20168.58	1.12ms	2.38ms	0	
+volucer-worker	24	on	32	2	12	20113.83	1.12ms	2.38ms	0	
+volucer-worker	24	on	64	2	12	23561.26	2.38ms	5.86ms	0	
+volucer-worker	24	on	8	3	8	14122.58	536.00us	1.05ms	0	
+volucer-worker	24	on	16	3	12	15511.14	723.00us	1.46ms	0	
+volucer-worker	24	on	24	3	12	20458.33	1.12ms	2.37ms	0	
+volucer-worker	24	on	32	3	12	20039.39	1.12ms	2.37ms	0	
+volucer-worker	24	on	64	3	12	24060.42	2.33ms	5.70ms	0	
+volucer-worker	32	on	8	1	8	14455.59	527.00us	1.00ms	0	
+volucer-worker	32	on	16	1	12	16062.98	699.00us	1.41ms	0	
+volucer-worker	32	on	24	1	12	20252.75	1.11ms	2.66ms	0	
+volucer-worker	32	on	32	1	12	20583.30	1.10ms	2.35ms	0	
+volucer-worker	32	on	64	1	12	23424.09	2.40ms	5.71ms	0	
+volucer-worker	32	on	8	2	8	14498.95	522.00us	1.02ms	0	
+volucer-worker	32	on	16	2	12	15832.69	710.00us	1.43ms	0	
+volucer-worker	32	on	24	2	12	20390.39	1.10ms	2.35ms	0	
+volucer-worker	32	on	32	2	12	20439.88	1.10ms	2.38ms	0	
+volucer-worker	32	on	64	2	12	23558.73	2.40ms	5.34ms	0	
+volucer-worker	32	on	8	3	8	14366.48	525.00us	1.02ms	0	
+volucer-worker	32	on	16	3	12	15799.84	709.00us	1.42ms	0	
+volucer-worker	32	on	24	3	12	20224.61	1.11ms	2.36ms	0	
+volucer-worker	32	on	32	3	12	19932.60	1.12ms	2.38ms	0	
+volucer-worker	32	on	64	3	12	23358.25	2.42ms	5.30ms	0	
+volucer-unix	1	on	8	1	8	3198.88	2.42ms	3.45ms	0	
+volucer-unix	1	on	16	1	12	3185.28	3.68ms	4.97ms	0	
+volucer-unix	1	on	24	1	12	3150.60	7.46ms	9.67ms	0	
+volucer-unix	1	on	32	1	12	3168.29	7.44ms	9.81ms	0	
+volucer-unix	1	on	64	1	12	3149.20	18.77ms	23.45ms	0	
+volucer-unix	1	on	8	2	8	3146.77	2.46ms	3.40ms	0	
+volucer-unix	1	on	16	2	12	3192.43	3.64ms	5.09ms	0	
+volucer-unix	1	on	24	2	12	3211.65	7.33ms	9.52ms	0	
+volucer-unix	1	on	32	2	12	3177.81	7.38ms	9.99ms	0	
+volucer-unix	1	on	64	2	12	3152.55	18.76ms	23.06ms	0	
+volucer-unix	1	on	8	3	8	3199.59	2.42ms	3.51ms	0	
+volucer-unix	1	on	16	3	12	3158.74	3.68ms	5.20ms	0	
+volucer-unix	1	on	24	3	12	3217.70	7.32ms	9.44ms	0	
+volucer-unix	1	on	32	3	12	3258.65	7.20ms	9.53ms	0	
+volucer-unix	1	on	64	3	12	3248.80	18.19ms	22.34ms	0	
+volucer-unix	4	on	8	1	8	12278.82	623.00us	1.20ms	0	
+volucer-unix	4	on	16	1	12	12254.21	0.95ms	2.21ms	0	
+volucer-unix	4	on	24	1	12	12180.81	1.93ms	5.46ms	0	
+volucer-unix	4	on	32	1	12	12234.31	1.90ms	5.25ms	0	
+volucer-unix	4	on	64	1	12	12277.78	4.82ms	14.93ms	0	
+volucer-unix	4	on	8	2	8	12307.13	617.00us	1.26ms	0	
+volucer-unix	4	on	16	2	12	12360.29	0.93ms	2.20ms	0	
+volucer-unix	4	on	24	2	12	12410.89	1.91ms	5.41ms	0	
+volucer-unix	4	on	32	2	12	12475.15	1.88ms	5.30ms	0	
+volucer-unix	4	on	64	2	12	12374.58	4.77ms	14.81ms	0	
+volucer-unix	4	on	8	3	8	12252.35	622.00us	1.23ms	0	
+volucer-unix	4	on	16	3	12	12222.71	0.94ms	2.25ms	0	
+volucer-unix	4	on	24	3	12	12297.69	1.91ms	5.34ms	0	
+volucer-unix	4	on	32	3	12	12400.50	1.88ms	5.28ms	0	
+volucer-unix	4	on	64	3	12	12215.07	4.86ms	15.15ms	0	
+volucer-unix	8	on	8	1	8	14373.72	526.00us	1.01ms	0	
+volucer-unix	8	on	16	1	12	18300.97	616.00us	1.26ms	0	
+volucer-unix	8	on	24	1	12	20255.46	1.12ms	3.35ms	0	
+volucer-unix	8	on	32	1	12	19945.59	1.11ms	3.36ms	0	
+volucer-unix	8	on	64	1	12	19404.74	3.05ms	11.61ms	0	
+volucer-unix	8	on	8	2	8	13866.54	546.00us	1.06ms	0	
+volucer-unix	8	on	16	2	12	17960.69	626.00us	1.26ms	0	
+volucer-unix	8	on	24	2	12	19510.22	1.16ms	3.53ms	0	
+volucer-unix	8	on	32	2	12	19420.57	1.15ms	3.41ms	0	
+volucer-unix	8	on	64	2	12	19442.41	3.04ms	11.89ms	0	
+volucer-unix	8	on	8	3	8	14011.30	537.00us	1.04ms	0	
+volucer-unix	8	on	16	3	12	18820.58	597.00us	1.21ms	0	
+volucer-unix	8	on	24	3	12	19420.00	1.18ms	3.44ms	0	
+volucer-unix	8	on	32	3	12	19454.36	1.14ms	3.43ms	0	
+volucer-unix	8	on	64	3	12	19232.42	3.07ms	11.79ms	0	
+volucer-unix	16	on	8	1	8	14053.63	538.00us	1.06ms	0	
+volucer-unix	16	on	16	1	12	15668.35	715.00us	1.47ms	0	
+volucer-unix	16	on	24	1	12	21477.94	1.04ms	2.30ms	0	
+volucer-unix	16	on	32	1	12	21597.84	1.03ms	2.24ms	0	
+volucer-unix	16	on	64	1	12	23617.19	2.39ms	7.49ms	0	
+volucer-unix	16	on	8	2	8	13513.13	558.00us	1.09ms	0	
+volucer-unix	16	on	16	2	12	15259.67	729.00us	1.51ms	0	
+volucer-unix	16	on	24	2	12	21111.99	1.07ms	2.33ms	0	
+volucer-unix	16	on	32	2	12	21344.39	1.05ms	2.25ms	0	
+volucer-unix	16	on	64	2	12	23633.83	2.39ms	7.20ms	0	
+volucer-unix	16	on	8	3	8	13728.74	553.00us	1.08ms	0	
+volucer-unix	16	on	16	3	12	15470.92	720.00us	1.50ms	0	
+volucer-unix	16	on	24	3	12	21537.14	1.05ms	2.27ms	0	
+volucer-unix	16	on	32	3	12	21697.90	1.03ms	2.22ms	0	
+volucer-unix	16	on	64	3	12	23891.25	2.38ms	7.32ms	0	
+volucer-unix	24	on	8	1	8	14353.38	529.00us	1.02ms	0	
+volucer-unix	24	on	16	1	12	15849.08	705.00us	1.48ms	0	
+volucer-unix	24	on	24	1	12	19746.45	1.13ms	2.86ms	0	
+volucer-unix	24	on	32	1	12	19936.81	1.12ms	2.45ms	0	
+volucer-unix	24	on	64	1	12	23321.80	2.41ms	6.02ms	0	
+volucer-unix	24	on	8	2	8	14148.47	533.00us	1.04ms	0	
+volucer-unix	24	on	16	2	12	15374.47	723.00us	1.50ms	0	
+volucer-unix	24	on	24	2	12	19584.35	1.14ms	2.50ms	0	
+volucer-unix	24	on	32	2	12	19913.27	1.13ms	2.50ms	0	
+volucer-unix	24	on	64	2	12	23617.50	2.38ms	5.84ms	0	
+volucer-unix	24	on	8	3	8	13948.01	542.00us	1.07ms	0	
+volucer-unix	24	on	16	3	12	15417.88	726.00us	1.51ms	0	
+volucer-unix	24	on	24	3	12	19763.12	1.13ms	2.48ms	0	
+volucer-unix	24	on	32	3	12	19833.64	1.12ms	2.48ms	0	
+volucer-unix	24	on	64	3	12	23020.01	2.43ms	5.99ms	0	
+volucer-unix	32	on	8	1	8	14224.45	529.00us	1.03ms	0	
+volucer-unix	32	on	16	1	12	15676.92	712.00us	1.49ms	0	
+volucer-unix	32	on	24	1	12	19960.01	1.12ms	2.88ms	0	
+volucer-unix	32	on	32	1	12	19829.73	1.12ms	2.47ms	0	
+volucer-unix	32	on	64	1	12	22550.86	2.51ms	5.94ms	0	
+volucer-unix	32	on	8	2	8	13658.93	552.00us	1.09ms	0	
+volucer-unix	32	on	16	2	12	15278.72	728.00us	1.53ms	0	
+volucer-unix	32	on	24	2	12	19576.32	1.14ms	2.51ms	0	
+volucer-unix	32	on	32	2	12	19768.17	1.13ms	2.49ms	0	
+volucer-unix	32	on	64	2	12	21971.89	2.58ms	5.68ms	0	
+volucer-unix	32	on	8	3	8	13241.43	569.00us	1.11ms	0	
+volucer-unix	32	on	16	3	12	15039.23	742.00us	1.55ms	0	
+volucer-unix	32	on	24	3	12	19539.68	1.15ms	2.51ms	0	
+volucer-unix	32	on	32	3	12	19600.11	1.14ms	2.50ms	0	
+volucer-unix	32	on	64	3	12	22520.05	2.54ms	5.67ms	0	
+volucer-attach	1	on	8	1	8	3286.13	2.37ms	3.26ms	0	
+volucer-attach	1	on	16	1	12	3176.56	3.68ms	4.90ms	0	
+volucer-attach	1	on	24	1	12	3226.48	7.29ms	9.66ms	0	
+volucer-attach	1	on	32	1	12	3214.28	7.29ms	9.47ms	0	
+volucer-attach	1	on	64	1	12	3228.85	18.32ms	23.08ms	0	
+volucer-attach	1	on	8	2	8	3216.37	2.42ms	3.34ms	0	
+volucer-attach	1	on	16	2	12	3237.92	3.61ms	4.92ms	0	
+volucer-attach	1	on	24	2	12	3299.54	7.07ms	9.41ms	0	
+volucer-attach	1	on	32	2	12	3267.43	7.21ms	9.32ms	0	
+volucer-attach	1	on	64	2	12	3161.13	18.68ms	22.98ms	0	
+volucer-attach	1	on	8	3	8	3258.40	2.38ms	3.38ms	0	
+volucer-attach	1	on	16	3	12	3184.04	3.65ms	4.94ms	0	
+volucer-attach	1	on	24	3	12	3258.16	7.21ms	9.43ms	0	
+volucer-attach	1	on	32	3	12	3272.61	7.18ms	9.37ms	0	
+volucer-attach	1	on	64	3	12	3201.65	18.40ms	22.54ms	0	
+volucer-attach	4	on	8	1	8	12439.09	614.00us	1.20ms	0	
+volucer-attach	4	on	16	1	12	12276.96	0.94ms	2.18ms	0	
+volucer-attach	4	on	24	1	12	12053.52	1.97ms	5.40ms	0	
+volucer-attach	4	on	32	1	12	12406.48	1.89ms	5.39ms	0	
+volucer-attach	4	on	64	1	12	12337.24	4.82ms	14.77ms	0	
+volucer-attach	4	on	8	2	8	12264.77	622.00us	1.23ms	0	
+volucer-attach	4	on	16	2	12	12229.38	0.94ms	2.26ms	0	
+volucer-attach	4	on	24	2	12	12115.51	1.97ms	5.60ms	0	
+volucer-attach	4	on	32	2	12	12210.70	1.94ms	5.40ms	0	
+volucer-attach	4	on	64	2	12	12248.39	4.87ms	14.90ms	0	
+volucer-attach	4	on	8	3	8	12317.81	619.00us	1.25ms	0	
+volucer-attach	4	on	16	3	12	12110.68	0.96ms	2.21ms	0	
+volucer-attach	4	on	24	3	12	12241.66	1.94ms	5.33ms	0	
+volucer-attach	4	on	32	3	12	12097.32	1.95ms	5.47ms	0	
+volucer-attach	4	on	64	3	12	12177.08	4.86ms	15.14ms	0	
+volucer-attach	8	on	8	1	8	14404.18	527.00us	1.02ms	0	
+volucer-attach	8	on	16	1	12	19647.57	575.00us	1.16ms	0	
+volucer-attach	8	on	24	1	12	20377.34	1.12ms	3.27ms	0	
+volucer-attach	8	on	32	1	12	19759.23	1.13ms	3.40ms	0	
+volucer-attach	8	on	64	1	12	19835.01	2.98ms	11.36ms	0	
+volucer-attach	8	on	8	2	8	14077.58	536.00us	1.03ms	0	
+volucer-attach	8	on	16	2	12	19092.25	592.00us	1.20ms	0	
+volucer-attach	8	on	24	2	12	19710.15	1.15ms	3.35ms	0	
+volucer-attach	8	on	32	2	12	19861.24	1.13ms	3.36ms	0	
+volucer-attach	8	on	64	2	12	19656.47	3.00ms	11.45ms	0	
+volucer-attach	8	on	8	3	8	14207.90	534.00us	1.03ms	0	
+volucer-attach	8	on	16	3	12	19100.83	593.00us	1.18ms	0	
+volucer-attach	8	on	24	3	12	20111.54	1.13ms	3.36ms	0	
+volucer-attach	8	on	32	3	12	20164.25	1.11ms	3.37ms	0	
+volucer-attach	8	on	64	3	12	19570.24	3.02ms	11.54ms	0	
+volucer-attach	16	on	8	1	8	14315.56	528.00us	1.02ms	0	
+volucer-attach	16	on	16	1	12	16118.17	691.00us	1.42ms	0	
+volucer-attach	16	on	24	1	12	22803.34	0.98ms	2.15ms	0	
+volucer-attach	16	on	32	1	12	22516.74	1.00ms	2.21ms	0	
+volucer-attach	16	on	64	1	12	25213.63	2.24ms	6.82ms	0	
+volucer-attach	16	on	8	2	8	14157.45	537.00us	1.02ms	0	
+volucer-attach	16	on	16	2	12	15892.82	704.00us	1.46ms	0	
+volucer-attach	16	on	24	2	12	23168.88	0.97ms	2.10ms	0	
+volucer-attach	16	on	32	2	12	23172.81	0.97ms	2.13ms	0	
+volucer-attach	16	on	64	2	12	25452.97	2.22ms	6.73ms	0	
+volucer-attach	16	on	8	3	8	14218.45	536.00us	1.01ms	0	
+volucer-attach	16	on	16	3	12	15923.45	700.00us	1.46ms	0	
+volucer-attach	16	on	24	3	12	22927.40	0.98ms	2.16ms	0	
+volucer-attach	16	on	32	3	12	22816.17	0.98ms	2.14ms	0	
+volucer-attach	16	on	64	3	12	26209.68	2.15ms	6.64ms	0	
+volucer-attach	24	on	8	1	8	14738.33	516.00us	0.99ms	0	
+volucer-attach	24	on	16	1	12	16301.13	685.00us	1.42ms	0	
+volucer-attach	24	on	24	1	12	21968.70	1.03ms	2.26ms	0	
+volucer-attach	24	on	32	1	12	22056.89	1.00ms	2.24ms	0	
+volucer-attach	24	on	64	1	12	26405.04	2.12ms	5.26ms	0	
+volucer-attach	24	on	8	2	8	14353.25	527.00us	1.02ms	0	
+volucer-attach	24	on	16	2	12	16078.60	693.00us	1.44ms	0	
+volucer-attach	24	on	24	2	12	21675.31	1.03ms	2.30ms	0	
+volucer-attach	24	on	32	2	12	21897.16	1.02ms	2.27ms	0	
+volucer-attach	24	on	64	2	12	26524.88	2.11ms	5.24ms	0	
+volucer-attach	24	on	8	3	8	14018.30	541.00us	1.05ms	0	
+volucer-attach	24	on	16	3	12	16041.89	700.00us	1.44ms	0	
+volucer-attach	24	on	24	3	12	22095.89	1.02ms	2.25ms	0	
+volucer-attach	24	on	32	3	12	22065.87	1.01ms	2.25ms	0	
+volucer-attach	24	on	64	3	12	26778.00	2.09ms	5.11ms	0	
+volucer-attach	32	on	8	1	8	14250.01	532.00us	1.03ms	0	
+volucer-attach	32	on	16	1	12	16232.54	685.00us	1.43ms	0	
+volucer-attach	32	on	24	1	12	21717.03	1.04ms	2.30ms	0	
+volucer-attach	32	on	32	1	12	21939.14	1.02ms	2.27ms	0	
+volucer-attach	32	on	64	1	12	25770.20	2.17ms	5.04ms	0	
+volucer-attach	32	on	8	2	8	14158.71	532.00us	1.04ms	0	
+volucer-attach	32	on	16	2	12	15766.34	711.00us	1.47ms	0	
+volucer-attach	32	on	24	2	12	21629.90	1.03ms	2.28ms	0	
+volucer-attach	32	on	32	2	12	21758.53	1.02ms	2.28ms	0	
+volucer-attach	32	on	64	2	12	26019.65	2.17ms	4.88ms	0	
+volucer-attach	32	on	8	3	8	14110.99	539.00us	1.04ms	0	
+volucer-attach	32	on	16	3	12	16086.82	693.00us	1.45ms	0	
+volucer-attach	32	on	24	3	12	21762.75	1.04ms	2.28ms	0	
+volucer-attach	32	on	32	3	12	21806.10	1.02ms	2.24ms	0	
+volucer-attach	32	on	64	3	12	26010.26	2.17ms	4.92ms	0	
+volucer-fastcgi	1	on	8	1	8	807.06	9.79ms	12.07ms	0	
+volucer-fastcgi	1	on	16	1	12	803.04	14.74ms	16.94ms	0	
+volucer-fastcgi	1	on	24	1	12	802.22	29.58ms	33.41ms	0	
+volucer-fastcgi	1	on	32	1	12	801.95	29.61ms	33.95ms	0	
+volucer-fastcgi	1	on	64	1	12	790.22	74.36ms	79.20ms	0	
+volucer-fastcgi	1	on	8	2	8	802.21	9.84ms	11.93ms	0	
+volucer-fastcgi	1	on	16	2	12	797.41	14.76ms	17.61ms	0	
+volucer-fastcgi	1	on	24	2	12	796.38	29.83ms	34.90ms	0	
+volucer-fastcgi	1	on	32	2	12	797.90	29.71ms	32.79ms	0	
+volucer-fastcgi	1	on	64	2	12	802.84	74.34ms	81.20ms	0	
+volucer-fastcgi	1	on	8	3	8	793.51	9.84ms	12.84ms	0	
+volucer-fastcgi	1	on	16	3	12	804.50	14.75ms	16.70ms	0	
+volucer-fastcgi	1	on	24	3	12	797.95	29.83ms	33.55ms	0	
+volucer-fastcgi	1	on	32	3	12	795.64	29.67ms	34.43ms	0	
+volucer-fastcgi	1	on	64	3	12	787.12	75.76ms	84.67ms	0	
+volucer-fastcgi	4	on	8	1	8	3100.85	2.32ms	6.78ms	0	
+volucer-fastcgi	4	on	16	1	12	3062.17	3.24ms	11.69ms	0	
+volucer-fastcgi	4	on	24	1	12	3107.40	7.01ms	24.92ms	0	
+volucer-fastcgi	4	on	32	1	12	3113.39	6.16ms	25.44ms	0	
+volucer-fastcgi	4	on	64	1	12	3157.43	19.99ms	48.57ms	0	
+volucer-fastcgi	4	on	8	2	8	3083.75	2.33ms	6.93ms	0	
+volucer-fastcgi	4	on	16	2	12	3044.31	3.08ms	12.28ms	0	
+volucer-fastcgi	4	on	24	2	12	3166.98	7.33ms	22.39ms	0	
+volucer-fastcgi	4	on	32	2	12	3145.13	6.76ms	25.67ms	0	
+volucer-fastcgi	4	on	64	2	12	3195.91	16.64ms	52.66ms	0	
+volucer-fastcgi	4	on	8	3	8	3092.41	2.35ms	6.56ms	0	
+volucer-fastcgi	4	on	16	3	12	3089.44	3.37ms	11.28ms	0	
+volucer-fastcgi	4	on	24	3	12	3200.73	7.46ms	23.48ms	0	
+volucer-fastcgi	4	on	32	3	12	3101.27	7.07ms	24.57ms	0	
+volucer-fastcgi	4	on	64	3	12	3203.26	18.01ms	63.29ms	0	
+volucer-fastcgi	8	on	8	1	8	5091.43	1.39ms	3.24ms	0	
+volucer-fastcgi	8	on	16	1	12	5602.47	1.51ms	6.89ms	0	
+volucer-fastcgi	8	on	24	1	12	5924.13	3.21ms	17.00ms	0	
+volucer-fastcgi	8	on	32	1	12	5846.95	2.60ms	17.72ms	0	
+volucer-fastcgi	8	on	64	1	12	6101.87	8.66ms	48.45ms	0	
+volucer-fastcgi	8	on	8	2	8	5117.93	1.38ms	3.30ms	0	
+volucer-fastcgi	8	on	16	2	12	5618.23	1.48ms	6.93ms	0	
+volucer-fastcgi	8	on	24	2	12	5781.11	3.09ms	19.97ms	0	
+volucer-fastcgi	8	on	32	2	12	5929.23	2.74ms	16.90ms	0	
+volucer-fastcgi	8	on	64	2	12	6126.14	8.56ms	46.12ms	0	
+volucer-fastcgi	8	on	8	3	8	5033.18	1.38ms	3.42ms	0	
+volucer-fastcgi	8	on	16	3	12	5613.16	1.48ms	6.66ms	0	
+volucer-fastcgi	8	on	24	3	12	5894.60	3.25ms	18.55ms	0	
+volucer-fastcgi	8	on	32	3	12	5953.67	2.64ms	16.68ms	0	
+volucer-fastcgi	8	on	64	3	12	6169.70	8.13ms	50.51ms	0	
+volucer-fastcgi	16	on	8	1	8	4155.88	1.73ms	3.82ms	0	
+volucer-fastcgi	16	on	16	1	12	5329.25	2.08ms	4.57ms	0	
+volucer-fastcgi	16	on	24	1	12	6726.36	3.04ms	13.36ms	0	
+volucer-fastcgi	16	on	32	1	12	6627.84	2.89ms	14.91ms	0	
+volucer-fastcgi	16	on	64	1	12	6948.71	6.12ms	63.89ms	0	
+volucer-fastcgi	16	on	8	2	8	4169.06	1.72ms	3.74ms	0	
+volucer-fastcgi	16	on	16	2	12	5233.31	2.11ms	4.78ms	0	
+volucer-fastcgi	16	on	24	2	12	6683.68	3.04ms	13.70ms	0	
+volucer-fastcgi	16	on	32	2	12	6649.39	2.87ms	13.15ms	0	
+volucer-fastcgi	16	on	64	2	12	6850.88	6.07ms	66.44ms	0	
+volucer-fastcgi	16	on	8	3	8	4124.18	1.75ms	3.80ms	0	
+volucer-fastcgi	16	on	16	3	12	5221.35	2.11ms	4.88ms	0	
+volucer-fastcgi	16	on	24	3	12	6661.97	3.08ms	12.34ms	0	
+volucer-fastcgi	16	on	32	3	12	6455.18	2.93ms	16.50ms	0	
+volucer-fastcgi	16	on	64	3	12	6851.44	6.46ms	60.23ms	0	
+volucer-fastcgi	24	on	8	1	8	3827.43	1.90ms	4.01ms	0	
+volucer-fastcgi	24	on	16	1	12	4954.47	2.24ms	4.91ms	0	
+volucer-fastcgi	24	on	24	1	12	6829.20	3.21ms	9.60ms	0	
+volucer-fastcgi	24	on	32	1	12	6863.28	3.17ms	9.16ms	0	
+volucer-fastcgi	24	on	64	1	12	7259.66	6.11ms	42.42ms	0	
+volucer-fastcgi	24	on	8	2	8	3939.19	1.84ms	3.89ms	0	
+volucer-fastcgi	24	on	16	2	12	4932.81	2.25ms	5.03ms	0	
+volucer-fastcgi	24	on	24	2	12	6840.22	3.26ms	9.06ms	0	
+volucer-fastcgi	24	on	32	2	12	6894.98	3.18ms	8.64ms	0	
+volucer-fastcgi	24	on	64	2	12	7440.89	5.71ms	45.29ms	0	
+volucer-fastcgi	24	on	8	3	8	3915.40	1.85ms	4.20ms	0	
+volucer-fastcgi	24	on	16	3	12	4919.66	2.25ms	4.95ms	0	
+volucer-fastcgi	24	on	24	3	12	6919.21	3.17ms	9.52ms	0	
+volucer-fastcgi	24	on	32	3	12	6838.07	3.20ms	8.94ms	0	
+volucer-fastcgi	24	on	64	3	12	7420.18	5.86ms	39.30ms	0	
+volucer-fastcgi	32	on	8	1	8	3772.37	1.93ms	4.26ms	0	
+volucer-fastcgi	32	on	16	1	12	4659.20	2.38ms	5.29ms	0	
+volucer-fastcgi	32	on	24	1	12	6595.84	3.37ms	9.02ms	0	
+volucer-fastcgi	32	on	32	1	12	6523.68	3.35ms	9.86ms	0	
+volucer-fastcgi	32	on	64	1	12	7472.58	6.00ms	46.00ms	0	
+volucer-fastcgi	32	on	8	2	8	3774.89	1.93ms	4.56ms	0	
+volucer-fastcgi	32	on	16	2	12	4684.82	2.36ms	5.28ms	0	
+volucer-fastcgi	32	on	24	2	12	6468.67	3.44ms	9.10ms	0	
+volucer-fastcgi	32	on	32	2	12	6468.75	3.39ms	8.95ms	0	
+volucer-fastcgi	32	on	64	2	12	7199.57	5.92ms	49.42ms	0	
+volucer-fastcgi	32	on	8	3	8	3750.38	1.93ms	5.70ms	0	
+volucer-fastcgi	32	on	16	3	12	4650.00	2.37ms	5.34ms	0	
+volucer-fastcgi	32	on	24	3	12	6541.89	3.40ms	9.09ms	0	
+volucer-fastcgi	32	on	32	3	12	6585.84	3.34ms	9.53ms	0	
+volucer-fastcgi	32	on	64	3	12	7334.52	5.90ms	47.26ms	0	
+volucer-prefork	1	on	8	1	8	792.86	9.95ms	12.49ms	0	1
+volucer-prefork	1	on	16	1	12	796.70	14.88ms	17.31ms	0	1
+volucer-prefork	1	on	24	1	12	786.72	29.96ms	35.87ms	0	1
+volucer-prefork	1	on	32	1	12	783.86	30.05ms	34.46ms	0	1
+volucer-prefork	1	on	64	1	12	789.24	75.19ms	102.19ms	0	1
+volucer-prefork	1	on	8	2	8	776.14	10.01ms	16.14ms	0	1
+volucer-prefork	1	on	16	2	12	785.98	15.04ms	17.83ms	0	1
+volucer-prefork	1	on	24	2	12	799.06	29.85ms	33.71ms	0	1
+volucer-prefork	1	on	32	2	12	793.33	29.99ms	34.13ms	0	1
+volucer-prefork	1	on	64	2	12	798.22	74.56ms	87.33ms	0	1
+volucer-prefork	1	on	8	3	8	797.59	9.83ms	12.77ms	0	1
+volucer-prefork	1	on	16	3	12	793.65	14.89ms	17.85ms	0	1
+volucer-prefork	1	on	24	3	12	789.68	29.97ms	34.45ms	0	1
+volucer-prefork	1	on	32	3	12	797.32	29.84ms	33.71ms	0	1
+volucer-prefork	1	on	64	3	12	784.45	74.93ms	81.36ms	0	1
+volucer-prefork	1	on	8	1	8	3202.19	2.39ms	4.18ms	0	4
+volucer-prefork	1	on	16	1	12	3128.80	3.64ms	6.62ms	0	4
+volucer-prefork	1	on	24	1	12	3151.43	7.39ms	14.86ms	0	4
+volucer-prefork	1	on	32	1	12	3194.94	7.40ms	14.65ms	0	4
+volucer-prefork	1	on	64	1	12	3176.21	18.70ms	38.90ms	0	4
+volucer-prefork	1	on	8	2	8	3228.87	2.38ms	4.09ms	0	4
+volucer-prefork	1	on	16	2	12	3152.56	3.63ms	6.70ms	0	4
+volucer-prefork	1	on	24	2	12	3186.33	7.38ms	14.68ms	0	4
+volucer-prefork	1	on	32	2	12	3146.51	7.39ms	14.72ms	0	4
+volucer-prefork	1	on	64	2	12	3194.93	18.52ms	38.52ms	0	4
+volucer-prefork	1	on	8	3	8	3174.30	2.41ms	4.32ms	0	4
+volucer-prefork	1	on	16	3	12	3170.99	3.61ms	6.75ms	0	4
+volucer-prefork	1	on	24	3	12	3181.78	7.32ms	14.46ms	0	4
+volucer-prefork	1	on	32	3	12	3173.03	7.35ms	14.49ms	0	4
+volucer-prefork	1	on	64	3	12	3169.71	18.68ms	38.58ms	0	4
+volucer-prefork	1	on	8	1	8	5670.27	1.32ms	2.65ms	0	8
+volucer-prefork	1	on	16	1	12	6207.63	1.87ms	3.19ms	0	8
+volucer-prefork	1	on	24	1	12	6267.26	3.72ms	7.93ms	0	8
+volucer-prefork	1	on	32	1	12	6197.04	3.76ms	8.01ms	0	8
+volucer-prefork	1	on	64	1	12	6144.17	9.58ms	26.91ms	0	8
+volucer-prefork	1	on	8	2	8	5474.00	1.36ms	2.80ms	0	8
+volucer-prefork	1	on	16	2	12	6083.47	1.91ms	3.23ms	0	8
+volucer-prefork	1	on	24	2	12	6241.16	3.80ms	8.07ms	0	8
+volucer-prefork	1	on	32	2	12	6258.03	3.79ms	8.14ms	0	8
+volucer-prefork	1	on	64	2	12	6256.00	9.49ms	24.90ms	0	8
+volucer-prefork	1	on	8	3	8	5601.15	1.34ms	2.61ms	0	8
+volucer-prefork	1	on	16	3	12	6234.92	1.86ms	3.15ms	0	8
+volucer-prefork	1	on	24	3	12	6350.33	3.69ms	7.94ms	0	8
+volucer-prefork	1	on	32	3	12	6300.33	3.70ms	7.83ms	0	8
+volucer-prefork	1	on	64	3	12	6309.62	9.43ms	24.32ms	0	8
+volucer-prefork	1	on	8	1	8	5634.46	1.33ms	2.61ms	0	16
+volucer-prefork	1	on	16	1	12	5994.34	1.78ms	4.08ms	0	16
+volucer-prefork	1	on	24	1	12	8380.22	2.76ms	5.53ms	0	16
+volucer-prefork	1	on	32	1	12	8293.50	2.75ms	5.34ms	0	16
+volucer-prefork	1	on	64	1	12	8591.00	6.84ms	16.81ms	0	16
+volucer-prefork	1	on	8	2	8	5555.51	1.33ms	2.52ms	0	16
+volucer-prefork	1	on	16	2	12	6037.16	1.80ms	3.91ms	0	16
+volucer-prefork	1	on	24	2	12	8365.07	2.77ms	5.97ms	0	16
+volucer-prefork	1	on	32	2	12	8354.12	2.77ms	5.77ms	0	16
+volucer-prefork	1	on	64	2	12	8486.20	6.84ms	17.65ms	0	16
+volucer-prefork	1	on	8	3	8	5644.81	1.33ms	2.54ms	0	16
+volucer-prefork	1	on	16	3	12	6053.58	1.79ms	3.93ms	0	16
+volucer-prefork	1	on	24	3	12	8308.24	2.74ms	5.48ms	0	16
+volucer-prefork	1	on	32	3	12	8309.74	2.73ms	5.46ms	0	16
+volucer-prefork	1	on	64	3	12	8643.77	6.82ms	16.56ms	0	16
+volucer-prefork	1	on	8	1	8	5746.22	1.30ms	2.45ms	0	24
+volucer-prefork	1	on	16	1	12	6123.13	1.77ms	3.86ms	0	24
+volucer-prefork	1	on	24	1	12	7961.97	2.85ms	6.23ms	0	24
+volucer-prefork	1	on	32	1	12	8004.40	2.82ms	6.22ms	0	24
+volucer-prefork	1	on	64	1	12	8792.56	6.58ms	14.76ms	0	24
+volucer-prefork	1	on	8	2	8	5554.79	1.33ms	2.53ms	0	24
+volucer-prefork	1	on	16	2	12	5991.96	1.82ms	4.18ms	0	24
+volucer-prefork	1	on	24	2	12	7892.37	2.88ms	6.28ms	0	24
+volucer-prefork	1	on	32	2	12	7885.23	2.87ms	6.26ms	0	24
+volucer-prefork	1	on	64	2	12	8966.84	6.53ms	14.53ms	0	24
+volucer-prefork	1	on	8	3	8	5565.15	1.34ms	2.86ms	0	24
+volucer-prefork	1	on	16	3	12	6030.78	1.81ms	3.85ms	0	24
+volucer-prefork	1	on	24	3	12	7998.13	2.84ms	6.21ms	0	24
+volucer-prefork	1	on	32	3	12	7897.59	2.86ms	6.30ms	0	24
+volucer-prefork	1	on	64	3	12	8952.68	6.54ms	14.45ms	0	24
+volucer-prefork	1	on	8	1	8	5622.10	1.33ms	2.59ms	0	32
+volucer-prefork	1	on	16	1	12	6097.85	1.79ms	3.85ms	0	32
+volucer-prefork	1	on	24	1	12	7778.98	2.90ms	7.01ms	0	32
+volucer-prefork	1	on	32	1	12	8003.92	2.83ms	6.12ms	0	32
+volucer-prefork	1	on	64	1	12	9184.64	6.33ms	12.69ms	0	32
+volucer-prefork	1	on	8	2	8	5577.45	1.33ms	2.51ms	0	32
+volucer-prefork	1	on	16	2	12	6045.06	1.80ms	3.91ms	0	32
+volucer-prefork	1	on	24	2	12	7971.52	2.84ms	6.20ms	0	32
+volucer-prefork	1	on	32	2	12	7916.33	2.86ms	6.28ms	0	32
+volucer-prefork	1	on	64	2	12	9117.05	6.40ms	12.53ms	0	32
+volucer-prefork	1	on	8	3	8	5644.36	1.33ms	2.52ms	0	32
+volucer-prefork	1	on	16	3	12	6030.38	1.81ms	3.85ms	0	32
+volucer-prefork	1	on	24	3	12	7855.75	2.89ms	6.32ms	0	32
+volucer-prefork	1	on	32	3	12	7860.78	2.87ms	6.25ms	0	32
+volucer-prefork	1	on	64	3	12	8929.00	6.42ms	12.93ms	0	32
+volucer-prefork	4	on	8	1	8	3050.85	2.31ms	7.74ms	0	1
+volucer-prefork	4	on	16	1	12	3069.53	3.05ms	13.20ms	0	1
+volucer-prefork	4	on	24	1	12	3141.94	7.33ms	23.78ms	0	1
+volucer-prefork	4	on	32	1	12	3041.86	6.93ms	25.12ms	0	1
+volucer-prefork	4	on	64	1	12	3126.58	20.09ms	56.98ms	0	1
+volucer-prefork	4	on	8	2	8	3001.55	2.34ms	7.23ms	0	1
+volucer-prefork	4	on	16	2	12	3083.36	3.32ms	13.01ms	0	1
+volucer-prefork	4	on	24	2	12	3053.34	6.40ms	33.91ms	0	1
+volucer-prefork	4	on	32	2	12	3078.70	5.49ms	31.69ms	0	1
+volucer-prefork	4	on	64	2	12	3212.02	17.78ms	42.65ms	0	1
+volucer-prefork	4	on	8	3	8	3046.55	2.34ms	6.94ms	0	1
+volucer-prefork	4	on	16	3	12	3099.55	3.24ms	11.94ms	0	1
+volucer-prefork	4	on	24	3	12	3202.54	7.40ms	22.98ms	0	1
+volucer-prefork	4	on	32	3	12	3130.64	6.26ms	25.03ms	0	1
+volucer-prefork	4	on	64	3	12	3181.41	18.14ms	47.51ms	0	1
+volucer-prefork	4	on	8	1	8	4867.61	1.48ms	3.13ms	0	4
+volucer-prefork	4	on	16	1	12	5676.55	1.89ms	4.39ms	0	4
+volucer-prefork	4	on	24	1	12	7886.81	2.76ms	7.94ms	0	4
+volucer-prefork	4	on	32	1	12	8037.55	2.78ms	6.95ms	0	4
+volucer-prefork	4	on	64	1	12	8063.86	5.08ms	41.99ms	0	4
+volucer-prefork	4	on	8	2	8	4762.07	1.47ms	3.24ms	0	4
+volucer-prefork	4	on	16	2	12	5643.70	1.91ms	4.38ms	0	4
+volucer-prefork	4	on	24	2	12	7902.76	2.78ms	7.86ms	0	4
+volucer-prefork	4	on	32	2	12	7902.67	2.76ms	8.39ms	0	4
+volucer-prefork	4	on	64	2	12	7875.55	3.68ms	46.21ms	0	4
+volucer-prefork	4	on	8	3	8	4791.17	1.48ms	3.59ms	0	4
+volucer-prefork	4	on	16	3	12	5581.17	1.93ms	4.55ms	0	4
+volucer-prefork	4	on	24	3	12	7718.80	2.82ms	7.90ms	0	4
+volucer-prefork	4	on	32	3	12	7728.54	2.73ms	8.65ms	0	4
+volucer-prefork	4	on	64	3	12	7840.19	4.09ms	46.04ms	0	4
+volucer-prefork	4	on	8	1	8	4999.36	1.43ms	3.11ms	0	8
+volucer-prefork	4	on	16	1	12	5670.32	1.87ms	4.31ms	0	8
+volucer-prefork	4	on	24	1	12	7469.68	3.02ms	6.93ms	0	8
+volucer-prefork	4	on	32	1	12	7552.28	2.98ms	6.80ms	0	8
+volucer-prefork	4	on	64	1	12	8587.64	5.96ms	26.11ms	0	8
+volucer-prefork	4	on	8	2	8	4855.62	1.48ms	3.20ms	0	8
+volucer-prefork	4	on	16	2	12	5643.78	1.91ms	4.45ms	0	8
+volucer-prefork	4	on	24	2	12	7606.88	2.98ms	6.79ms	0	8
+volucer-prefork	4	on	32	2	12	7597.90	2.96ms	6.76ms	0	8
+volucer-prefork	4	on	64	2	12	8721.77	5.95ms	24.45ms	0	8
+volucer-prefork	4	on	8	3	8	4817.04	1.48ms	3.22ms	0	8
+volucer-prefork	4	on	16	3	12	5638.98	1.92ms	4.39ms	0	8
+volucer-prefork	4	on	24	3	12	7493.48	3.02ms	6.95ms	0	8
+volucer-prefork	4	on	32	3	12	7438.81	3.00ms	7.61ms	0	8
+volucer-prefork	4	on	64	3	12	8726.71	5.93ms	23.37ms	0	8
+volucer-prefork	4	on	8	1	8	4882.69	1.45ms	3.71ms	0	16
+volucer-prefork	4	on	16	1	12	5716.69	1.88ms	4.43ms	0	16
+volucer-prefork	4	on	24	1	12	7529.03	3.00ms	6.85ms	0	16
+volucer-prefork	4	on	32	1	12	7500.39	3.00ms	6.92ms	0	16
+volucer-prefork	4	on	64	1	12	8462.58	6.82ms	15.23ms	0	16
+volucer-prefork	4	on	8	2	8	4837.09	1.48ms	3.23ms	0	16
+volucer-prefork	4	on	16	2	12	5607.66	1.93ms	4.45ms	0	16
+volucer-prefork	4	on	24	2	12	7421.40	3.05ms	7.04ms	0	16
+volucer-prefork	4	on	32	2	12	7495.91	2.98ms	6.93ms	0	16
+volucer-prefork	4	on	64	2	12	8389.85	6.86ms	15.47ms	0	16
+volucer-prefork	4	on	8	3	8	4860.75	1.47ms	3.16ms	0	16
+volucer-prefork	4	on	16	3	12	5637.21	1.92ms	4.42ms	0	16
+volucer-prefork	4	on	24	3	12	7352.42	3.03ms	6.97ms	0	16
+volucer-prefork	4	on	32	3	12	7515.22	2.97ms	6.93ms	0	16
+volucer-prefork	4	on	64	3	12	8379.62	6.88ms	15.33ms	0	16
+volucer-prefork	8	on	8	1	8	5008.27	1.39ms	3.30ms	0	1
+volucer-prefork	8	on	16	1	12	5594.25	1.47ms	6.86ms	0	1
+volucer-prefork	8	on	24	1	12	6035.33	3.36ms	20.62ms	0	1
+volucer-prefork	8	on	32	1	12	6109.51	2.72ms	19.01ms	0	1
+volucer-prefork	8	on	64	1	12	6184.47	8.62ms	50.86ms	0	1
+volucer-prefork	8	on	8	2	8	5064.28	1.39ms	5.92ms	0	1
+volucer-prefork	8	on	16	2	12	5561.93	1.51ms	6.68ms	0	1
+volucer-prefork	8	on	24	2	12	6015.47	3.33ms	16.67ms	0	1
+volucer-prefork	8	on	32	2	12	5884.12	2.59ms	18.38ms	0	1
+volucer-prefork	8	on	64	2	12	6231.36	8.64ms	39.62ms	0	1
+volucer-prefork	8	on	8	3	8	5135.35	1.37ms	3.17ms	0	1
+volucer-prefork	8	on	16	3	12	5713.87	1.51ms	7.05ms	0	1
+volucer-prefork	8	on	24	3	12	6016.66	3.28ms	15.77ms	0	1
+volucer-prefork	8	on	32	3	12	6021.99	2.88ms	15.49ms	0	1
+volucer-prefork	8	on	64	3	12	6196.52	8.88ms	46.22ms	0	1
+volucer-prefork	8	on	8	1	8	4588.24	1.53ms	3.93ms	0	4
+volucer-prefork	8	on	16	1	12	5437.49	2.02ms	4.53ms	0	4
+volucer-prefork	8	on	24	1	12	7385.00	3.07ms	6.97ms	0	4
+volucer-prefork	8	on	32	1	12	7417.73	3.02ms	6.97ms	0	4
+volucer-prefork	8	on	64	1	12	8445.22	5.80ms	31.57ms	0	4
+volucer-prefork	8	on	8	2	8	4553.48	1.56ms	3.52ms	0	4
+volucer-prefork	8	on	16	2	12	5384.95	2.05ms	4.59ms	0	4
+volucer-prefork	8	on	24	2	12	7293.40	3.11ms	7.15ms	0	4
+volucer-prefork	8	on	32	2	12	7352.83	3.05ms	7.03ms	0	4
+volucer-prefork	8	on	64	2	12	8556.76	5.89ms	27.64ms	0	4
+volucer-prefork	8	on	8	3	8	4632.25	1.52ms	3.77ms	0	4
+volucer-prefork	8	on	16	3	12	5442.17	2.03ms	4.53ms	0	4
+volucer-prefork	8	on	24	3	12	7347.72	3.08ms	7.06ms	0	4
+volucer-prefork	8	on	32	3	12	7513.69	2.98ms	6.83ms	0	4
+volucer-prefork	8	on	64	3	12	8609.75	5.67ms	28.61ms	0	4
+volucer-prefork	8	on	8	1	8	4607.00	1.51ms	3.48ms	0	8
+volucer-prefork	8	on	16	1	12	5452.66	2.03ms	4.55ms	0	8
+volucer-prefork	8	on	24	1	12	7191.19	3.14ms	7.35ms	0	8
+volucer-prefork	8	on	32	1	12	7332.62	3.06ms	7.04ms	0	8
+volucer-prefork	8	on	64	1	12	8352.54	6.89ms	15.69ms	0	8
+volucer-prefork	8	on	8	2	8	4594.70	1.54ms	3.51ms	0	8
+volucer-prefork	8	on	16	2	12	5455.47	2.02ms	4.46ms	0	8
+volucer-prefork	8	on	24	2	12	7187.31	3.14ms	7.19ms	0	8
+volucer-prefork	8	on	32	2	12	7326.81	3.06ms	7.06ms	0	8
+volucer-prefork	8	on	64	2	12	8125.67	7.04ms	16.15ms	0	8
+volucer-prefork	8	on	8	3	8	4638.07	1.51ms	5.09ms	0	8
+volucer-prefork	8	on	16	3	12	5443.96	2.01ms	4.52ms	0	8
+volucer-prefork	8	on	24	3	12	7236.44	3.12ms	7.31ms	0	8
+volucer-prefork	8	on	32	3	12	7453.15	3.01ms	6.94ms	0	8
+volucer-prefork	8	on	64	3	12	8325.32	6.91ms	15.58ms	0	8
+volucer-prefork	16	on	8	1	8	4141.90	1.73ms	4.27ms	0	1
+volucer-prefork	16	on	16	1	12	5351.94	2.08ms	4.59ms	0	1
+volucer-prefork	16	on	24	1	12	6706.41	3.03ms	13.32ms	0	1
+volucer-prefork	16	on	32	1	12	6637.82	2.91ms	13.30ms	0	1
+volucer-prefork	16	on	64	1	12	6957.06	6.17ms	53.76ms	0	1
+volucer-prefork	16	on	8	2	8	4110.36	1.76ms	3.85ms	0	1
+volucer-prefork	16	on	16	2	12	5304.35	2.07ms	4.59ms	0	1
+volucer-prefork	16	on	24	2	12	6585.93	3.07ms	15.29ms	0	1
+volucer-prefork	16	on	32	2	12	6676.53	2.88ms	12.92ms	0	1
+volucer-prefork	16	on	64	2	12	6948.52	6.16ms	73.44ms	0	1
+volucer-prefork	16	on	8	3	8	4149.85	1.75ms	3.79ms	0	1
+volucer-prefork	16	on	16	3	12	5262.93	2.10ms	4.64ms	0	1
+volucer-prefork	16	on	24	3	12	6676.55	3.05ms	13.17ms	0	1
+volucer-prefork	16	on	32	3	12	6627.48	2.89ms	14.00ms	0	1
+volucer-prefork	16	on	64	3	12	7028.37	6.03ms	56.83ms	0	1
+volucer-prefork	16	on	8	1	8	4163.35	1.74ms	3.74ms	0	4
+volucer-prefork	16	on	16	1	12	5281.06	2.12ms	4.59ms	0	4
+volucer-prefork	16	on	24	1	12	7004.05	3.22ms	7.61ms	0	4
+volucer-prefork	16	on	32	1	12	6955.96	3.21ms	7.60ms	0	4
+volucer-prefork	16	on	64	1	12	8048.40	7.11ms	16.60ms	0	4
+volucer-prefork	16	on	8	2	8	4170.52	1.74ms	3.75ms	0	4
+volucer-prefork	16	on	16	2	12	5154.97	2.17ms	4.94ms	0	4
+volucer-prefork	16	on	24	2	12	6865.06	3.29ms	7.62ms	0	4
+volucer-prefork	16	on	32	2	12	6977.22	3.19ms	7.98ms	0	4
+volucer-prefork	16	on	64	2	12	7850.62	7.29ms	17.11ms	0	4
+volucer-prefork	16	on	8	3	8	4195.70	1.71ms	3.76ms	0	4
+volucer-prefork	16	on	16	3	12	5194.68	2.15ms	4.73ms	0	4
+volucer-prefork	16	on	24	3	12	6853.24	3.28ms	8.55ms	0	4
+volucer-prefork	16	on	32	3	12	6953.89	3.21ms	7.53ms	0	4
+volucer-prefork	16	on	64	3	12	7833.02	7.28ms	16.96ms	0	4
+volucer-prefork	24	on	8	1	8	3956.19	1.84ms	3.92ms	0	1
+volucer-prefork	24	on	16	1	12	5050.73	2.19ms	4.90ms	0	1
+volucer-prefork	24	on	24	1	12	6887.39	3.24ms	8.85ms	0	1
+volucer-prefork	24	on	32	1	12	6905.69	3.16ms	8.88ms	0	1
+volucer-prefork	24	on	64	1	12	7314.80	6.23ms	36.24ms	0	1
+volucer-prefork	24	on	8	2	8	3948.03	1.84ms	3.95ms	0	1
+volucer-prefork	24	on	16	2	12	4918.02	2.24ms	5.00ms	0	1
+volucer-prefork	24	on	24	2	12	6914.95	3.19ms	9.33ms	0	1
+volucer-prefork	24	on	32	2	12	6884.11	3.14ms	9.01ms	0	1
+volucer-prefork	24	on	64	2	12	7337.32	6.04ms	47.46ms	0	1
+volucer-prefork	24	on	8	3	8	3968.82	1.82ms	3.96ms	0	1
+volucer-prefork	24	on	16	3	12	4938.61	2.24ms	4.99ms	0	1
+volucer-prefork	24	on	24	3	12	6881.82	3.21ms	9.19ms	0	1
+volucer-prefork	24	on	32	3	12	6782.18	3.25ms	9.28ms	0	1
+volucer-prefork	24	on	64	3	12	7241.24	6.09ms	41.53ms	0	1
+volucer-prefork	32	on	8	1	8	3791.68	1.93ms	4.11ms	0	1
+volucer-prefork	32	on	16	1	12	4719.64	2.33ms	5.30ms	0	1
+volucer-prefork	32	on	24	1	12	6606.49	3.36ms	9.15ms	0	1
+volucer-prefork	32	on	32	1	12	6641.88	3.29ms	8.92ms	0	1
+volucer-prefork	32	on	64	1	12	7631.20	5.86ms	44.02ms	0	1
+volucer-prefork	32	on	8	2	8	3916.91	1.85ms	3.88ms	0	1
+volucer-prefork	32	on	16	2	12	4778.33	2.31ms	5.23ms	0	1
+volucer-prefork	32	on	24	2	12	6540.30	3.43ms	8.88ms	0	1
+volucer-prefork	32	on	32	2	12	6704.45	3.26ms	9.09ms	0	1
+volucer-prefork	32	on	64	2	12	7320.35	5.87ms	50.11ms	0	1
+volucer-prefork	32	on	8	3	8	3842.39	1.90ms	3.98ms	0	1
+volucer-prefork	32	on	16	3	12	4682.45	2.34ms	5.57ms	0	1
+volucer-prefork	32	on	24	3	12	6499.91	3.43ms	8.75ms	0	1
+volucer-prefork	32	on	32	3	12	6562.88	3.34ms	8.95ms	0	1
+volucer-prefork	32	on	64	3	12	7443.98	6.28ms	38.87ms	0	1

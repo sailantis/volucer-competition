@@ -387,7 +387,7 @@ number that is suspiciously round in wall time is a timer, not a rate.**
 
 ### The buffering pass: what the syscall cut was worth in wall clock
 
-Hazard 38 in `volucer/docs/plan.md` replaced every unbuffered transport stream with a
+Hazard 38 in `volucer/internal/plan.md` replaced every unbuffered transport stream with a
 buffered one, so a frame — a header followed by a payload — stops costing one `read(2)` per
 field. The counted syscalls fell a long way: the worker's response read went **6 → 1**, the
 FastCGI client's reply **4 → 1**, and the front-end's handling of a twelve-record request

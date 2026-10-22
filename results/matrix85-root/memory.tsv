@@ -1,0 +1,61 @@
+arm	workers	opcache	phase	conc	pss_mb	rss_mb	pids	children
+volucer-worker	16	on	boot	0	261.9	755.5	17	
+volucer-worker	16	on	post	64	289.9	786.4	17	
+volucer-unix	16	on	boot	0	261.9	755.2	17	
+volucer-unix	16	on	post	64	288.4	784.8	17	
+volucer-attach	16	on	boot	0	45.6	313.9	18	
+volucer-attach	16	on	post	64	58.8	367.0	18	
+volucer-fastcgi	16	on	boot	0	239.8	723.1	17	
+volucer-fastcgi	16	on	post	64	286.4	783.9	17	
+volucer-prefork	1	on	boot	0	37.1	242.5	18	16
+volucer-prefork	1	on	post	64	60.4	448.9	18	16
+volucer-prefork	1	on	boot	0	38.3	418.6	34	32
+volucer-prefork	1	on	post	64	75.3	838.4	34	32
+rr	16	on	boot	0	293.9	784.3	17	
+rr	16	on	post	64	349.5	844.3	17	
+frankenphp	16	on	boot	0	120.1	120.2	1	
+frankenphp	16	on	post	64	133.7	133.7	1	
+fpm	16	on	boot	0	41.8	303.9	22	
+fpm	16	on	post	64	53.1	461.4	22	
+fpm	32	on	boot	0	44.6	505.9	38	
+fpm	32	on	post	64	66.8	846.5	38	
+volucer-unix	16	on	boot	0	262.0	755.6	17	
+volucer-unix	16	on	post	64	288.9	785.4	17	
+volucer-attach	16	on	boot	0	45.5	313.1	18	
+volucer-attach	16	on	post	64	59.4	367.6	18	
+volucer-fastcgi	16	on	boot	0	239.6	723.4	17	
+volucer-fastcgi	16	on	post	64	284.5	782.1	17	
+volucer-prefork	1	on	boot	0	37.2	243.9	18	16
+volucer-prefork	1	on	post	64	61.0	451.3	18	16
+volucer-prefork	1	on	boot	0	38.7	420.8	34	32
+volucer-prefork	1	on	post	64	76.2	838.7	34	32
+rr	16	on	boot	0	293.4	782.5	17	
+rr	16	on	post	64	351.1	844.8	17	
+frankenphp	16	on	boot	0	120.7	120.7	1	
+frankenphp	16	on	post	64	133.5	133.5	1	
+fpm	16	on	boot	0	41.8	304.8	22	
+fpm	16	on	post	64	53.0	461.4	22	
+fpm	32	on	boot	0	44.4	503.7	38	
+fpm	32	on	post	64	66.6	854.0	38	
+volucer-worker	16	on	boot	0	261.7	755.7	17	
+volucer-worker	16	on	post	64	288.5	785.2	17	
+volucer-attach	16	on	boot	0	45.7	312.5	18	
+volucer-attach	16	on	post	64	58.7	366.9	18	
+volucer-fastcgi	16	on	boot	0	239.7	723.1	17	
+volucer-fastcgi	16	on	post	64	286.4	784.3	17	
+volucer-prefork	1	on	boot	0	36.9	242.4	18	16
+volucer-prefork	1	on	post	64	59.8	449.0	18	16
+volucer-prefork	1	on	boot	0	38.4	417.9	34	32
+volucer-prefork	1	on	post	64	74.3	833.5	34	32
+rr	16	on	boot	0	294.5	784.4	17	
+rr	16	on	post	64	353.0	847.2	17	
+frankenphp	16	on	boot	0	119.5	119.5	1	
+frankenphp	16	on	post	64	133.3	133.3	1	
+fpm	16	on	boot	0	41.6	304.2	22	
+fpm	16	on	post	64	53.0	461.7	22	
+fpm	32	on	boot	0	44.4	504.6	38	
+fpm	32	on	post	64	66.5	847.0	38	
+volucer-worker	16	on	boot	0	261.8	755.2	17	
+volucer-worker	16	on	post	64	288.7	784.9	17	
+volucer-unix	16	on	boot	0	261.8	754.6	17	
+volucer-unix	16	on	post	64	288.9	784.8	17	

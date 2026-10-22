@@ -659,8 +659,10 @@ samples PSS and RSS of each arm's process tree at boot and after load, because t
 model's speed is paid for in memory and that trade had not been put in one table before.
 
 The published runs are `results/matrix/` (raw rows, memory samples, and the generated
-tables) and `results/matrix85/`, which repeats the grid on PHP 8.5 with every arm on the same
-interpreter — see [PHP 8.5, one interpreter for every arm](#php-85-one-interpreter-for-every-arm).
+tables), `results/matrix85/`, which repeats the grid on PHP 8.5 with every arm on the same
+interpreter, and `results/matrix85-opcache/`, which is the earlier 8.5 pass that measured
+opcache on *and* off and the wrk thread count as a variable — see
+[PHP 8.5, one interpreter for every arm](#php-85-one-interpreter-for-every-arm).
 The numbers below are from the 8.3 run. Host: 12 cores, 3.9 GB, PHP 8.3.35 for everything
 except FrankenPHP (its release binary embeds 8.5.11 — stated, not corrected, and closed by the
 8.5 run), volucer 0.1.0, RoadRunner 2025.1.15, FrankenPHP 1.13.0, nginx 1.24.0. Every cell
@@ -853,8 +855,13 @@ per worker. FPM reaches its 20 MB a different way — by keeping nothing.
 
 The run above had a hole in it: FrankenPHP executes its **embedded** PHP, which was 8.5.11,
 while the other four arms executed the distro's 8.3.35. Every cross-arm ratio therefore mixed
-the server's effect with the interpreter's. `results/matrix85/` closes that hole by running
-the same five arms with `PHP=/usr/bin/php8.5`, at the worker count the earlier run peaked on.
+the server's effect with the interpreter's. `results/matrix85-opcache/` closes that hole by
+running the same five arms with `PHP=/usr/bin/php8.5`, at the worker count the earlier run
+peaked on.
+
+`results/matrix85/` is the later pass on the same interpreter, with the two new arms
+(`volucer-unix` and `volucer-prefork`) and the `/items` endpoint; it pins opcache on and the
+thread count at 12, so it answers "which server" rather than "what does opcache cost".
 
 Two things had to be true before that run measured what it claimed:
 
@@ -919,8 +926,8 @@ The opcache axis is unchanged too — at c=64 it is **1.02–1.03×** for the wa
 
 Every harness in this repository before this one — including the run above — either used
 `-t$c` or fixed the thread count at 12. Both are defensible and they answer different
-questions, so the 8.5 run measures both in the same cells, as a `threads` column in
-`results/matrix85/matrix.tsv`. `THREADS_LIST=tc,t12` selects it; `tc` means `-t$conc`.
+questions, so the 8.5 run measured both in the same cells, as a `threads` column in
+`results/matrix85-opcache/matrix.tsv`. `THREADS_LIST=tc,t12` selects it; `tc` means `-t$conc`.
 
 | volucer worker, opcache on | `-t12` | `-t$c` | change |
 |---|---|---|---|
@@ -1569,15 +1576,15 @@ python3 scripts/matrix-report.py ~/matrix-run/matrix.tsv ~/matrix-run/memory.tsv
 ```
 
 Sweeping the client as well, and running the whole grid on PHP 8.5 with one interpreter
-for every arm (`results/matrix85/`) — `INI_SCAN_DIR` is what keeps xdebug and the internal
-`psr` extension out of the measurement, and `meta.txt` records what actually loaded:
+for every arm (`results/matrix85-opcache/`) — `INI_SCAN_DIR` is what keeps xdebug and the
+internal `psr` extension out of the measurement, and `meta.txt` records what actually loaded:
 
 ```bash
 THREADS_LIST=tc,t12 bash scripts/matrix.sh            # -t$conc vs -t12, same cells
 
 PHP=/usr/bin/php8.5 PHP_CGI=/usr/bin/php-cgi8.5 PHP_FPM=/usr/sbin/php-fpm8.5 \
 INI_SCAN_DIR=$HOME/php85-clean/conf.d WORKERS_LIST=16 \
-THREADS_LIST=tc,t12 RUNDIR=$HOME/matrix85 bash scripts/matrix.sh
+THREADS_LIST=tc,t12 RUNDIR=$HOME/matrix85-opcache bash scripts/matrix.sh
 ```
 
 The two memory questions have their own short scripts, neither needing sudo:
@@ -2000,9 +2007,9 @@ result by more than any configuration change in the history of the harness.
 
 ## The two new arms: a unix worker socket, and prefork inside a cold slot
 
-`results/matrix85/report.md` answers "how many workers" for the five servers this
-repository compares. `results/matrix85-volucer-modes/report.md` answers a
-narrower and sharper question: **what is each part of volucer's warm model worth**,
+`results/matrix85/report.md` answers "how many workers" for the eight arms this
+repository compares, on the `/items` endpoint. `results/matrix85-volucer-modes/report.md`
+answers a narrower and sharper question: **what is each part of volucer's warm model worth**,
 holding the server, the page and the host constant and changing one thing per row.
 
 | arm | transport | process model | what the row isolates |
@@ -2180,11 +2187,11 @@ places for a reader to find the same comparison stated against a different basel
 and four places for a number to be re-stated and drift.
 
 The one page is built from the **second scale run** — `results/run85-scale-items-2` — and
-from nothing else. The earlier 16-process run (`results/matrix85`) was measured on a 3.9
-GB host and the scale run on a 7.9 GB one; the factor column is a round-paired ratio, so
-both rows of a comparison have to come from the same pass for the range beside the
-factor to mean anything. The old numbers are still in the repository; they are simply
-not the ones on the page.
+from nothing else. The earlier runs (`results/matrix`, `results/matrix85-opcache`) were
+measured on a 3.9 GB host and the scale run on a 7.9 GB one; the factor column is a
+round-paired ratio, so both rows of a comparison have to come from the same pass for the
+range beside the factor to mean anything. The old numbers are still in the repository;
+they are simply not the ones on the page.
 
 **The second pass, and why it is the one that is published.** The first scale run
 (`results/run85-scale-items`) carried an artefact the second does not: the

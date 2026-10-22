@@ -35,13 +35,15 @@ results/*.tsv
 !results/prefork-vs-slots.tsv
 # The matrix runs are deliverables for the same reason: each directory is one
 # interleaved measurement of a grid, and the published benchmark pages are
-# generated from these exact rows. `matrix85` is the server comparison, on
-# PHP 8.5, every arm through one harness; `matrix85-root` is the same grid on
-# the landing page; `matrix85-volucer-modes` is one server in five shapes;
-# `matrix85-prefork` is the cold path against php-fpm at an equal number of
-# serving processes. A published chart that cannot be traced to the rows
-# behind it is a chart nobody can check.
+# generated from these exact rows. `matrix85-opcache` is the 8.5 pass that measured
+# opcache on and off and the wrk thread count as a variable; `matrix85` is the
+# later pass on the same interpreter that adds the unix-socket and prefork arms on
+# the `/items` endpoint; `matrix85-root` is the same grid on the landing page;
+# `matrix85-volucer-modes` is one server in five shapes; `matrix85-prefork` is the
+# cold path against php-fpm at an equal number of serving processes. A published
+# chart that cannot be traced to the rows behind it is a chart nobody can check.
 !results/matrix85/
+!results/matrix85-opcache/
 !results/matrix85-root/
 !results/matrix85-volucer-modes/
 !results/matrix85-prefork/

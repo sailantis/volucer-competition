@@ -131,6 +131,18 @@ def arm_sort(arms):
     return sorted(arms, key=lambda a: (ARM_ORDER.index(a) if a in ARM_ORDER else 99, a))
 
 
+# The five volucer shapes the modes run measures. A run whose arms are a subset of
+# this set is comparing *shapes of one server*, which is a different document from a
+# run that puts several servers side by side.
+MODES_ARMS = {
+    "volucer-worker",
+    "volucer-unix",
+    "volucer-attach",
+    "volucer-fastcgi",
+    "volucer-prefork",
+}
+
+
 def child_of(row):
     """The `children` a row was measured at, as a string, or "".
 
@@ -538,21 +550,37 @@ def main():
     mem_rows = read_tsv(mem_path) if os.path.isfile(mem_path) else []
     concs = ordered({r["conc"] for r in rows if r["rps"] != "FAIL"})
 
+    arms = sorted({r["arm"] for r in rows})
+    modes_run = set(arms) <= MODES_ARMS
+
     out = []
-    out.append("# Worker x children x concurrency matrix, PHP 8.5")
+    if modes_run:
+        out.append("# Worker x children x concurrency matrix, PHP 8.5")
+    else:
+        out.append("# Worker / opcache / concurrency matrix")
     out.append("")
-    out.append("Five volucer shapes, one server, one page, one host. The point of the run is")
-    out.append("that every row is the *same* server with one thing changed, so a difference")
-    out.append("between two rows is that thing:")
-    out.append("")
-    out.append("| arm | transport | process model | what it isolates |")
-    out.append("|---|---|---|---|")
-    out.append("| `volucer-worker` | pipe | one `exec` per worker | the baseline |")
-    out.append("| `volucer-unix` | unix socket | one `exec` per worker | the transport |")
-    out.append("| `volucer-attach` | unix relay | one boot, `fork()` per connection | the memory model |")
-    out.append("| `volucer-fastcgi` | unix socket | one `php-cgi` per slot | the SAPI reset per request |")
-    out.append("| `volucer-prefork` | unix socket | `php-cgi` + `children` per slot | fork inside a cold slot |")
-    out.append("")
+    if modes_run:
+        out.append("Five volucer shapes, one server, one page, one host. The point of the run is")
+        out.append("that every row is the *same* server with one thing changed, so a difference")
+        out.append("between two rows is that thing:")
+        out.append("")
+        out.append("| arm | transport | process model | what it isolates |")
+        out.append("|---|---|---|---|")
+        out.append("| `volucer-worker` | pipe | one `exec` per worker | the baseline |")
+        out.append("| `volucer-unix` | unix socket | one `exec` per worker | the transport |")
+        out.append("| `volucer-attach` | unix relay | one boot, `fork()` per connection | the memory model |")
+        out.append("| `volucer-fastcgi` | unix socket | one `php-cgi` per slot | the SAPI reset per request |")
+        out.append("| `volucer-prefork` | unix socket | `php-cgi` + `children` per slot | fork inside a cold slot |")
+        out.append("")
+    else:
+        out.append("Every arm on one host, through one harness, so a difference between two")
+        out.append("rows is the server rather than the measurement:")
+        out.append("")
+        out.append("| arm | what it is |")
+        out.append("|---|---|")
+        for arm in arm_sort(arms):
+            out.append(f"| `{arm}` | {ARM_NAME.get(arm, arm)} |")
+        out.append("")
     out.append(f"Rows: `{matrix_path}`. Memory: `{mem_path}`.")
     out.append("")
     out.append("Every cell is the **median over the rounds**, with the min–max spread across")
@@ -610,8 +638,10 @@ def main():
         mode = sorted({r["opcache"] for r in rows})[0]
         out.append(f"Every cell in this run was measured with opcache **{mode}**, which is the")
         out.append("production case and the only one where a shared OPcache segment can exist —")
-        out.append("so the ON/OFF ratio is not a column here. The committed 8.5 matrix measures")
-        out.append("that axis for the same arms (`results/matrix85/report.md`).")
+        out.append("so the ON/OFF ratio is not a column here.")
+        if os.path.basename(os.path.dirname(os.path.abspath(matrix_path))) != "matrix85-opcache":
+            out.append("The 8.5 pass that measured it (`results/matrix85-opcache/report.md`)")
+            out.append("has the ON/OFF ratio for the arms both runs share.")
         out.append("")
 
     out.append("## Shape comparisons")
