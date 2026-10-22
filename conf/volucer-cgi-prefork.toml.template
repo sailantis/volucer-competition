@@ -3,7 +3,7 @@
 # The same arm as `volucer-cgi-unix.toml.template` with one key added, which is the
 # point: U and Uf are the same server, model, transport and SAPI, so a difference
 # between them is the fork shape and nothing else. That pair is how this repository
-# answers the question `docs/plan.md` hazard 86 asks — whether forked children really
+# answers the question `internal/plan.md` hazard 86 asks — whether forked children really
 # buy the OPcache memory they are supposed to.
 #
 #   children = 12  PHP processes per slot, sharing that slot's listening socket AND
