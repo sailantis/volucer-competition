@@ -13,10 +13,9 @@ The page is `GET /items`: one SQLite query through the azera ORM, rendered by a
 ClarityEngine template, through a controller with middleware. It is the cheapest
 route that still boots the container.
 
-The design memory behind volucer itself — the numbered hazards, the step list and
-the open decisions — is [`volucer/internal/plan.md`](https://github.com/sailantis/volucer/blob/main/internal/plan.md).
-Where this README says "hazard 46" it means entry 46 there, and its section 10
-("Where the work stands") is the current state of the build.
+The design memory behind volucer itself — the numbered hazards and the open decisions — is
+recorded in the source comments of the [volucer repository](https://github.com/sailantis/volucer).
+Where this README says "hazard 46" it means the entry numbered 46 in that design record.
 
 ## The six arms
 
@@ -43,7 +42,7 @@ Six arms is not six questions. Each pair isolates one variable:
   [results/prefork-vs-slots.md](results/prefork-vs-slots.md). The runnable shape is
   [conf/volucer-cgi-prefork.toml.template](conf/volucer-cgi-prefork.toml.template); it is
   not yet in `scripts/bench.sh`'s `ARMS`, so reproducing it means stamping it by hand. See
-  volucer's `internal/plan.md` hazard 86.
+  the `children` key in volucer's configuration reference.
 - **P vs T/U** — the deployment model. A difference here is what the framework
   boot costs when it is paid per request instead of once.
 - **F vs T/U** — the server implementation at the same cold model.
@@ -633,8 +632,8 @@ and `GET /assets/app.css` is then served from disk with its MIME type.
 
 Raw rows: `results/ab-perf-baseline.tsv` (before the layer became self-deciding) and
 `results/ab-perf-autostat.tsv` (after, with both controls). Harness: `scripts/ab-perf.sh` with the
-`baseline`, `new-nostat` and `new-static` variants; report at `scripts/ab-report.py`; record at
-volucer `internal/plan.md` hazard 85:
+`baseline`, `new-nostat` and `new-static` variants; report at `scripts/ab-report.py`; the record is
+in volucer's source comments:
 
 ```bash
 # The original attribution: what the default cost, against the published build.
@@ -2223,6 +2222,31 @@ about who wins.
 table.** It is the other side of the memory comparison — the same cold path arranged so
 that one slot serves one request — and publishing it in both places would put the same
 argument on the page twice against two different baselines.
+
+### What the prose is allowed to say, and what the charts carry
+
+The page's paragraphs explain the data; they do not restate it. A sentence built out of
+one run's figures has to be rewritten after the next run, and the sentence that survives
+a run it no longer describes is the failure — it states a result the table under it no
+longer shows. So every number on the page lives in a table cell, and the prose carries
+only what stays true: what a bar is, what a range on a bar is, why the baseline is the
+fastest server in the chart, what the `children` key costs. `StaticProseTest` pins that.
+
+Each chart carries three lines under its title, and each says a different kind of thing:
+
+| line | what it holds | why it is on the card |
+|---|---|---|
+| note | how to read the chart: the bar, the floating factor, the round-paired range | a reader who lands on the image from a search reads no prose first |
+| stamp | host, kernel, method (concurrency levels, duration, repeats) | a figure with no host beside it is not a measurement a reader can weigh |
+| versions | the build of every program the chart measured, in italic | a chart is copied or linked on its own, so it has to name what it is a fact about |
+
+The version line is the same idea as `azera-competition`'s engine line: it is read from
+the run's own `meta.txt` rather than typed, it names only the programs that chart
+measured — the throughput charts name all five, the two-arrangements chart names volucer
+alone, because RoadRunner is not in it — and a program the run measured without recording
+a version is printed as `unknown` rather than dropped. It is drawn *inside* the SVG, not
+only in the table, because the image is what gets quoted. `ChartBuildLineTest` pins both
+halves of that.
 
 The generator is `scripts/bench-report.py`, the tests are `tests/test_bench_report.py`,
 and the four retired views are listed in `RETIRED_VIEWS` so that publishing removes

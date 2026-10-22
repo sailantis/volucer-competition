@@ -2,7 +2,7 @@
 
 Raw rows: [`results/prefork-vs-slots.tsv`](../results/prefork-vs-slots.tsv).
 
-The question `internal/plan.md` hazard 86 in the volucer repository asks: `spawn_cgi` could
+The question the `children` key in the volucer repository answers: `spawn_cgi` could
 set `PHP_FCGI_CHILDREN`, and forked children share the OPcache segment — is that worth a
 new configuration key and a pool that admits more than one request per slot?
 
@@ -12,10 +12,10 @@ held equal at **16**, opcache **on** (the production case, and the only case in 
 shared compiled scripts exist — [matrix85-opcache](matrix85-opcache/report.md) records
 opcache at ~10× for this arm, so measuring with it off would measure the wrong thing):
 
-| shape | config | PHP processes |
-| --- | --- | --- |
-| **S** | `spawn_cgi`, `workers = 16`, no `children` | 16 separate slots |
-| **C16** | `external` → `PHP_FCGI_CHILDREN=16` | 1 master + 16 children |
+| shape   | config                                     | PHP processes          |
+| ------- | ------------------------------------------ | ---------------------- |
+| **S**   | `spawn_cgi`, `workers = 16`, no `children` | 16 separate slots      |
+| **C16** | `external` → `PHP_FCGI_CHILDREN=16`        | 1 master + 16 children |
 
 WSL2, 12 cores, PHP 8.3.35 (cgi-fcgi), `/items`, `wrk -t4`, 8 s per point, 2 interleaved
 rounds. PSS is `smaps_rollup` summed over the server and every PHP process; **PSS rather
@@ -24,10 +24,10 @@ count the OPcache segment once per child and report a saving that does not exist
 
 ## Result
 
-| shape | PSS after load | rps @ c=64 | distinct pids serving |
-| --- | --- | --- | --- |
-| S — 16 slots | **300 – 313 MB** | 3668 / 3850 | 16 |
-| C16 — 1 master × 16 children | **68 – 70 MB** | 4543 / 4170 | 16 |
+| shape                        | PSS after load   | rps @ c=64  | distinct pids serving |
+| ---------------------------- | ---------------- | ----------- | --------------------- |
+| S — 16 slots                 | **300 – 313 MB** | 3668 / 3850 | 16                    |
+| C16 — 1 master × 16 children | **68 – 70 MB**   | 4543 / 4170 | 16                    |
 
 **4.5–4.7× less memory for the same 16 PHP processes**, and throughput is within noise —
 C16 slightly ahead at every concurrency in both rounds.

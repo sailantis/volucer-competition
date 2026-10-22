@@ -383,6 +383,94 @@ def shorten_tool_version(value: str, label: str) -> str:
     return value
 
 
+# The version of the *program* each arm runs.
+#
+# The arms are the measurement; the program behind them is what a reader has to
+# install to reproduce it, and the same program backs several arms — four of
+# them are volucer in four shapes. So the chart's version line names volucer
+# once rather than once per arm.
+ARM_VERSIONS = {
+    "volucer-worker": "volucer",
+    "volucer-unix": "volucer",
+    "volucer-attach": "volucer",
+    "volucer-fastcgi": "volucer",
+    "volucer-prefork": "volucer",
+    "rr": "roadrunner",
+    "frankenphp": "frankenphp",
+    "fpm": "nginx",
+}
+
+# The order the version line names the programs: the server under test, then
+# what it is measured against, then the interpreter they all run on.
+VERSION_ORDER = ("volucer", "roadrunner", "frankenphp", "nginx")
+
+VERSION_LABELS = dict(VERSION_SOURCES)
+
+
+def version_value(meta: dict, key: str) -> str:
+    """The version of one participant, as a table cell or a chart line prints it."""
+    value = meta.get(key, "").strip()
+    if not value:
+        return ""
+    if key in ("roadrunner", "frankenphp", "nginx"):
+        return shorten_tool_version(value, VERSION_LABELS.get(key, key))
+    return shorten_version(value)
+
+
+def versions_line(meta: dict, arms) -> str:
+    """The one-line build stamp of every program in a chart.
+
+    A chart is embedded as an image and gets copied or linked on its own, so it
+    has to name the builds it measured without relying on the table beside it —
+    the table is where a reader checks the versions, and the chart is where they
+    read the numbers. Both come from the run's own ``meta.txt``, so neither can
+    drift from the other.
+
+    Only the programs the chart actually measured are named: a version line that
+    listed RoadRunner under a chart of volucer alone would describe a run that
+    is not the one on the card. A program the run measured but did not record a
+    version for is printed as ``unknown`` rather than dropped — an absent name
+    reads as "not in this chart", while "unknown" states honestly that the
+    chart measured it and cannot name its build.
+    """
+    parts: list[str] = []
+    for key in VERSION_ORDER:
+        if not any(ARM_VERSIONS.get(arm) == key for arm in arms):
+            continue
+        label = VERSION_LABELS.get(key, key)
+        value = version_value(meta, key)
+        if not value:
+            parts.append(f"{label} unknown")
+            continue
+
+        if key == "volucer":
+            # `volucer 0.1.0` repeats the label; the number is what is left.
+            number = value[len("volucer "):] if value.startswith("volucer ") else value
+            text = f"{label} {number}"
+            # A version number does not say which source produced the binary,
+            # so the commit is what makes the row reproducible.
+            ref = meta.get("volucer ref", "").strip()
+            if ref and not ref.startswith("("):
+                text += f" ({ref})"
+            parts.append(text)
+        elif key == "nginx":
+            # `nginx/1.24.0 (Ubuntu)`: the label names the program already, and
+            # the distribution suffix is the host's, not the build's.
+            number = value[len("nginx/"):] if value.startswith("nginx/") else value
+            parts.append(f"{label} {number.split(' (')[0]}")
+        else:
+            parts.append(f"{label} {value}")
+
+    php = meta.get("php", "").strip()
+    if php:
+        # `PHP 8.5.11 (cli) (built: ...) (NTS)`: the number is what a reader
+        # compares against the build they would install.
+        words = php.split()
+        parts.append(" ".join(words[:2]) if len(words) >= 2 else php)
+
+    return " · ".join(parts)
+
+
 def view_versions(meta: dict) -> list[str]:
     """The versions the run was measured with, as a table.
 
@@ -435,54 +523,40 @@ def view_versions(meta: dict) -> list[str]:
         lines.append(f"| {label} | {value} |")
     lines.append("")
     lines.append(
-        "The **host** is the machine all of them ran on, and the **method** "
-        "is the harness that drove them — both are printed on every chart "
-        "above. One host, one harness, one interpreter, one pass: that is "
-        "what makes a ratio between two arms a ratio between two "
-        "measurements made the same way."
+        "The **host** is the machine all of them ran on, the **method** is the "
+        "harness that drove them, and the **builds** are the versions of the "
+        "programs compared — all three are printed on every chart above, so a "
+        "reader who has only the image still knows what it measured. One host, "
+        "one harness, one interpreter, one pass: that is what makes a ratio "
+        "between two arms a ratio between two measurements made the same way."
     )
     lines.append("")
     return lines
 
 
 def meta_stamp(meta: dict) -> str:
-    """The one-line provenance stamp a chart carries.
+    """The conditions a chart's numbers were measured under.
 
-    Host, kernel, interpreter, the commit the server was built from, and the
-    method. A throughput figure with no host beside it is not a measurement a
-    reader can weigh — the same number on a different host, or with a different
-    interpreter, is a different number. And a version number does not say which
-    source produced it, so the commit is printed too.
+    The host, the kernel and the method — the three facts that make a number
+    comparable with another one. They are stamped on every chart because a
+    throughput figure with no host beside it is not a measurement a reader can
+    weigh: the same number on another host, or with another client, is another
+    number.
+
+    The builds are the other half of that provenance and they are drawn as a
+    line of their own (see :func:`versions_line`): a reader scanning a chart
+    looks for "which version", and a version buried in a sentence about the
+    host is a version they have to hunt for.
     """
     parts: list[str] = []
 
-    host = meta.get("host", "")
+    host = meta.get("host", "").strip()
     if host:
         parts.append(host)
 
-    kernel = meta.get("kernel", "")
+    kernel = meta.get("kernel", "").strip()
     if kernel:
         parts.append(kernel)
-
-    php = meta.get("php", "")
-    if php:
-        # `PHP 8.5.11 (cli) (built: ...) (NTS)` is more than a chart caption
-        # wants; the version and the SAPI are what a reader needs.
-        parts.append(" ".join(php.split(" (built:")[0].split()))
-
-    ref = meta.get("volucer ref", "")
-    if ref and not ref.startswith("("):
-        parts.append(f"volucer {ref}")
-
-    # The arms the run measured. Two pages can compare the same two
-    # deployments and report different numbers, because they come from
-    # different runs; the number of arms is what tells a reader that the two
-    # charts came from passes of different scope rather than from one pass
-    # that disagrees with itself.
-    arms = meta.get("arms", "")
-    if arms:
-        count = len([a for a in arms.split(",") if a.strip()])
-        parts.append(f"{count} arms")
 
     method = meta_method(meta)
     if method:
@@ -877,6 +951,9 @@ def view_benchmarks(out_dir: Path) -> dict:
         return {"pages": 0, "files": []}
 
     meta = load_meta(directory)
+    # The conditions every chart was measured under: the host, the kernel and
+    # the method. The builds are a line of their own, because they differ per
+    # chart - a chart of two servers must not name a third.
     stamp = meta_stamp(meta)
 
     arms = [arm for arm in COMPARISON_ARMS
@@ -997,7 +1074,10 @@ def view_benchmarks(out_dir: Path) -> dict:
 
     # How to read the charts, stated once, because a chart that needs a
     # paragraph in the reader's head to be read is a chart that will be
-    # misread.
+    # misread. These paragraphs explain the ENCODING only: which mark is which
+    # number, and what a range on a bar means. No figure from this run appears
+    # in them, so a re-measurement cannot leave a sentence behind claiming the
+    # previous run's result.
     lines.append(
         "Each chart is a bar per server, and the bar is the **request rate** — "
         "the number the page is about. The bars start at zero, so their lengths "
@@ -1010,10 +1090,11 @@ def view_benchmarks(out_dir: Path) -> dict:
         "dashed vertical line, and it carries no label of its own; every other "
         "bar states its factor — `x2.5` for a server that did 40% of the "
         "leader's requests per second. The baseline is the fastest server *in "
-        "that chart*, not a fixed server: a cold deployment overtakes a warm one "
-        "once the host saturates, so the fastest server is not the same one at "
-        "every load — and naming it per chart is more honest than a fixed "
-        "reference that would read as a claim about the same winner every time."
+        "that chart*, not a fixed server: a cold deployment can overtake a warm "
+        "one as the host saturates, so the fastest server is not necessarily "
+        "the same one at every load — and naming it per chart is more honest "
+        "than a fixed reference that would read as a claim about the same "
+        "winner every time."
     )
     lines.append("")
     lines.append(
@@ -1023,8 +1104,7 @@ def view_benchmarks(out_dir: Path) -> dict:
         "largest of those round-paired ratios, scaled back into requests per "
         "second. Pairing by round is what makes that range honest: a host that "
         "drifts over the run moves both servers in the same round, so the ratio "
-        "within a round is steadier than either server's own spread — "
-        "measurably so, on this run, in most of the pairs on this page. A range "
+        "within a round is steadier than either server's own spread. A range "
         "drawn from one server's minimum and maximum would instead charge the "
         "whole of the host's drift to that one server, and would be wide for the "
         "wrong reason."
@@ -1155,10 +1235,6 @@ def view_benchmarks(out_dir: Path) -> dict:
 
             slug = "root" if endpoint == "/" else endpoint.strip("/").replace("/", "-")
             chart = f"benchmarks-{slug}-{mode}-c{conc}.svg"
-            reference_server, reference_model = SERVER_ARMS[reference["arm"]]
-            reference_label = f"{reference_server} — {reference_model}"
-            if reference_best["children"]:
-                reference_label += f", {reference_best['children']} children"
 
             write(svg_dir / chart, throughput_dots(
                 rows=chart_rows,
@@ -1169,7 +1245,9 @@ def view_benchmarks(out_dir: Path) -> dict:
                      "each bar is the spread of the round-paired comparison: "
                      "both servers were measured in the same round, so the "
                      "range is the spread of the comparison rather than the "
-                     "drift of the host. " + stamp,
+                     "drift of the host.",
+                stamp=stamp,
+                versions=versions_line(meta, [entry["arm"] for entry in entries]),
                 reference_label="fastest here",
             ))
             files.append(chart)
@@ -1186,13 +1264,13 @@ def view_benchmarks(out_dir: Path) -> dict:
 
             lines.append("")
             lines.append(
-                f"The **factor** column is measured against **{reference_label}** "
-                "— the fastest server in this table. It states how many times "
-                "slower each server is, so `x1.0` is the fastest and `x2.5` is "
-                "a quarter of its rate. The column carries the range of the "
-                "round-paired ratios beside it, and a row marked **tie** is one "
-                "whose range reaches across 1.0 — the two servers could not be "
-                "told apart in this run."
+                "The **factor** column is measured against **the fastest server "
+                "in the table**, which is the row marked `x1.0`. It states how "
+                "many times slower each server is, so `x1.0` is the fastest and "
+                "`x2.5` is a quarter of its rate. The column carries the range "
+                "of the round-paired ratios beside it, and a row marked **tie** "
+                "is one whose range reaches across 1.0 — the two servers could "
+                "not be told apart in this run."
             )
             lines.append("")
             lines.append("| server | model | PHP procs | rps | p50 | p99 | factor (range) |")
@@ -1267,7 +1345,7 @@ def view_benchmarks(out_dir: Path) -> dict:
     # pool's advantage grows with the process count — which is the whole
     # argument for it. A section that stopped at 32 would show the advantage
     # at its smallest.
-    memory = view_memory(rows, stamp, arms, MEASURED_TIERS, svg_dir, files)
+    memory = view_memory(rows, meta, stamp, arms, MEASURED_TIERS, svg_dir, files)
     lines.extend(memory["lines"])
     files.extend(memory["files"])
 
@@ -1284,12 +1362,14 @@ def view_benchmarks(out_dir: Path) -> dict:
 
 def tier_notes(rows: list[dict], arms: list[str], tiers: list[int],
                mode: str) -> list[str]:
-    """What the extra process tiers say, in words the data supports.
+    """The two tables that read the process tiers against each other.
 
-    Every claim here is a round-paired ratio between two cells of the same
-    run, which is the only kind of claim the run can carry: a ratio between
-    a 16-process measurement and a 32-process measurement of the same arm,
-    paired by the round they were measured in.
+    Both are comparisons of the same run's cells, paired by the round they
+    were measured in: the two cold deployments against each other with the
+    process count held equal, and each arm's larger tier against its smaller
+    one. The prose around them only says what a column or a ratio means; the
+    numbers stay in the cells, so a re-measured run needs no rewritten
+    sentence here.
     """
     notes: list[str] = []
 
@@ -1323,16 +1403,29 @@ def tier_notes(rows: list[dict], arms: list[str], tiers: list[int],
                 "**The two cold deployments, head to head.** `spawn_cgi` with "
                 "`children` and `nginx + php-fpm` are the same idea reached two "
                 "ways — a forked pool of `php-cgi` children behind one socket, "
-                "or a pool of `php-fpm` children behind another — and at the "
-                "same number of serving processes they are level:"
+                "or a pool of `php-fpm` children behind another. The table below "
+                "holds the pair at each process count the run covered, so the "
+                "two are compared with the amount of server held equal:"
             )
             lines.append("")
+            lines.append("| PHP procs | server | model | rps | spawn_cgi ÷ php-fpm |")
+            lines.append("|---:|---|---|---:|---:|")
             for tier, prefork_rps, fpm_rps, factor in pairs:
                 lines.append(
-                    f"- **{tier} processes** — `spawn_cgi` "
-                    f"**{fmt_number(prefork_rps)}** rps against php-fpm's "
-                    f"**{fmt_number(fpm_rps)}**, a factor of x{factor:.2f}"
+                    f"| {tier} | volucer | spawn_cgi (cold, unix, children) | "
+                    f"**{fmt_number(prefork_rps)}** | x{factor:.2f} |"
                 )
+                lines.append(
+                    f"| {tier} | nginx + php-fpm | cold, unix socket | "
+                    f"**{fmt_number(fpm_rps)}** | — |"
+                )
+            lines.append("")
+            lines.append(
+                "The factor is `spawn_cgi`'s rate divided by php-fpm's at the "
+                "same process count, so `x1.0` is level and a factor above 1.0 "
+                "means the forked pool served more requests with the same "
+                "number of PHP processes."
+            )
             lines.append("")
             notes.extend(lines)
 
@@ -1361,10 +1454,13 @@ def tier_notes(rows: list[dict], arms: list[str], tiers: list[int],
 
     if gains:
         notes.append(
-            f"**What the extra processes buy.** The table below is the same arm "
-            f"at {tiers[0]} processes and at {tiers[-1]} processes, paired by "
-            f"the round each was measured in. It is the clearest statement of "
-            f"what this host does when it is given more of the server:"
+            "**What the extra processes buy.** The table below is each arm at "
+            "the smallest and the largest serving-process count this comparison "
+            "publishes, paired by the round each was measured in, with the ratio "
+            "of the two and its range. A ratio above 1.0 means the arm served "
+            "more requests with the larger process count; a ratio below 1.0 "
+            "means it served fewer; and a range that reaches across 1.0 means "
+            "the two tiers could not be told apart in this run:"
         )
         notes.append("")
         notes.append(
@@ -1374,153 +1470,32 @@ def tier_notes(rows: list[dict], arms: list[str], tiers: list[int],
         notes.append("|---|---|---:|---:|---:|")
         notes.extend(gains)
         notes.append("")
-        notes.append(scaling_summary(rows, arms, tiers, mode, conc))
-        notes.append("")
 
     # The tier that is measured but not published, said out loud.
     #
-    # A page that stops at 32 without saying why looks like a page that ran
-    # out of measurements. The run measured 64 as well, the rows are in the
-    # repository, and the reason the tier is not in the throughput table is
-    # a claim about what the tier shows: it is where the cold path stops
-    # gaining for volucer, so it would say more about php-fpm's ceiling than
-    # about a volucer deployment.
+    # A page that stops at the last tier without saying why looks like a page
+    # that ran out of measurements. The run measured more than the throughput
+    # table prints, the rows are in the repository, and the memory section
+    # below publishes every tier - so the omission is a scope decision about
+    # the throughput comparison, not a missing measurement. Which tier says
+    # what is a result, so it is left to the tables rather than asserted here.
     unpublished = [tier for tier in MEASURED_TIERS if tier not in tiers]
     if unpublished:
         notes.append(
             f"**The {', '.join(str(t) for t in unpublished)}-process tier is "
-            f"measured and is not in the table above.** The run covered it — "
-            f"the rows are in the repository — and it is left out because it "
-            f"is the tier where the cold path stops gaining for volucer: "
-            f"`spawn_cgi` with `children` is *slower* there than at "
-            f"{tiers[-1]} processes. What the tier does show is that "
-            f"`nginx + php-fpm` keeps improving, and a fact about another "
-            f"server's ceiling is not a reason for a reader to run more volucer "
-            f"processes. It is in the memory section below, where it is a fact "
-            f"about what a deployment costs rather than a claim about who wins."
+            f"measured and is not in the throughput table above.** The rows are "
+            f"in the repository, and the memory section below publishes every "
+            f"tier the run covered — memory is a cost of a deployment rather "
+            f"than a claim about who is faster, so it has no reason to stop "
+            f"where the throughput comparison does."
         )
         notes.append("")
 
     return notes
 
 
-def scaling_summary(rows: list[dict], arms: list[str], tiers: list[int],
-                    mode: str, conc: str) -> str:
-    """What the extra processes do, stated from the data rather than asserted.
-
-    The sentence below is a summary of the table above it, and it is
-    *computed* from the table rather than written next to it. A summary that
-    is written by hand is a second copy of the numbers, and the second copy
-    is the one that goes stale: a run that measured differently would still
-    carry the sentence the last run earned.
-
-    So the arms are sorted into three groups by what the measurement says
-    about them, and each group is named by the data:
-
-    - the arms that got faster, and whose range clears 1.0
-    - the arms that got slower, and whose range clears 1.0
-    - the arms the measurement could not tell apart from their own spread
-
-    and the sentence says which is which.
-    """
-    def key_for(arm: str, tier: int) -> dict:
-        if arm == "volucer-prefork":
-            return {"arm": arm, "workers": "1", "children": str(tier),
-                    "opcache": mode, "conc": conc, "threads": "12"}
-        return {"arm": arm, "workers": str(tier), "opcache": mode,
-                "conc": conc, "threads": "12"}
-
-    if len(tiers) < 2:
-        return ""
-    base, top = tiers[0], tiers[-1]
-
-    faster: list[str] = []
-    slower: list[str] = []
-    unclear: list[str] = []
-    for arm in arms:
-        spread = ratio_with_spread(rows, key_for(arm, top), key_for(arm, base))
-        if spread["centre"] is None:
-            continue
-        server, model = SERVER_ARMS[arm]
-        label = f"{server} ({model})"
-        low, high = spread["low"], spread["high"]
-        if low is not None and high is not None and low <= 1.0 <= high:
-            # The range reaches across 1.0: the two tiers could not be told
-            # apart, so calling it a gain or a loss would claim more than
-            # the measurement carries.
-            unclear.append(label)
-        elif spread["centre"] > 1.0:
-            faster.append(label)
-        else:
-            slower.append(label)
-
-    parts: list[str] = []
-    if faster:
-        parts.append(
-            f"**{len(faster)} of the arms got faster** with the extra "
-            f"processes: " + ", ".join(faster) + "."
-        )
-    if slower:
-        parts.append(
-            f"**{len(slower)} got slower**: " + ", ".join(slower) + "."
-        )
-    if unclear:
-        parts.append(
-            f"**{len(unclear)} could not be told apart** from their own "
-            f"spread: " + ", ".join(unclear) + "."
-        )
-
-    if not parts:
-        return ""
-
-    # The explanation, only where the data shows the pattern.
-    #
-    # The cold deployments pay a framework boot per request, so a process
-    # that is not yet warm is a process that has not yet paid, and each one
-    # can add throughput the others cannot. The warm arms keep the
-    # application resident, so their processes are interchangeable: once
-    # enough of them are running, another one adds contention rather than
-    # throughput. That is the mechanism the numbers show, and it is stated
-    # as the pattern the numbers show rather than as a rule.
-    warm = [arm for arm in arms
-            if arm in ("volucer-attach", "volucer-worker", "volucer-unix",
-                       "rr", "frankenphp")]
-    cold = [arm for arm in arms if arm in ("volucer-prefork", "fpm")]
-
-    def names(arms_in: list[str], bucket: list[str]) -> list[str]:
-        found = []
-        for arm in arms_in:
-            server, model = SERVER_ARMS[arm]
-            label = f"{server} ({model})"
-            if label in bucket:
-                found.append(label)
-        return found
-
-    fast_warm = names(warm, faster)
-    fast_cold = names(cold, faster)
-    if fast_cold and not fast_warm:
-        parts.append(
-            "The pattern is the mechanism: the deployments that gained are the "
-            "ones that pay a framework boot per request, where a process that "
-            "has not yet warmed has not yet paid, and the warm ones keep the "
-            "application resident, so their processes are interchangeable — "
-            "once enough of them are running, another one adds contention "
-            "rather than throughput."
-        )
-    elif fast_cold and fast_warm:
-        parts.append(
-            "The deployments that gained fastest are the ones that pay a "
-            "framework boot per request: a process that has not yet warmed has "
-            "not yet paid, so each one can add throughput the others cannot. "
-            "The warm deployments keep the application resident, so their "
-            "processes are interchangeable."
-        )
-
-    return " ".join(parts)
-
-
-def view_memory(rows: list[dict], stamp: str, arms: list[str], tiers: list[int],
-                svg_dir: Path, files: list[str]) -> dict:
+def view_memory(rows: list[dict], meta: dict, stamp: str, arms: list[str],
+                tiers: list[int], svg_dir: Path, files: list[str]) -> dict:
     """The cost of the same deployments: the memory they hold.
 
     Throughput alone is half the answer to "which server should I run". The
@@ -1594,7 +1569,9 @@ def view_memory(rows: list[dict], stamp: str, arms: list[str], tiers: list[int],
             value_suffix="MiB",
             note="Proportional set size of the whole process tree, after the "
                  "run: each shared page is divided by the number of processes "
-                 "that map it, so a page the children share counts once. " + stamp,
+                 "that map it, so a page the children share counts once.",
+            stamp=stamp,
+            versions=versions_line(meta, list(series)),
             height=420,
         ))
         charts.append(chart)
@@ -1669,7 +1646,13 @@ def view_memory(rows: list[dict], stamp: str, arms: list[str], tiers: list[int],
                          "processes that map it, so a page the children share "
                          "counts once. The same number of PHP processes, serving "
                          "the same requests: once as separate slots, once as the "
-                         "children of a single slot. " + stamp,
+                         "children of a single slot.",
+                    stamp=stamp,
+                    # Only the two spawn_cgi shapes are on this card, so only
+                    # volucer is named: a version line that listed RoadRunner
+                    # under a chart of one server's shapes would describe a
+                    # chart that is not the one on the card.
+                    versions=versions_line(meta, ["volucer-fastcgi", "volucer-prefork"]),
                     height=340,
                 ))
                 charts.append(chart)
@@ -1705,34 +1688,29 @@ def view_memory(rows: list[dict], stamp: str, arms: list[str], tiers: list[int],
                         f"{entry['max']:.1f} | {ratio} |"
                     )
                 lines.append("")
-                pairs: list[tuple[int, float]] = []
-                for entry in same_processes:
-                    base = baseline.get(entry["processes"])
-                    if base and "separate slots" not in entry["label"]:
-                        pairs.append((entry["processes"], base / entry["median"]))
-                if pairs:
-                    smallest = min(pairs, key=lambda p: p[1])
-                    largest = max(pairs, key=lambda p: p[1])
-                    lines.append(
-                        f"For the same number of serving processes, the forked "
-                        f"pool holds **{smallest[1]:.1f}× to {largest[1]:.1f}× "
-                        f"less** resident memory than one process per slot — "
-                        f"because the children inherit the master's pages "
-                        f"instead of each mapping its own."
-                    )
-                    lines.append("")
-                    lines.append(
-                        "The advantage grows with the process count, because the "
-                        "pages the children share are the ones that would "
-                        "otherwise be copied into every process. That is the "
-                        "argument for the `children` key, and it is why the "
-                        "`spawn_cgi` arm with `children` is the one that "
-                        "appears in the throughput comparison above, while the "
-                        "one-process-per-slot shape is not: for the same number "
-                        "of PHP processes it costs several times the memory "
-                        "for the same throughput."
-                    )
-                    lines.append("")
+                lines.append(
+                    "The **vs one per slot** column is the row's own median "
+                    "divided by the one-process-per-slot row at the same "
+                    "process count, so it states how much less memory the "
+                    "forked pool holds for the same amount of server. Read it "
+                    "across a row of the table, not between two rows: the "
+                    "comparison holds the process count equal, and comparing "
+                    "two different counts would compare two different amounts "
+                    "of server."
+                )
+                lines.append("")
+                lines.append(
+                    "The reason the two arrangements differ is that the "
+                    "children inherit the master's pages instead of each "
+                    "mapping its own copy, so a page the pool shares is paid "
+                    "for once rather than once per process. That is the "
+                    "argument for the `children` key, and it is why the "
+                    "`spawn_cgi` arm with `children` is the shape that "
+                    "appears in the throughput comparison above: it is the "
+                    "same cold path as one process per slot, at a fraction of "
+                    "the memory."
+                )
+                lines.append("")
 
     return {"lines": lines, "files": charts}
 
@@ -1779,8 +1757,9 @@ and the controls live in that repository.
 **One host, one harness, one interpreter, one pass.** Every figure below was measured on
 the same machine, through the same script, against the same PHP build, in one
 interleaved pass — so a ratio between two arms is a ratio between two measurements made
-the same way. The host, the kernel, the PHP version and the method are printed on every
-chart.
+the same way. **Each chart names the host and the method it was measured on, and the
+build of every program it measured**, so the image is readable on its own and a figure
+is never a fact about a version no one can identify.
 """
 
 

@@ -23,7 +23,7 @@
 # the question. On Linux it does fork children (`cgi_main.c:1995-2081` is the
 # `#ifndef PHP_WIN32` path, and `2083-2216` is the `CreateProcess` one for Windows) — an
 # earlier version of this comment claimed it was read only under `#ifdef PHP_WIN32`, which is
-# wrong and is corrected in `internal/plan.md` hazard 86. What is true, and what the two blocks
+# wrong. What is true, and what the two blocks
 # below show, is that a php-cgi with **no** children serves its connections one at a time,
 # so varying the count is what tells the two explanations apart.
 #

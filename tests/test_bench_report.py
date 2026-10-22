@@ -883,18 +883,44 @@ class ColdPathTest(unittest.TestCase):
         """The two cold deployments are compared with each other.
 
         The comparison has to hold the number of serving processes equal, or
-        it is comparing two different amounts of server.
+        it is comparing two different amounts of server. So the check is on the
+        shape of the published row: a process count, both deployments at that
+        count, and the factor between them.
         """
         self.assertIn(
             "head to head", self.markdown,
             "the page does not compare the two cold deployments with each other",
         )
+        rows = [line for line in self.markdown.splitlines()
+                if line.startswith("| ") and "spawn_cgi (cold, unix, children)" in line
+                and "**" in line and "PHP procs" not in line]
+        self.assertTrue(
+            rows, "the cold comparison publishes no spawn_cgi row",
+        )
+        # The cold comparison is its own table, and its rows lead with the
+        # process count; the throughput table leads with the server. That is
+        # what tells the two apart in the Markdown.
+        cold_rows = [row for row in rows
+                     if row.strip("|").split("|")[0].strip().isdigit()]
+        self.assertTrue(
+            cold_rows,
+            "the cold comparison publishes no table of its own, so the "
+            "throughput table is the only place the two deployments meet",
+        )
+        counts = {int(row.strip("|").split("|")[0].strip()) for row in cold_rows}
         for tier in br.PUBLISHED_TIERS:
             self.assertIn(
-                f"- **{tier} processes**",
-                self.markdown,
+                tier, counts,
                 f"the page does not compare the cold deployments at {tier} processes",
             )
+        # Both sides of each pair have to be on the page, or the factor in the
+        # last column is a ratio against a number the reader cannot find.
+        self.assertTrue(
+            [row for row in self.markdown.splitlines()
+             if row.startswith("| ") and "nginx + php-fpm | cold, unix socket |" in row
+             and row.strip("|").split("|")[0].strip().isdigit()],
+            "the cold comparison publishes the spawn_cgi side without php-fpm's",
+        )
 
     def test_the_cold_comparison_carries_the_range(self):
         """The table has to show the range the chart draws."""
@@ -1181,6 +1207,147 @@ class VersionsSectionTest(unittest.TestCase):
         """
         self.assertIn("| RoadRunner | 2025", self.markdown)
         self.assertNotIn("build time:", self.markdown)
+
+
+class ChartBuildLineTest(unittest.TestCase):
+    """Every chart names the builds it measured, inside the image.
+
+    A chart is copied or linked on its own, so a reader who lands on the
+    image never sees the table beside it. The same reason azera-competition
+    draws its engine versions into each chart: the figure has to say which
+    version it is a fact about, or it is a fact about no version in
+    particular.
+
+    The line is drawn from the run's own `meta.txt` and it names only the
+    programs that chart measured: a chart of volucer alone must not list
+    RoadRunner, because a reader would take that as "RoadRunner was in this
+    chart".
+    """
+
+    def setUp(self):
+        self.out = Path(tempfile.mkdtemp(prefix="bench-buildline-"))
+        self.addCleanup(shutil.rmtree, self.out, True)
+        br.build(self.out, "benchmarks")
+        self.meta = br.load_meta(br.MATRIX_DIRS["servers"])
+        self.charts = sorted((self.out / "svg" / "benchmarks").glob("*.svg"))
+
+    def text_of(self, chart):
+        data = chart.read_text(encoding="utf-8")
+        return " ".join(re.findall(r"<text[^>]*>(.*?)</text>", data))
+
+    def test_every_chart_names_the_volucer_build_and_its_commit(self):
+        version = br.version_value(self.meta, "volucer")
+        number = version[len("volucer "):] if version.startswith("volucer ") else version
+        ref = self.meta.get("volucer ref", "").strip()
+        for chart in self.charts:
+            with self.subTest(chart=chart.name):
+                text = self.text_of(chart)
+                self.assertIn(number, text,
+                              f"{chart.name} does not name the volucer version")
+                self.assertIn(ref, text,
+                              f"{chart.name} does not name the volucer commit")
+
+    def test_the_version_line_names_every_program_in_the_chart(self):
+        """The three competitors and the interpreter, on a chart of all of them.
+
+        The throughput charts are the comparison of servers, so each of them
+        names every server in it. The memory chart of the two `spawn_cgi`
+        shapes is a chart of one server's two arrangements, so it names that
+        one server and nobody else.
+        """
+        throughput = [chart for chart in self.charts
+                      if chart.name.startswith("benchmarks-items-")]
+        self.assertTrue(throughput, "the run published no throughput chart")
+        for chart in throughput:
+            with self.subTest(chart=chart.name):
+                text = self.text_of(chart)
+                for label in ("RoadRunner", "FrankenPHP", "nginx", "PHP"):
+                    self.assertIn(label, text,
+                                  f"{chart.name} does not name {label}")
+
+        shapes = [chart for chart in self.charts
+                  if chart.name == "benchmarks-memory-same-processes.svg"]
+        for chart in shapes:
+            with self.subTest(chart=chart.name):
+                text = self.text_of(chart)
+                self.assertIn("Volucer", text,
+                              f"{chart.name} does not name the build it measured")
+                for label in ("RoadRunner", "FrankenPHP", "nginx"):
+                    self.assertNotIn(
+                        label, text,
+                        f"{chart.name} names {label}, which is not in the chart",
+                    )
+
+    def test_the_version_line_is_inside_the_image(self):
+        """Not only in the page: the figure has to carry it too.
+
+        The table is where a reader checks a version; the chart is where they
+        read the number. A chart that relied on the table beside it to say
+        which build it measured would say nothing when it is linked on its own.
+        """
+        note = br.versions_line(self.meta, ["volucer-attach", "rr"])
+        self.assertIn("Volucer", note)
+        self.assertIn("RoadRunner", note)
+        self.assertNotIn("FrankenPHP", note,
+                         "the version line names a server this chart did not measure")
+
+
+class StaticProseTest(unittest.TestCase):
+    """The page's prose explains the data; it does not restate its figures.
+
+    A page whose sentences are built out of this run's numbers has to be
+    rewritten after every run, and the sentence that survives a run it no
+    longer describes is the failure - it states a result the table under it
+    no longer shows. So the prose carries only what stays true: what a bar is,
+    what a range is, what the columns mean.
+
+    The check is structural: every number in this document lives in a table
+    cell, a chart caption, a code span or a link. A figure in a paragraph is a
+    figure a re-measurement can leave behind.
+    """
+
+    def setUp(self):
+        self.out = Path(tempfile.mkdtemp(prefix="bench-prose-"))
+        self.addCleanup(shutil.rmtree, self.out, True)
+        br.build(self.out, "benchmarks")
+        self.markdown = (self.out / "benchmarks.md").read_text(encoding="utf-8")
+
+    def paragraphs(self):
+        for line in self.markdown.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if stripped.startswith(("|", "![", "#", "- ")):
+                continue
+            yield stripped
+
+    def test_no_measured_figure_appears_in_a_paragraph(self):
+        """A request rate, a MiB figure or a factor in prose is a stale result."""
+        patterns = (
+            r"\d[\d,]{2,}\s*rps",          # a request rate
+            r"\d+\.\d\s*MiB",             # a memory figure
+            r"\b\d,\d{3}\b",              # a thousands-separated count
+        )
+        for paragraph in self.paragraphs():
+            # Code spans and links are excluded: they name a column, a key or
+            # a page, not a measurement.
+            scrubbed = re.sub(r"`[^`]*`", "", paragraph)
+            scrubbed = re.sub(r"\[[^\]]*\]\([^)]*\)", "", scrubbed)
+            for pattern in patterns:
+                with self.subTest(paragraph=paragraph[:60], pattern=pattern):
+                    self.assertIsNone(
+                        re.search(pattern, scrubbed),
+                        f"the prose states a measured figure, which a "
+                        f"re-measurement cannot update: {paragraph[:200]}",
+                    )
+
+    def test_the_prose_says_how_to_read_the_charts(self):
+        """The instructions survive, because they are not a result."""
+        text = " ".join(self.paragraphs())
+        for phrase in ("request rate", "round-paired", "spread of the comparison",
+                       "fastest server"):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, text)
 
 
 if __name__ == "__main__":

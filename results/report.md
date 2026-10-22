@@ -20,10 +20,10 @@ round, which the blocked sweep above cannot do).
 > revision exists.** That sweep read 1–3% slower than the one before it in every cell, and
 > the note here dismissed it as drift using a re-run of R and F that was never committed —
 > a sentence, not data. Re-deriving it from the two committed files shows the pattern the
-> note missed: every arm fell *except* the two arms the four commits touched (P +0.35%,
+> note missed: every arm fell _except_ the two arms the four commits touched (P +0.35%,
 > R −2.79%, F −1.63%, T −1.54%, U −1.77% — RoadRunner slower in 10 of 10 cells). The
 > absolute rps column is not comparable between sweeps; the ratios are, and by those the
-> four commits *improved* volucer's lead (P/R +5.3% on `/`).
+> four commits _improved_ volucer's lead (P/R +5.3% on `/`).
 >
 > **And the leak guard that sweep relied on could not see the arms it guarded.** It matched
 > the literal string `php-cgi -b`, but arms T and U spawn PHP through a wrapper whose argv
@@ -39,10 +39,10 @@ round, which the blocked sweep above cannot do).
 > change since is the file split. Two binaries — `ddaada7` and `91cc7b6` — were built and
 > alternated `A,B,B,A` on the same idle host, 5 s × 3 repeats per cell:
 >
-> | endpoint | c=1 | c=4 | c=8 | c=16 | c=32 |
-> |---|---|---|---|---|---|
+> | endpoint                    | c=1    | c=4    | c=8    | c=16   | c=32   |
+> | --------------------------- | ------ | ------ | ------ | ------ | ------ |
 > | `/`, `91cc7b6` vs `ddaada7` | −0.52% | +0.92% | +0.68% | +0.23% | −0.42% |
-> | `/items`, same | +1.00% | +1.68% | −0.24% | −1.04% | −1.56% |
+> | `/items`, same              | +1.00% | +1.68% | −0.24% | −1.04% | −1.56% |
 >
 > Median **−0.00%**, 5 of 10 cells each way, every delta inside the 3.3% within-cell repeat
 > spread. So the refactor is free, and the ~3.3% on P in the table below is drift that
@@ -61,7 +61,7 @@ round, which the blocked sweep above cannot do).
 >
 > **This revision also settles a question the sweeps above could not: is the crc32c fix still
 > worth what it claimed?** It is worth more than the report previously implied, and it is the
-> *only* thing that puts the warm arm ahead of RoadRunner. Measured by an interleaved A/B —
+> _only_ thing that puts the warm arm ahead of RoadRunner. Measured by an interleaved A/B —
 > four variants, every one measured inside the same round, the starting order rotated, 7
 > rounds × 6 cells = 168 measured cells and 0 failures — the current build is **+10.2% to
 > +16.3%** over the same build with **only** `crc32c` reverted to the hand-written loop it
@@ -69,13 +69,13 @@ round, which the blocked sweep above cannot do).
 > RoadRunner in every cell of every round**. CPU attribution agrees to the microsecond: the
 > fix removes **59 µs of server CPU per request** (184 → 125 µs on `/items` at c=32, −32%) and
 > leaves the PHP column where it was. See "Is the warm arm's lead still there?" below, and
-> hazards 50–51 in the volucer plan. The two CPU-attribution tables *below* are still the
+> hazards 50–51 in the volucer plan. The two CPU-attribution tables _below_ are still the
 > carried-over ones, but this revision adds a current attribution for exactly the three builds
 > the question is about.
 
 > **The previous revision (volucer `841c963`) refreshed the five measured tables after the
 > transport-buffering pass** — every read and write path in volucer's three transports now
-> enters the kernel once per frame instead of once per frame *field*. It changes throughput by
+> enters the kernel once per frame instead of once per frame _field_. It changes throughput by
 > a few percent, not by a factor; the A/B against the previous build is at the foot of the
 > transport section. The two CPU-attribution tables ("Where the warm arm's 10% went", "The
 > cold model's real cost is CPU") are carried over from the previous build and were not
@@ -85,14 +85,14 @@ round, which the blocked sweep above cannot do).
 > **There are three passes and they answer three different questions.** A wrk sweep holds
 > concurrency at the slot count and reports what the host can push; `latency.php` holds it
 > at 1 and reports what one request costs; `crossover.php` sweeps it and reports where the
-> model advantage sits at each load. This report has been wrong in *both* directions by
+> model advantage sits at each load. This report has been wrong in _both_ directions by
 > reading one pass as another — first claiming the warm model was worth nothing in
 > throughput (it was a config bug on the unwrapped arms), then reading a throughput ratio
 > against a published latency ratio. The three passes now agree with each other, and the
 > agreement is the result, not any single table.
 >
 > **A fourth pass was added after the first three disagreed with themselves.** A 10%
-> deficit against RoadRunner on *every* endpoint, in two implementations of the same
+> deficit against RoadRunner on _every_ endpoint, in two implementations of the same
 > design, is small enough to be a property of volucer's code rather than of the model —
 > and it was. CPU attribution found it in an hour, where wall clock had not found it in
 > three passes; see "Where the warm arm's 10% went". Every number in this report below is
@@ -116,33 +116,33 @@ round, which the blocked sweep above cannot do).
 
 ## Corrected summary
 
-| question | answer | how measured |
-|---|---|---|
-| Does the warm model pay off? | **yes, ~2.1x per request** (published: 3.3x) | sequential latency |
-| Does it show in aggregate throughput? | **yes on `/`, ~2.0x; and 2.24x on `/items` at c=32** (originally ~1.0x, which was a bug) | wrk, 12 slots |
-| At what load does it stop paying? | **it does not, within 1..16** - flat ~2.0x | crossover |
-| Why does the cold model idle 16% of the cores? | **it costs 1,063 us of CPU per request against 666** - a duty cycle, not headroom | CPU accounting |
-| Is loopback TCP a problem? | **no - T and U agree to 3%** (a 40 ms/request stall in volucer's client was) | latency + wire |
-| Which transport should I use? | **either** - keep `unix:` for permissions, not speed | both |
-| Does volucer agree with RoadRunner? | **it leads by 1-5% at c=32**, warm vs warm, with a cheaper front-end (136 us vs 155) | both |
-| What was the syscall-buffering pass worth? | **2-6% on `/`, nothing on `/items`** - a fixed cost removed, not a proportional one | A/B, two binaries |
-| Did the `worker_pool.rs` split cost anything? | **no - −0.00% median**, every cell inside the repeat spread | A/B, `A,B,B,A`, two binaries |
-| Is the crc32c fix still worth what it claimed? | **it is worth more, and it is the whole lead** - +10.2% to +16.3% over the reverted build, which is 5.8-12.9% *behind* RoadRunner | interleaved A/B, 168 cells |
-| What does it cost, per process? | **59 µs of server CPU per request** (184 → 125 µs), PHP column unchanged, and flat across c=8..32 | CPU attribution, 3 builds |
-| Is the c=16 loss a crossover? | **no - a ~1% deficit spread over c=16-20, every round's spread crossing 1.00** | dense A/B, 96 cells |
-| Is anything actually worse? | **the tail - p99 1.6 → 10.4 ms from c=12 to 24 while RoadRunner stays at 1.8 → 2.7 ms** | dense A/B, same 96 cells |
+| question                                       | answer                                                                                                                            | how measured                 |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| Does the warm model pay off?                   | **yes, ~2.1x per request** (published: 3.3x)                                                                                      | sequential latency           |
+| Does it show in aggregate throughput?          | **yes on `/`, ~2.0x; and 2.24x on `/items` at c=32** (originally ~1.0x, which was a bug)                                          | wrk, 12 slots                |
+| At what load does it stop paying?              | **it does not, within 1..16** - flat ~2.0x                                                                                        | crossover                    |
+| Why does the cold model idle 16% of the cores? | **it costs 1,063 us of CPU per request against 666** - a duty cycle, not headroom                                                 | CPU accounting               |
+| Is loopback TCP a problem?                     | **no - T and U agree to 3%** (a 40 ms/request stall in volucer's client was)                                                      | latency + wire               |
+| Which transport should I use?                  | **either** - keep `unix:` for permissions, not speed                                                                              | both                         |
+| Does volucer agree with RoadRunner?            | **it leads by 1-5% at c=32**, warm vs warm, with a cheaper front-end (136 us vs 155)                                              | both                         |
+| What was the syscall-buffering pass worth?     | **2-6% on `/`, nothing on `/items`** - a fixed cost removed, not a proportional one                                               | A/B, two binaries            |
+| Did the `worker_pool.rs` split cost anything?  | **no - −0.00% median**, every cell inside the repeat spread                                                                       | A/B, `A,B,B,A`, two binaries |
+| Is the crc32c fix still worth what it claimed? | **it is worth more, and it is the whole lead** - +10.2% to +16.3% over the reverted build, which is 5.8-12.9% _behind_ RoadRunner | interleaved A/B, 168 cells   |
+| What does it cost, per process?                | **59 µs of server CPU per request** (184 → 125 µs), PHP column unchanged, and flat across c=8..32                                 | CPU attribution, 3 builds    |
+| Is the c=16 loss a crossover?                  | **no - a ~1% deficit spread over c=16-20, every round's spread crossing 1.00**                                                    | dense A/B, 96 cells          |
+| Is anything actually worse?                    | **the tail - p99 1.6 → 10.4 ms from c=12 to 24 while RoadRunner stays at 1.8 → 2.7 ms**                                           | dense A/B, same 96 cells     |
 
 Everything below is the detail behind that table.
 
 ## `GET /` — the server and the model
 
-| arm | server | model | c=1 | c=4 | c=8 | c=16 | c=32 |
-|---|---|---|---|---|---|---|---|
-| **P** | volucer | warm worker, pipe | 3,268 | 12,970 | 23,278 | 34,394 | 36,008 |
-| **R** | RoadRunner | warm worker, pipe | 2,999 | 11,143 | 19,730 | 33,462 | 35,513 |
-| **F** | nginx + php-fpm | cold, unix socket | 1,823 | 6,504 | 11,638 | 18,365 | 17,960 |
-| **U** | volucer | cold, unix socket | 1,571 | 5,631 | 9,419 | 14,397 | 16,126 |
-| **T** | volucer | cold, loopback TCP | 1,534 | 5,866 | 9,736 | 14,212 | 16,744 |
+| arm   | server          | model              | c=1   | c=4    | c=8    | c=16   | c=32   |
+| ----- | --------------- | ------------------ | ----- | ------ | ------ | ------ | ------ |
+| **P** | volucer         | warm worker, pipe  | 3,268 | 12,970 | 23,278 | 34,394 | 36,008 |
+| **R** | RoadRunner      | warm worker, pipe  | 2,999 | 11,143 | 19,730 | 33,462 | 35,513 |
+| **F** | nginx + php-fpm | cold, unix socket  | 1,823 | 6,504  | 11,638 | 18,365 | 17,960 |
+| **U** | volucer         | cold, unix socket  | 1,571 | 5,631  | 9,419  | 14,397 | 16,126 |
+| **T** | volucer         | cold, loopback TCP | 1,534 | 5,866  | 9,736  | 14,212 | 16,744 |
 
 Ratios at c=32: **P/F 2.00×**, **R/F 1.98×**, **T/U 1.04×**.
 
@@ -155,13 +155,13 @@ comes from not booting the framework, not from the pipe.
 
 ## `GET /items` — throughput
 
-| arm | server | model | c=1 | c=4 | c=8 | c=16 | c=32 |
-|---|---|---|---|---|---|---|---|
-| **P** | volucer | warm worker, pipe | 1,790 | 6,893 | 11,523 | 16,696 | 18,655 |
-| **R** | RoadRunner | warm worker, pipe | 1,727 | 6,535 | 10,957 | 17,190 | 17,804 |
-| **F** | nginx + php-fpm | cold, unix socket | 808 | 3,049 | 5,430 | 8,412 | 8,325 |
-| **U** | volucer | cold, unix socket | 654 | 2,696 | 4,616 | 7,240 | 8,179 |
-| **T** | volucer | cold, loopback TCP | 651 | 2,838 | 4,736 | 7,015 | 8,014 |
+| arm   | server          | model              | c=1   | c=4   | c=8    | c=16   | c=32   |
+| ----- | --------------- | ------------------ | ----- | ----- | ------ | ------ | ------ |
+| **P** | volucer         | warm worker, pipe  | 1,790 | 6,893 | 11,523 | 16,696 | 18,655 |
+| **R** | RoadRunner      | warm worker, pipe  | 1,727 | 6,535 | 10,957 | 17,190 | 17,804 |
+| **F** | nginx + php-fpm | cold, unix socket  | 808   | 3,049 | 5,430  | 8,412  | 8,325  |
+| **U** | volucer         | cold, unix socket  | 654   | 2,696 | 4,616  | 7,240  | 8,179  |
+| **T** | volucer         | cold, loopback TCP | 651   | 2,838 | 4,736  | 7,015  | 8,014  |
 
 Ratios at c=32: **P/F 2.24×**, **R/F 2.14×**, **T/U 0.98×**.
 
@@ -173,7 +173,7 @@ happened to have installed. With xdebug loaded the two warm arms ran at roughly 
 with every arm given the same PHP they roughly doubled and the cold arms did not move. See
 "What this says about the deployment model" for the before/after.
 
-The T column in the *first* version of this file read **198–281 rps** on `/items` and was
+The T column in the _first_ version of this file read **198–281 rps** on `/items` and was
 called a measurement artifact of the single-connection sweep. It was not an artifact: T was
 stalling 40 ms per request in volucer's client, which is now fixed, and T now sits within
 2% of U at every concurrency.
@@ -186,13 +186,13 @@ stalling 40 ms per request in volucer's client, which is now fixed, and T now si
 `curl_exec` at a time, a single reused connection, an untimed verified warm-up, 1000
 iterations × 10 runs. Median of the run medians, milliseconds:
 
-| arm | `GET /` | `GET /items` | vs the warm arms |
-|---|---|---|---|
-| **P** volucer worker (warm) | 0.356 | **0.585** | 1.00× |
-| **R** RoadRunner (warm) | 0.386 | **0.633** | 1.00× |
-| **F** nginx + php-fpm (cold) | 0.592 | 1.242 | 1.66× / **2.12×** |
-| **U** volucer cold, unix (cold) | 0.701 | 1.521 | 1.97× / **2.60×** |
-| **T** volucer cold, TCP (cold) | 0.713 | 1.505 | 2.00× / **2.57×** |
+| arm                             | `GET /` | `GET /items` | vs the warm arms  |
+| ------------------------------- | ------- | ------------ | ----------------- |
+| **P** volucer worker (warm)     | 0.356   | **0.585**    | 1.00×             |
+| **R** RoadRunner (warm)         | 0.386   | **0.633**    | 1.00×             |
+| **F** nginx + php-fpm (cold)    | 0.592   | 1.242        | 1.66× / **2.12×** |
+| **U** volucer cold, unix (cold) | 0.701   | 1.521        | 1.97× / **2.60×** |
+| **T** volucer cold, TCP (cold)  | 0.713   | 1.505        | 2.00× / **2.57×** |
 
 Against `azera-competition`'s published `GET /items` for the same application
 (RoadRunner 0.4647 ms, php-fpm 1.5318 ms = 3.30×) this run gives **2.12×**, and on `GET /`
@@ -227,12 +227,12 @@ throughput. That was measured while the two warm arms were running an unwrapped 
 exposed to a host whose CLI PHP had xdebug loaded. Once every arm was given the same PHP,
 the warm arms roughly doubled and the cold arms did not move:
 
-| `/items`, conc 32 | with the unwrapped CLI PHP | with every arm wrapped | factor |
-|---|---|---|---|
-| **P** warm worker | 8,566 | **16,329** | 1.91× |
-| **R** RoadRunner | 8,727 | **18,258** | 2.09× |
-| **F** nginx + php-fpm | 8,552 | 8,540 | **1.00×** |
-| **T/U** spawn_cgi | 8,107 / 7,915 | 7,989 / 8,161 | 1.00× |
+| `/items`, conc 32     | with the unwrapped CLI PHP | with every arm wrapped | factor    |
+| --------------------- | -------------------------- | ---------------------- | --------- |
+| **P** warm worker     | 8,566                      | **16,329**             | 1.91×     |
+| **R** RoadRunner      | 8,727                      | **18,258**             | 2.09×     |
+| **F** nginx + php-fpm | 8,552                      | 8,540                  | **1.00×** |
+| **T/U** spawn_cgi     | 8,107 / 7,915              | 7,989 / 8,161          | 1.00×     |
 
 So the warm model is worth ~1.9× by throughput too, on the same route where a previous
 version of this report found no difference at all. That earlier "1.0×" was a configuration
@@ -264,10 +264,10 @@ and RoadRunner's binary is `rr`. The tree is the fact; the name is a guess.
 
 At concurrency 32 on `/items`, before the fix:
 
-| arm | rps | server CPU/req | PHP CPU/req | total |
-|---|---|---|---|---|
-| **P** volucer | 16,017 | **413 µs** | 608 µs | 1,021 µs |
-| **R** RoadRunner | 17,860 | **309 µs** | 704 µs | 1,013 µs |
+| arm              | rps    | server CPU/req | PHP CPU/req | total    |
+| ---------------- | ------ | -------------- | ----------- | -------- |
+| **P** volucer    | 16,017 | **413 µs**     | 608 µs      | 1,021 µs |
+| **R** RoadRunner | 17,860 | **309 µs**     | 704 µs      | 1,013 µs |
 
 The totals agree to **1%** while the two server halves differ by **1.34×**. The gap was
 entirely volucer's front-end — not the worker protocol, not the pipe, not PHP, not the
@@ -277,36 +277,36 @@ same application on both, so that half is noise between runs.)
 `scripts/diag-profile.sh` then named three functions. A flat `perf record` on the server
 process during a saturated run:
 
-| symbol | self time |
-|---|---|
+| symbol                                                               | self time      |
+| -------------------------------------------------------------------- | -------------- |
 | `volucer_worker::codec::Channel::read_frame` (with `crc32c` inlined) | **14.8–19.0%** |
-| `volucer_fcgi::client::parse_response_headers` | 5.2% |
-| `volucer_fcgi::client::split_response_body` | 5.2% |
+| `volucer_fcgi::client::parse_response_headers`                       | 5.2%           |
+| `volucer_fcgi::client::split_response_body`                          | 5.2%           |
 
 All three were a full pass over the response body, per request, in userspace:
 
 - **`crc32c` was a bit-by-bit implementation.** Eight shift-and-mask rounds per byte,
   written out by hand so the PHP SDK could mirror it line for line — but the SDK does not
-  need to mirror the *implementation*, only the *value*, and the standard check value was
+  need to mirror the _implementation_, only the _value_, and the standard check value was
   already pinned by test. A 12 KB page meant ~96,000 inner-loop iterations per request. It
   is now the `crc32c` crate, which uses the CPU's CRC32 instruction where it exists.
-  *The lesson worth keeping: "keep it dependency-free so another language can transcribe
-  it" is a sound argument about the encode path and a bad one about the verify path.*
+  _The lesson worth keeping: "keep it dependency-free so another language can transcribe
+  it" is a sound argument about the encode path and a bad one about the verify path._
 - **`parse_response_headers` began with `String::from_utf8_lossy(stdout)`** — validating
   UTF-8 across the entire payload, body included, and copying it when invalid, to find a
   separator that a byte search finds for free. It was also a correctness bug: the body
   offset was computed on a `String` whose length differs from the slice's, so a non-UTF-8
-  byte *in the body* could move the located header terminator.
+  byte _in the body_ could move the located header terminator.
 - **`split_response_body` searched for the same separator a second time**, over a body the
   header parser had just been through, using `windows(4).position` — four bytes compared at
   every offset of 12 KB, twice.
 
 And after, measured the same way on the same host:
 
-| arm, conc 32, `/items` | rps | server CPU/req | vs RoadRunner |
-|---|---|---|---|
-| **P** volucer | **18,946** | **137 µs** | 0.89× |
-| **R** RoadRunner | 18,019 | 153 µs | 1.00× |
+| arm, conc 32, `/items` | rps        | server CPU/req | vs RoadRunner |
+| ---------------------- | ---------- | -------------- | ------------- |
+| **P** volucer          | **18,946** | **137 µs**     | 0.89×         |
+| **R** RoadRunner       | 18,019     | 153 µs         | 1.00×         |
 
 **volucer's front-end is now cheaper than RoadRunner's as well as faster end to end.**
 `perf` no longer lists any volucer function above 1.3%.
@@ -347,17 +347,17 @@ Both were measuring a real effect and misnaming its owner. `spawn_cgi` over TCP 
   (`out_buf[1024*8]`). A response larger than 8 KiB leaves a short final segment, and Nagle
   withholds it until the previous data is acknowledged.
 - The connection is keep-alive, so Linux's ACK is a **delayed ACK — 40 ms on this host**.
-- The withheld tail is still unacknowledged when the *next* request arrives, so the stall
+- The withheld tail is still unacknowledged when the _next_ request arrives, so the stall
   repeats on every request rather than only the first. That is also why a 5 KB page was
   slow: the previous response's tail is permanently outstanding.
 
 Measured on one slot, sequential, `/items`:
 
-| | per request | `TcpExtDelayedACKs` |
-|---|---|---|
-| T over loopback TCP, before | **42.005 ms** | 10,054 |
-| T over loopback TCP, after | **1.238 ms** | **0** |
-| U over a unix socket (control) | 1.219 ms | 0 |
+|                                | per request   | `TcpExtDelayedACKs` |
+| ------------------------------ | ------------- | ------------------- |
+| T over loopback TCP, before    | **42.005 ms** | 10,054              |
+| T over loopback TCP, after     | **1.238 ms**  | **0**               |
+| U over a unix socket (control) | 1.219 ms      | 0                   |
 
 42.005 ms with a 0.05 ms spread is a timer, not a rate: 40 ms of delayed ACK plus ~2 ms of
 work. The wire trace agreed, showing php-cgi's trailing 1728-byte segment leaving **10 µs
@@ -387,7 +387,7 @@ number that is suspiciously round in wall time is a timer, not a rate.**
 
 ### The buffering pass: what the syscall cut was worth in wall clock
 
-Hazard 38 in `volucer/internal/plan.md` replaced every unbuffered transport stream with a
+Volucer's buffering pass replaced every unbuffered transport stream with a
 buffered one, so a frame — a header followed by a payload — stops costing one `read(2)` per
 field. The counted syscalls fell a long way: the worker's response read went **6 → 1**, the
 FastCGI client's reply **4 → 1**, and the front-end's handling of a twelve-record request
@@ -397,24 +397,24 @@ Those are syscall counts, not throughput, and the difference is worth measuring 
 assuming. Two binaries — one from the commit before the pass, one from after — on the same
 host, same harness, three repeats, medians:
 
-| arm | endpoint | conc | before | after | |
-|---|---|---|---|---|---|
-| P worker (pipe) | `/` | 32 | 36,986 | **38,141** | +3.1% |
-| P worker (pipe) | `/` | 8 | 23,800 | 24,320 | +2.2% |
-| T spawn_cgi (TCP) | `/` | 32 | 15,901 | **16,868** | **+6.1%** |
-| U spawn_cgi (unix) | `/` | 32 | 16,506 | 16,900 | +2.4% |
-| T spawn_cgi (TCP) | `/items` | 32 | 8,006 | 8,009 | 0% |
-| U spawn_cgi (unix) | `/items` | 32 | 8,353 | 8,254 | −1.2% |
-| P worker (pipe) | `/items` | 32 | 18,739 | 19,438 | +3.7% |
+| arm                | endpoint | conc | before | after      |           |
+| ------------------ | -------- | ---- | ------ | ---------- | --------- |
+| P worker (pipe)    | `/`      | 32   | 36,986 | **38,141** | +3.1%     |
+| P worker (pipe)    | `/`      | 8    | 23,800 | 24,320     | +2.2%     |
+| T spawn_cgi (TCP)  | `/`      | 32   | 15,901 | **16,868** | **+6.1%** |
+| U spawn_cgi (unix) | `/`      | 32   | 16,506 | 16,900     | +2.4%     |
+| T spawn_cgi (TCP)  | `/items` | 32   | 8,006  | 8,009      | 0%        |
+| U spawn_cgi (unix) | `/items` | 32   | 8,353  | 8,254      | −1.2%     |
+| P worker (pipe)    | `/items` | 32   | 18,739 | 19,438     | +3.7%     |
 
 So: **2–6% where the request and response are small, and nothing where the request already
 spends its time elsewhere.** `/items` runs an ORM query and a 12 KB render, so six saved
-syscalls on each side vanish into noise — the spread *within* one binary is larger than the
+syscalls on each side vanish into noise — the spread _within_ one binary is larger than the
 difference between them (T's `/items` c=32 repeats were 8,006 / 8,275 / 8,448).
 
 Two caveats, stated rather than buried. The A/B is **not a clean isolation**: the earlier
 binary is the commit before the buffering pass, which also predates two other commits, so
-part of the gain belongs to those. And the large 40-read figure buys the *least* throughput,
+part of the gain belongs to those. And the large 40-read figure buys the _least_ throughput,
 because in practice nginx sends the whole CGI environment in **one** `PARAMS` record — the
 twelve-record request is what this front-end tolerates, not what it receives.
 
@@ -433,12 +433,12 @@ which none of the intervening commits touch.
 So this is a different instrument. Four variants, each measured **inside the same round**, with
 the starting order rotated by round so a drift of any shape charges every variant equally:
 
-| variant | what it is |
-|---|---|
-| `new-req` | current build, `checksum = "required"` — what every table above used |
-| `new-opt` | current build, `checksum = "optional"` — the knob hazard 41 added |
+| variant   | what it is                                                             |
+| --------- | ---------------------------------------------------------------------- |
+| `new-req` | current build, `checksum = "required"` — what every table above used   |
+| `new-opt` | current build, `checksum = "optional"` — the knob hazard 41 added      |
 | `old-req` | current build with **only** `crc32c` reverted to the hand-written loop |
-| `rr` | RoadRunner — shares no code with any of the other three |
+| `rr`      | RoadRunner — shares no code with any of the other three                |
 
 `rr` is the control and the reason the result is legible. 7 rounds × 2 endpoints × 3 concurrency
 levels = **168 measured cells, 0 failed**, and the leak guard reports clean after every variant.
@@ -457,12 +457,12 @@ bit-by-bit loop it replaced — in a second checkout, with the two binaries conf
 behaviour not at all, because both return **byte-identical** bodies for both endpoints and the
 pinned `crc32c_matches_the_standard_check_value` test still passes on the reverted tree.
 
-| ratio, median over 7 rounds | `/` c=8 | `/` c=16 | `/` c=32 | `/items` c=8 | `/items` c=16 | `/items` c=32 |
-|---|---|---|---|---|---|---|
-| **`crc32c` fix** (`new-req`/`old-req`) | **+11.8%** | **+11.4%** | **+16.3%** | **+10.2%** | **+12.1%** | **+13.7%** |
-| checksum option (`new-opt`/`new-req`) | +2.0% | +2.9% | +2.5% | +3.0% | +2.7% | +2.8% |
-| lead over `rr` (`new-req`/`rr`) | +18.0% | +4.6% | +4.2% | +3.3% | **−1.7%** | +7.0% |
-| **pre-fix vs `rr`** (`old-req`/`rr`) | **+5.3%** | **−6.5%** | **−9.1%** | **−5.8%** | **−12.9%** | **−6.2%** |
+| ratio, median over 7 rounds            | `/` c=8    | `/` c=16   | `/` c=32   | `/items` c=8 | `/items` c=16 | `/items` c=32 |
+| -------------------------------------- | ---------- | ---------- | ---------- | ------------ | ------------- | ------------- |
+| **`crc32c` fix** (`new-req`/`old-req`) | **+11.8%** | **+11.4%** | **+16.3%** | **+10.2%**   | **+12.1%**    | **+13.7%**    |
+| checksum option (`new-opt`/`new-req`)  | +2.0%      | +2.9%      | +2.5%      | +3.0%        | +2.7%         | +2.8%         |
+| lead over `rr` (`new-req`/`rr`)        | +18.0%     | +4.6%      | +4.2%      | +3.3%        | **−1.7%**     | +7.0%         |
+| **pre-fix vs `rr`** (`old-req`/`rr`)   | **+5.3%**  | **−6.5%**  | **−9.1%**  | **−5.8%**    | **−12.9%**    | **−6.2%**     |
 
 The first row is positive in **all 42 paired cells** — the spread never crosses 1.00 anywhere.
 The last row is negative in all six cells of every round. That is the answer, and it is stronger
@@ -473,9 +473,9 @@ either extended it or spent it.
 
 Per-round spreads, so the claim can be checked rather than believed:
 
-| ratio | `/` c=32 | `/items` c=32 |
-|---|---|---|
-| `crc32c` fix | 1.163× `[1.131..1.172]` | 1.137× `[1.115..1.154]` |
+| ratio           | `/` c=32                | `/items` c=32           |
+| --------------- | ----------------------- | ----------------------- |
+| `crc32c` fix    | 1.163× `[1.131..1.172]` | 1.137× `[1.115..1.154]` |
 | checksum option | 1.025× `[1.000..1.049]` | 1.028× `[0.995..1.055]` |
 
 The difference between those two rows is the whole methodological point: the fix's spread is far
@@ -487,14 +487,14 @@ is a real cost reported through a noise floor larger than it is.**
 A ratio says a cost exists; CPU attribution says whose it is. Per request on `/items`, median of
 three rounds at each concurrency:
 
-| build | c | server µs | PHP µs | total µs | rps |
-|---|---|---|---|---|---|
-| `old-req` — bit-by-bit loop | 32 | **184** | 287 | 471 | 16,957 |
-| `new-req` — crate, hardware CRC32 | 32 | **125** | 283 | 408 | 19,428 |
-| `new-opt` — crate, checksum off | 32 | **121** | **281** | 402 | 19,414 |
-| `old-req` | 16 | 181 | 289 | 470 | 15,627 |
-| `new-req` | 16 | 122 | 284 | 406 | 17,581 |
-| `new-opt` | 16 | 119 | 282 | 401 | 17,708 |
+| build                             | c   | server µs | PHP µs  | total µs | rps    |
+| --------------------------------- | --- | --------- | ------- | -------- | ------ |
+| `old-req` — bit-by-bit loop       | 32  | **184**   | 287     | 471      | 16,957 |
+| `new-req` — crate, hardware CRC32 | 32  | **125**   | 283     | 408      | 19,428 |
+| `new-opt` — crate, checksum off   | 32  | **121**   | **281** | 402      | 19,414 |
+| `old-req`                         | 16  | 181       | 289     | 470      | 15,627 |
+| `new-req`                         | 16  | 122       | 284     | 406      | 17,581 |
+| `new-opt`                         | 16  | 119       | 282     | 401      | 17,708 |
 
 The fix removes **59 µs of server CPU per request (184 → 125, −32%)** and leaves the PHP column
 where it was (287 → 283). That is exactly what it should do and no more: the server hashes every
@@ -505,7 +505,7 @@ hardware-accelerated. The same column moves 181 → 122 at c=16. So the 10–16%
 Two things this does **not** say, both visible above. The warm arm at 19,400 rps uses **7.8 of 12
 cores**, so it is not CPU-saturated at this load — which is why the throughput gain is a little
 smaller than the CPU gain, and why it is not uniform across concurrency. And the PHP column is not
-*identical* across the three builds; it moves by ~6 µs in the same direction as the server column
+_identical_ across the three builds; it moves by ~6 µs in the same direction as the server column
 because the worker's hash is part of what the option removes, and the residue is run noise.
 
 **And the per-request cost is flat in concurrency, for both servers**, which is what makes the
@@ -513,26 +513,26 @@ one losing cell look like noise rather than a mechanism. Server CPU per request 
 median of three rounds at each level:
 
 | concurrency | volucer | RoadRunner | volucer's advantage |
-|---|---|---|---|
-| c=8 | 124 µs | 159 µs | −35 µs |
-| c=12 | 121 µs | 160 µs | −39 µs |
-| c=16 | 123 µs | 154 µs | −31 µs |
-| c=20 | 124 µs | 151 µs | −27 µs |
-| c=24 | 124 µs | 152 µs | −28 µs |
-| c=32 | 126 µs | 152 µs | −26 µs |
+| ----------- | ------- | ---------- | ------------------- |
+| c=8         | 124 µs  | 159 µs     | −35 µs              |
+| c=12        | 121 µs  | 160 µs     | −39 µs              |
+| c=16        | 123 µs  | 154 µs     | −31 µs              |
+| c=20        | 124 µs  | 151 µs     | −27 µs              |
+| c=24        | 124 µs  | 152 µs     | −28 µs              |
+| c=32        | 126 µs  | 152 µs     | −26 µs              |
 
 Volucer's per-request cost does not move at all across a 4× range of offered load, and
 RoadRunner's moves by 9 µs. If c=16 were a genuine crossover — the point at which volucer's
 12 slots stop covering the offered concurrency — the volucer column would be the one to bend
-there. It does not bend anywhere. What *does* move is the tail: see "A single cell that is not a
+there. It does not bend anywhere. What _does_ move is the tail: see "A single cell that is not a
 crossover, and the tail that is".
 
 ### A correction: hazard 41 measured the checksum against half its own cost
 
 Hazard 41 concluded the optional checksum was "worth about 0.26%", from a microbenchmark that
 encoded a whole response with the SDK 50,000 times and compared checked against unchecked. That
-number is not wrong, it is **incomplete in a systematic way**: it timed the *Rust-side frame
-encoding*, and `crc32c` is computed **twice** per response — once by the PHP worker that writes the
+number is not wrong, it is **incomplete in a systematic way**: it timed the _Rust-side frame
+encoding_, and `crc32c` is computed **twice** per response — once by the PHP worker that writes the
 `BODY` frame, and once by the server that reads it back. The worker's copy is the larger half.
 
 Measured end to end the cost is **~6 µs of CPU per request, about 1.5%** (server 125 → 121, PHP
@@ -554,13 +554,13 @@ above it — so it was chased with a denser sweep: the same two variants at c=12
 times. 96 cells, none failed.
 
 | concurrency | volucer | RoadRunner | volucer's lead | per-round spread |
-|---|---|---|---|---|
-| c=12 | 15,678 | 15,482 | +1.3% | 1.003–1.041 |
-| c=14 | 16,932 | 16,745 | +1.1% | 0.985–1.018 |
-| **c=16** | 17,560 | 17,759 | **−1.1%** | 0.965–1.018 |
-| **c=18** | 18,010 | 18,250 | **−1.3%** | 0.971–1.001 |
-| c=20 | 18,336 | 18,413 | −0.4% | 0.979–1.017 |
-| c=24 | 18,827 | 18,272 | +3.0% | 1.009–1.055 |
+| ----------- | ------- | ---------- | -------------- | ---------------- |
+| c=12        | 15,678  | 15,482     | +1.3%          | 1.003–1.041      |
+| c=14        | 16,932  | 16,745     | +1.1%          | 0.985–1.018      |
+| **c=16**    | 17,560  | 17,759     | **−1.1%**      | 0.965–1.018      |
+| **c=18**    | 18,010  | 18,250     | **−1.3%**      | 0.971–1.001      |
+| c=20        | 18,336  | 18,413     | −0.4%          | 0.979–1.017      |
+| c=24        | 18,827  | 18,272     | +3.0%          | 1.009–1.055      |
 
 **There is no crossover.** The deficit is real but shallow (−1%, or about 200 rps out of
 18,000) and it sits in a band from c=16 to c=20, not at a threshold; the spread crosses 1.00
@@ -574,16 +574,16 @@ The dense sweep did turn up something the sparse one could not: **a tail-latency
 that has nothing to do with throughput.**
 
 | concurrency | volucer p99 | RoadRunner p99 | ratio |
-|---|---|---|---|
-| c=12 | 1,640 µs | 1,760 µs | 0.93× |
-| c=14 | 2,195 µs | 1,930 µs | 1.14× |
-| c=16 | 3,470 µs | 2,105 µs | 1.65× |
-| c=18 | 5,255 µs | 2,275 µs | 2.31× |
-| c=20 | 6,770 µs | 2,415 µs | 2.80× |
-| c=24 | 10,425 µs | 2,690 µs | 3.88× |
+| ----------- | ----------- | -------------- | ----- |
+| c=12        | 1,640 µs    | 1,760 µs       | 0.93× |
+| c=14        | 2,195 µs    | 1,930 µs       | 1.14× |
+| c=16        | 3,470 µs    | 2,105 µs       | 1.65× |
+| c=18        | 5,255 µs    | 2,275 µs       | 2.31× |
+| c=20        | 6,770 µs    | 2,415 µs       | 2.80× |
+| c=24        | 10,425 µs   | 2,690 µs       | 3.88× |
 
 RoadRunner's tail is **flat** above its slot count, which is what a pool that holds a queue
-looks like. Volucer's grows without bound and its p50 stays *better* than RoadRunner's at
+looks like. Volucer's grows without bound and its p50 stays _better_ than RoadRunner's at
 every level, so the mean is fine and the tail is not. A p99 that grows with offered load while
 the median improves is a signature of **queueing with no bound on the queue**, not of
 overload — the work is not slower, it is waiting longer before it starts.
@@ -591,13 +591,13 @@ overload — the work is not slower, it is waiting longer before it starts.
 The mechanism is a hypothesis and is labelled as one. `pick_slot` (hazard 50's file,
 `worker_pool/mod.rs:355`) advances an atomic cursor and then takes **each candidate slot's
 mutex** until it finds one whose `is_available()` is true; `is_available()` is
-`exchange.is_some() && child has not exited` — it means *the worker is healthy*, not *the slot
-is free*. The mutex is then held across the whole request, so at c=32 thirty-two connection
+`exchange.is_some() && child has not exited` — it means _the worker is healthy_, not _the slot
+is free_. The mutex is then held across the whole request, so at c=32 thirty-two connection
 threads contend for twelve slot mutexes with no fair queue and no backpressure. That would
 produce exactly this shape.
 
 This is worth recording as a finding rather than a task because it is not a throughput problem
-and fixing it would not move any number in this report. It is a *deployment* property: a
+and fixing it would not move any number in this report. It is a _deployment_ property: a
 `p99` that reaches 10 ms at 24 concurrent connections is visible to a user in a way that a 1%
 throughput deficit is not, and a resident-worker server that is faster on average and worse at
 the tail is a different proposition from one that is faster on both.
@@ -606,20 +606,20 @@ the tail is a different proposition from one that is faster on both.
 
 The pool now measures it. `wait_us` accumulates, per slot, the time each request spent between
 asking for a slot and holding one, and counts each wait into powers of two so a percentile can
-be read out of it. Both figures are produced *inside the server* and printed at shutdown
+be read out of it. Both figures are produced _inside the server_ and printed at shutdown
 (volucer `4dd402a`, `a6df392`), so they cannot include anything a client did.
 `scripts/diag-slots.sh` drives it.
 
 Two experiments were run on the benchmark host, three repeats each, `/items`, 8 s per run.
 
-**First, is the client at fault?** The harness drives `wrk` as `-t$c -c$c`, so concurrency *is*
+**First, is the client at fault?** The harness drives `wrk` as `-t$c -c$c`, so concurrency _is_
 the thread count, and at c=32 the load generator owns 32 threads on a 12-core box. Holding
 concurrency at 32 and varying only the thread count changes nothing on the server side:
 
-| client threads | client p50 | client p99 | pool mean wait | pool p99 wait |
-|---|---|---|---|---|
-| 2 | 1.16 ms | **17.80 ms** | 895 µs | 16.4 ms |
-| 32 | 1.19 ms | **18.33 ms** | 898 µs | 16.4 ms |
+| client threads | client p50 | client p99   | pool mean wait | pool p99 wait |
+| -------------- | ---------- | ------------ | -------------- | ------------- |
+| 2              | 1.16 ms    | **17.80 ms** | 895 µs         | 16.4 ms       |
+| 32             | 1.19 ms    | **18.33 ms** | 898 µs         | 16.4 ms       |
 
 p99 moves by 3%, and the pool's own figures do not move at all. **The load generator is not the
 cause.** This hypothesis was mine, it was plausible, and the measurement refutes it.
@@ -627,20 +627,20 @@ cause.** This hypothesis was mine, it was plausible, and the measurement refutes
 **Second, does it scale with excess clients, as queueing must?** Concurrency equals threads:
 
 | concurrency | excess over 12 workers | client p50 | client p99 | pool mean | pool p50 | pool p99 | pool mean as share of time in system | client `p99−p50` | pool `p99−p50` |
-|---|---|---|---|---|---|---|---|---|---|
-| 12 | 0 | 0.71 ms | 1.68 ms | 34 µs | 2 µs | 1.02 ms | 4% | 0.97 ms | 1.02 ms |
-| 16 | 4 | 0.79 ms | 3.94 ms | 157 µs | 3 µs | 2.05 ms | 17% | 3.15 ms | 2.05 ms |
-| 20 | 8 | 0.88 ms | 7.68 ms | 325 µs | 4 µs | 8.19 ms | 30% | 6.80 ms | 8.19 ms |
-| 24 | 12 | 0.97 ms | 10.74 ms | 509 µs | 4 µs | 8.19 ms | 40% | 9.77 ms | 8.19 ms |
-| 32 | 20 | 1.16 ms | 18.98 ms | 906 µs | 19 µs | 16.4 ms | 54% | 17.82 ms | 16.37 ms |
+| ----------- | ---------------------- | ---------- | ---------- | --------- | -------- | -------- | ------------------------------------ | ---------------- | -------------- |
+| 12          | 0                      | 0.71 ms    | 1.68 ms    | 34 µs     | 2 µs     | 1.02 ms  | 4%                                   | 0.97 ms          | 1.02 ms        |
+| 16          | 4                      | 0.79 ms    | 3.94 ms    | 157 µs    | 3 µs     | 2.05 ms  | 17%                                  | 3.15 ms          | 2.05 ms        |
+| 20          | 8                      | 0.88 ms    | 7.68 ms    | 325 µs    | 4 µs     | 8.19 ms  | 30%                                  | 6.80 ms          | 8.19 ms        |
+| 24          | 12                     | 0.97 ms    | 10.74 ms   | 509 µs    | 4 µs     | 8.19 ms  | 40%                                  | 9.77 ms          | 8.19 ms        |
+| 32          | 20                     | 1.16 ms    | 18.98 ms   | 906 µs    | 19 µs    | 16.4 ms  | 54%                                  | 17.82 ms         | 16.37 ms       |
 
 Three things in that table are the finding.
 
 - **The growth starts at concurrency 13, not at a plateau.** This kills a hypothesis I had
   offered earlier in this work — that a request is served the instant the cursor points at a
   free slot, so the wait is a step at c = workers + 1 and flat thereafter. A step shape would
-  be *scheduling*: wait for the one request already in front of you. This shape — 34, 157,
-  325, 509, 906 µs across 0, 4, 8, 12, 20 excess clients — is *accumulating queue*: each new
+  be _scheduling_: wait for the one request already in front of you. This shape — 34, 157,
+  325, 509, 906 µs across 0, 4, 8, 12, 20 excess clients — is _accumulating queue_: each new
   client waits for everything queued ahead of it. The old docstring's claim that the scan
   "never blocks on a busy worker" is not merely imprecise, it described a design that is not
   what runs.
@@ -655,7 +655,7 @@ Three things in that table are the finding.
   spends 0.91 ms of its 1.69 ms waiting for a slot. It is not pure tail: half the request's
   average latency at high concurrency is spent waiting for a worker that is busy with someone
   else, which is the throughput plateau in another form. A fair queue would not remove that
-  time; it would spread it evenly instead of concentrating it, which is a latency *variance*
+  time; it would spread it evenly instead of concentrating it, which is a latency _variance_
   fix rather than a latency fix.
 
 So the hypothesis is confirmed with a correction: the pool does not block waiting for a
@@ -667,7 +667,7 @@ because nothing pushes back.
 defect and its magnitude; it does not compare candidate fixes. Giving the pool a fair queue, or
 making the scan take `try_lock` so a request skips a busy slot instead of queueing for it, are
 both consistent with this data and would need to be built and measured. What is now settled is
-that there *is* something to fix, that it is in `pick_slot`, and that it is worth 0.9 ms of mean
+that there _is_ something to fix, that it is in `pick_slot`, and that it is worth 0.9 ms of mean
 latency and a 16 ms p99 at c=32 — which is enough to justify the work that a hypothesis alone
 was not.
 
@@ -677,7 +677,7 @@ The free list was chosen over `try_lock` for a reason the data already implied: 
 structural.** 32 clients against 12 workers at ~600 µs each means ~20 requests in flight beyond
 the workers, and no scheduling change removes that time — it is Little's law, and it is why the
 two sweeps above agree on ~900 µs at c=32 despite being otherwise different experiments. What a
-fix *can* change is who that time is charged to. `try_lock` scanning for a free slot is a race
+fix _can_ change is who that time is charged to. `try_lock` scanning for a free slot is a race
 rather than a fairness mechanism, and at c=32, where the damage is, all twelve slots are usually
 busy — there is little free to skip to. The fair queue makes a request wait for the slot it will
 actually use. `pick_slot`, the cursor and the healthy-not-free test are gone, replaced by a lease
@@ -685,13 +685,13 @@ actually use. `pick_slot`, the cursor and the healthy-not-free test are gone, re
 
 Same two sweeps, on the idle host, three repeats per level:
 
-| concurrency | rps before → after | client p50 | client p99 | pool mean wait | pool p99 wait |
-|---|---|---|---|---|---|
-| 12 | 15,686 → 16,342 (**+4.2%**) | 0.71 → 0.69 ms | 1.68 → 1.41 ms (−16%) | 34 → 0 µs | 1.02 → 0.008 ms |
-| 16 | 17,548 → 19,884 (**+13.3%**) | 0.79 → 0.75 ms | 3.94 → 1.57 ms (−60%) | 157 → 30 µs | 2.05 → 0.51 ms |
-| 20 | 18,581 → 22,114 (**+19.0%**) | 0.88 → 0.85 ms | 7.68 → 1.78 ms (−77%) | 325 → 123 µs | 8.19 → 1.02 ms |
-| 24 | 18,799 → 22,787 (**+21.2%**) | 0.97 → 0.99 ms | 10.74 → 2.24 ms (−79%) | 509 → 271 µs | 8.19 → 2.05 ms |
-| 32 | 18,982 → 22,360 (**+17.8%**) | 1.16 → 1.35 ms | 18.98 → 3.68 ms (−81%) | 906 → 625 µs | 16.4 → 4.10 ms |
+| concurrency | rps before → after           | client p50     | client p99             | pool mean wait | pool p99 wait   |
+| ----------- | ---------------------------- | -------------- | ---------------------- | -------------- | --------------- |
+| 12          | 15,686 → 16,342 (**+4.2%**)  | 0.71 → 0.69 ms | 1.68 → 1.41 ms (−16%)  | 34 → 0 µs      | 1.02 → 0.008 ms |
+| 16          | 17,548 → 19,884 (**+13.3%**) | 0.79 → 0.75 ms | 3.94 → 1.57 ms (−60%)  | 157 → 30 µs    | 2.05 → 0.51 ms  |
+| 20          | 18,581 → 22,114 (**+19.0%**) | 0.88 → 0.85 ms | 7.68 → 1.78 ms (−77%)  | 325 → 123 µs   | 8.19 → 1.02 ms  |
+| 24          | 18,799 → 22,787 (**+21.2%**) | 0.97 → 0.99 ms | 10.74 → 2.24 ms (−79%) | 509 → 271 µs   | 8.19 → 2.05 ms  |
+| 32          | 18,982 → 22,360 (**+17.8%**) | 1.16 → 1.35 ms | 18.98 → 3.68 ms (−81%) | 906 → 625 µs   | 16.4 → 4.10 ms  |
 
 Three things there go beyond what was predicted, and the first is the one to be careful about.
 
@@ -709,10 +709,10 @@ Three things there go beyond what was predicted, and the first is the one to be 
   pessimistic, and the likely reason is that a fair queue also produces 40% fewer requests that
   spend time waiting at all, so there is less total queueing to share out.
 
-The trade that *was* expected did occur: **at c=32 the median is 16% worse** while the p99 is 81%
+The trade that _was_ expected did occur: **at c=32 the median is 16% worse** while the p99 is 81%
 better. That is the fairness doing what it was approved to do — the request that would have been
 served on contact now shares the queue — and it is confined to the range where there is something
-to share, because at c=12 the median is slightly *better*.
+to share, because at c=12 the median is slightly _better_.
 
 RoadRunner for contrast, from the dense sweep: at c=24 it measured 2.70 ms p99 with a 1.23 ms
 median. The fair queue gets 2.24 ms p99 with a 0.99 ms median — better on both, which is the first
@@ -732,10 +732,10 @@ row that is thrown away.
 
 Per-round ratios, so the claim can be checked rather than believed:
 
-| concurrency | new / pre-fair | spread over 7 rounds | new / RoadRunner | pre-fair / RoadRunner |
-|---|---|---|---|---|
-| **c=24** | **1.245× (+24.5%)** | 1.223–1.271 | 1.272× (+27.2%) | 1.030× (+3.0%) |
-| **c=32** | **1.229× (+22.9%)** | 1.197–1.244 | 1.302× (+30.2%) | 1.057× (+5.7%) |
+| concurrency | new / pre-fair      | spread over 7 rounds | new / RoadRunner | pre-fair / RoadRunner |
+| ----------- | ------------------- | -------------------- | ---------------- | --------------------- |
+| **c=24**    | **1.245× (+24.5%)** | 1.223–1.271          | 1.272× (+27.2%)  | 1.030× (+3.0%)        |
+| **c=32**    | **1.229× (+22.9%)** | 1.197–1.244          | 1.302× (+30.2%)  | 1.057× (+5.7%)        |
 
 The spread never crosses 1.00 at either level, and every one of the 14 paired comparisons is the
 same way. The control confirms it is volucer that moved rather than the host: on the same rounds
@@ -743,8 +743,8 @@ same way. The control confirms it is volucer that moved rather than the host: on
 for that binary in the interleaved A/B at the top of this report (+4.2% and +7.0% here, and −1.7% in
 the one `/items` c=16 cell of that pass)** — while the current build sits at +27% and +30%. The old
 build still lands exactly where it always did; the new one is 23–25% above it. So the blocked layout
-*understated* the gain, and the fair queue is the largest throughput effect this repository has
-measured — larger than the `crc32c` fix's +10–16%, which was called *"the whole lead"* over
+_understated_ the gain, and the fair queue is the largest throughput effect this repository has
+measured — larger than the `crc32c` fix's +10–16%, which was called _"the whole lead"_ over
 RoadRunner; the fix made volucer 4–7% faster than RoadRunner, this makes it 27–30%. The one larger
 effect measured here is not this project's code, and is not even a result: removing xdebug from the
 host's CLI PHP doubled the warm arms (8,566 → 16,329 rps, +91%), which was a configuration bug that
@@ -753,15 +753,15 @@ made one arm measure the host rather than the server.
 The pool's own columns move with the throughput rather than against it. Median over the seven
 rounds, measured inside the server:
 
-| concurrency | build | mean wait | wait p50 | wait p99 | client p50 | client p99 |
-|---|---|---|---|---|---|---|
-| c=24 | pre-fair | 522 µs | 8 µs | 8,192 µs | 1.00 ms | **10.92 ms** |
-| c=24 | **fair** | 263 µs | 256 µs | **2,048 µs** | 0.98 ms | **2.19 ms** |
-| c=32 | pre-fair | 887 µs | 64 µs | 16,384 µs | 1.21 ms | **17.44 ms** |
-| c=32 | **fair** | 587 µs | 1,024 µs | **4,096 µs** | 1.28 ms | **3.47 ms** |
+| concurrency | build    | mean wait | wait p50 | wait p99     | client p50 | client p99   |
+| ----------- | -------- | --------- | -------- | ------------ | ---------- | ------------ |
+| c=24        | pre-fair | 522 µs    | 8 µs     | 8,192 µs     | 1.00 ms    | **10.92 ms** |
+| c=24        | **fair** | 263 µs    | 256 µs   | **2,048 µs** | 0.98 ms    | **2.19 ms**  |
+| c=32        | pre-fair | 887 µs    | 64 µs    | 16,384 µs    | 1.21 ms    | **17.44 ms** |
+| c=32        | **fair** | 587 µs    | 1,024 µs | **4,096 µs** | 1.28 ms    | **3.47 ms**  |
 
 Three things to read there. **The p99 halves twice over** (10.92 → 2.19 ms at c=24, 17.44 → 3.47 ms at
-c=32), and it does so *while* the mean wait falls (522 → 263 µs). **The p50 rises**, from 8 µs to
+c=32), and it does so _while_ the mean wait falls (522 → 263 µs). **The p50 rises**, from 8 µs to
 256 µs, which is the fairness being visible: the request that used to be served on contact now
 shares the queue, so it waits a little and the unlucky request no longer waits 10 ms. And the client
 p50 at c=32 pays 0.07 ms for it (1.21 → 1.28 ms) — the same trade the blocked sweep showed, at less
@@ -787,14 +787,14 @@ Median of 3 runs x 400 iterations per client, milliseconds. The ratio column is
 **cold-over-warm** (F/P), the direction that reads larger when the resident model is further
 ahead — the convention `scripts/compare_runs.py` also uses.
 
-| conc | P volucer | R RoadRunner | F nginx+php-fpm | U volucer unix | T volucer TCP | F/P | F/R |
-|---|---|---|---|---|---|---|---|
-| 1 | 0.584 | 0.592 | 1.234 | 1.521 | 1.548 | **2.11×** | 2.08× |
-| 2 | 0.573 | 0.591 | 1.204 | 1.421 | 1.361 | 2.10× | 2.04× |
-| 4 | 0.589 | 0.649 | 1.239 | 1.382 | 1.339 | 2.10× | 1.91× |
-| 8 | 0.722 | 0.748 | 1.382 | 1.617 | 1.604 | 1.91× | 1.85× |
-| 12 | 0.836 | 0.836 | 1.507 | 1.936 | 1.870 | 1.80× | 1.80× |
-| 16 | 0.917 | 0.980 | 1.791 | 2.119 | 2.110 | **1.95×** | 1.83× |
+| conc | P volucer | R RoadRunner | F nginx+php-fpm | U volucer unix | T volucer TCP | F/P       | F/R   |
+| ---- | --------- | ------------ | --------------- | -------------- | ------------- | --------- | ----- |
+| 1    | 0.584     | 0.592        | 1.234           | 1.521          | 1.548         | **2.11×** | 2.08× |
+| 2    | 0.573     | 0.591        | 1.204           | 1.421          | 1.361         | 2.10×     | 2.04× |
+| 4    | 0.589     | 0.649        | 1.239           | 1.382          | 1.339         | 2.10×     | 1.91× |
+| 8    | 0.722     | 0.748        | 1.382           | 1.617          | 1.604         | 1.91×     | 1.85× |
+| 12   | 0.836     | 0.836        | 1.507           | 1.936          | 1.870         | 1.80×     | 1.80× |
+| 16   | 0.917     | 0.980        | 1.791           | 2.119          | 2.110         | **1.95×** | 1.83× |
 
 **The advantage does not cross over.** It is ~2.1× at concurrency 1, dips to ~1.8× in the
 middle, and is back to ~2.0× at 16. That is the opposite of the intuition that a
@@ -807,13 +807,13 @@ at c=12, where they are identical to three decimals.
 
 On `/` the same pass gives ~1.7–1.8× (F/P) and ~1.5–1.6× (F/R).
 
-Note that the cold arm's *absolute* penalty is much larger on `/items` (0.58 ms) than on
+Note that the cold arm's _absolute_ penalty is much larger on `/items` (0.58 ms) than on
 `/` (0.18 ms), which is more than a constant boot would explain. The cold arm appears to
 pay in proportion to what the request touches, plausibly because autoloading and lazy class
 resolution follow the code path. That is an inference from these numbers, not a separate
 measurement, and it is recorded as such.
 
-**Caveat, stated rather than hidden:** past concurrency 12 the *client* is the limit. The N
+**Caveat, stated rather than hidden:** past concurrency 12 the _client_ is the limit. The N
 client processes share the same 12 cores as the servers, and every latency in the table
 rises roughly linearly with N — including the two warm arms, which have no boot to pay. So
 the absolute values above 12 are not trustworthy, and above 12 even the ratios are muddied
@@ -821,7 +821,7 @@ once clients take scheduled time from server slots. A second machine to generate
 fix it; one is not available here.
 
 The first version of this measurement was wrong in this project's usual way. Driving N
-handles from one process with `curl_multi`, it reported concurrency 2 as *exactly* 2× the
+handles from one process with `curl_multi`, it reported concurrency 2 as _exactly_ 2× the
 latency of concurrency 1 on three unrelated servers, with throughput flat between them —
 which no real server does. Two client bugs: `curl_getinfo` read after
 `curl_multi_remove_handle` (every status 0), and `curl_multi_select($multi, 0.05)` whose
@@ -837,10 +837,10 @@ slightly lower (7,634 / 7,738 / 7,250 rps), so the pool was never the limit.
 
 Measuring CPU per request explains the idle time exactly:
 
-| arm, conc 32 | rps | total cores | busiest % of 12 | **total CPU per request** |
-|---|---|---|---|---|
-| P worker (warm) | 18,485 | 7.93 | 66% | **429 µs** |
-| T spawn_cgi (cold) | 7,951 | 9.76 | 81% | **1,228 µs** |
+| arm, conc 32       | rps    | total cores | busiest % of 12 | **total CPU per request** |
+| ------------------ | ------ | ----------- | --------------- | ------------------------- |
+| P worker (warm)    | 18,485 | 7.93        | 66%             | **429 µs**                |
+| T spawn_cgi (cold) | 7,951  | 9.76        | 81%             | **1,228 µs**              |
 
 Both close arithmetically: `18,485 × 429 µs = 7.93 cores` and `7,951 × 1,228 µs = 9.76
 cores`. The per-request model costs ~1.23 ms of CPU per request against ~0.43 ms, a ratio
@@ -849,7 +849,7 @@ it faster.
 
 Two numbers in this table moved in opposite directions when the front-end was fixed, and the
 movement is itself informative. The warm arm's CPU per request fell from 666 µs to 429 µs
-(the front-end's share was pure waste), but its *utilisation* fell too, from 86% to 66% —
+(the front-end's share was pure waste), but its _utilisation_ fell too, from 86% to 66% —
 because 12 workers now serve 18,485 rps in the same wall clock with less CPU each, leaving
 more of the machine idle. The cold arm's utilisation did not change, because it never had
 any waste to remove: its CPU is the framework boot, which is what it is measuring.
@@ -877,7 +877,7 @@ milliseconds.**
 
 **The boot is the framework's, and every cold arm pays it.** All four cold arms reach the
 same entry script (`public/index.php`) and boot the same `BenchApp` the warm arms use; they
-differ only in *when* the boot happens. That is the experiment, not a confound — but it
+differ only in _when_ the boot happens. That is the experiment, not a confound — but it
 does mean the FPM and `spawn_cgi` arms both carry the `azera-framework` boot, so a faster
 framework boot would shrink every cold arm together and leave the ranking unchanged.
 
@@ -903,8 +903,7 @@ a 200 or a config file, and each one silently produced a plausible wrong number:
   deleted the `php_admin_value` lines that set it. Statting every file per request is a
   silent per-request cost; the harness's ini probe catches it.
 - **nginx `try_files` served the front controller as a static file.** `try_files
-  /index.php =404;` tests `/index.php` on disk, finds it, serves the PHP **source** with a
-  200. The FPM arm returned its own source code and looked healthy. The vhost now has one
+/index.php =404;` tests `/index.php` on disk, finds it, serves the PHP **source** with a 200. The FPM arm returned its own source code and looked healthy. The vhost now has one
   `location` and no `try_files`.
 - **The FPM pool was deleted after every arm**, so the FPM arm — the last one — was never
   measured. Provisioning once and tearing down once are different jobs.
@@ -914,7 +913,7 @@ a 200 or a config file, and each one silently produced a plausible wrong number:
   interrupted run did. The teardown is in the `EXIT` trap.
 - **The leftover-php-cgi guard could not see the arms it was guarding.** It matched the
   literal string `php-cgi -b`, but arms T and U spawn PHP through the `php-cgi-bench`
-  wrapper, which puts its `-d` flags *before* `-b`:
+  wrapper, which puts its `-d` flags _before_ `-b`:
   `/usr/bin/php-cgi -d opcache.enable_cli=1 … -b 127.0.0.1:19300`. The pattern therefore
   matched **0** of the 12 children a running arm actually had — measured, on the bench host:
   0 while twelve were alive, and still 0 after a `kill -9` of the server left all twelve
@@ -925,7 +924,7 @@ a 200 or a config file, and each one silently produced a plausible wrong number:
 - **php-fpm ran as `www-data` against a `competition`-owned SQLite database** and 500'd
   every request; the pool now runs as the checkout's owner.
 
-Three more were found by *measuring*, rather than by reading, and each is described where
+Three more were found by _measuring_, rather than by reading, and each is described where
 it belongs above:
 
 - **A whole-payload `from_utf8_lossy` in the response header parser**, which both cost 5.2%
@@ -936,9 +935,8 @@ it belongs above:
 - **A second full scan for the separator the header parser had already found.** Same
   section.
 
-And one that was found by *not* trusting two measurements that agreed: the 10% deficit
+And one that was found by _not_ trusting two measurements that agreed: the 10% deficit
 between P and R was small enough to call agreement, which is why it took a fourth pass
 (CPU attribution) to show it was volucer's own waste rather than a server difference. The
 lesson is the same one this document keeps relearning: **two numbers agreeing does not mean
 either is right.**
-

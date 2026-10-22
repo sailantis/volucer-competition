@@ -57,10 +57,13 @@ def _escape(text: str) -> str:
 
 
 def _text(x: float, y: float, content: str, *, size: int = 12, fill: str = INK,
-          anchor: str = "start", weight: str = "normal") -> str:
+          anchor: str = "start", weight: str = "normal",
+          italic: bool = False) -> str:
+    style = ' font-style="italic"' if italic else ""
     return (
         f'<text x="{x:.1f}" y="{y:.1f}" font-family="{FONT}" font-size="{size}" '
-        f'fill="{fill}" text-anchor="{anchor}" font-weight="{weight}">{_escape(content)}</text>'
+        f'fill="{fill}" text-anchor="{anchor}" font-weight="{weight}"{style}>'
+        f"{_escape(content)}</text>"
     )
 
 
@@ -196,7 +199,9 @@ def grouped_bars(categories: Sequence[str],
                  width: int = 960,
                  height: int = 400,
                  log_scale: bool = False,
-                 note: str = "") -> str:
+                 note: str = "",
+                 stamp: str = "",
+                 versions: str = "") -> str:
     """Grouped vertical bar chart: one group per category, one bar per series.
 
     ``series`` maps a series key to one value per category. A value that is
@@ -204,15 +209,27 @@ def grouped_bars(categories: Sequence[str],
     as "measured, and it was terrible" rather than "not measured". The category
     label says so where it matters.
 
-    ``note`` is stamped under the title: the host and the method the numbers
-    were measured on. A throughput figure with no host beside it is not a
-    measurement a reader can weigh.
+    Three lines are drawn under the title, and each says a different kind of
+    thing:
+
+    - ``note`` — how to read the chart: what a bar is, what a range on it is;
+    - ``stamp`` — the conditions the numbers were measured under: host, kernel,
+      method. A figure with no host beside it is not a measurement a reader can
+      weigh;
+    - ``versions`` — the builds, in italic, because it is provenance rather
+      than an instruction.
+
+    None of the three carries a datum: the bar carries the number.
     """
     pad_left, pad_right, pad_bottom = 74, 16, 74
     note_lines = _wrap(note, width - pad_left - pad_right, 11.5) if note else []
+    stamp_lines = _wrap(stamp, width - pad_left - pad_right, 11) if stamp else []
+    version_lines = _wrap(versions, width - pad_left - pad_right, 11) if versions else []
     legend_items, legend_rows = _layout_legend(series, colors, labels, pad_left,
                                                width - pad_right)
-    pad_top = LEGEND_TOP + (legend_rows - 1) * LEGEND_ROW_H + 18 + len(note_lines) * 18
+    pad_top = (LEGEND_TOP + (legend_rows - 1) * LEGEND_ROW_H + 18
+               + len(note_lines) * 18 + len(stamp_lines) * 15
+               + len(version_lines) * 15)
     plot_width = width - pad_left - pad_right
     plot_height = height - pad_top - pad_bottom
     if plot_height < 40:
@@ -248,10 +265,17 @@ def grouped_bars(categories: Sequence[str],
     parts = [_chart_open(width, height, title)]
     parts.append(_legend_svg(legend_items))
 
-    # The provenance line, under the legend: what and how, never a datum.
+    # The provenance block, under the legend: what and how, never a datum.
     note_y = LEGEND_TOP + (legend_rows - 1) * LEGEND_ROW_H + 26
     for line in note_lines:
         parts.append(_text(pad_left, note_y, line, size=11.5, fill=INK_SOFT))
+        note_y += 15
+    for line in stamp_lines:
+        parts.append(_text(pad_left, note_y, line, size=11, fill=INK_SOFT))
+        note_y += 15
+    for line in version_lines:
+        parts.append(_text(pad_left, note_y, line, size=11, fill=INK_SOFT,
+                           italic=True))
         note_y += 15
 
     # Grid and the value axis.
@@ -545,7 +569,8 @@ def _fmt_factor(value: float | None) -> str:
 
 def throughput_dots(rows: Sequence[Mapping], title: str = "", note: str = "",
                      unit: str = "requests per second", width: int = 960,
-                     height: int | None = None, reference_label: str = "") -> str:
+                     height: int | None = None, reference_label: str = "",
+                     stamp: str = "", versions: str = "") -> str:
     """A bar chart of throughput, every bar labelled with how much slower it is.
 
     The chart this replaces plotted *ratios* against a fixed reference arm.
@@ -590,6 +615,13 @@ def throughput_dots(rows: Sequence[Mapping], title: str = "", note: str = "",
     The factor is an annotation, not a datum, so it is drawn in the faded
     slate of the scale rather than the ink of the measurement - the numbers
     whisper, and the bars carry the claim.
+
+    ``note``, ``stamp`` and ``versions`` are the three lines under the title.
+    The note says how to read the bars, the stamp says what conditions they
+    were measured under (host, kernel, method), and the versions say which
+    builds they are a fact about. The last is styled apart because it is
+    provenance rather than an instruction: a chart is copied or linked on its
+    own, so its image has to name what it measured.
     """
     if not rows:
         return ""
@@ -648,14 +680,23 @@ def throughput_dots(rows: Sequence[Mapping], title: str = "", note: str = "",
     def to_x(value: float) -> float:
         return pad_left + plot_width * (value / axis_max)
 
-    # The note block, wrapped to the card.
+    # The three blocks under the title, in the order a reader needs them:
+    # how to read the chart, the conditions it was measured under, then the
+    # builds it is a fact about.
     note_lines: list[str] = []
     if note:
         note_lines = _wrap(note, width - 64.0 - 12.0, 11.5)
+    stamp_lines: list[str] = []
+    if stamp:
+        stamp_lines = _wrap(stamp, width - 64.0 - 12.0, 11)
+    version_lines: list[str] = []
+    if versions:
+        version_lines = _wrap(versions, width - 64.0 - 12.0, 11)
 
     title_y = 34.0
     pad_top = (title_y + 24.0) if title else 18.0
     pad_top += 20.0 * len(note_lines)
+    pad_top += 16.0 * (len(stamp_lines) + len(version_lines))
     pad_top += 14.0
 
     row_height = 40.0
@@ -678,6 +719,15 @@ def throughput_dots(rows: Sequence[Mapping], title: str = "", note: str = "",
     for line in note_lines:
         parts.append(_text(64.0, y, line, size=11.5, fill=INK_SOFT))
         y += 20.0
+    for line in stamp_lines:
+        parts.append(_text(64.0, y - 2.0, line, size=11, fill=INK_SOFT))
+        y += 16.0
+    # The builds, in italic: provenance rather than an instruction, and the
+    # style is what tells a reader which of the two the line is.
+    for line in version_lines:
+        parts.append(_text(64.0, y - 2.0, line, size=11, fill=INK_SOFT,
+                           italic=True))
+        y += 16.0
 
     if unit:
         parts.append(_text(width - 16, 34, unit, size=11, fill=INK_SOFT,
