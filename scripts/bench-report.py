@@ -196,7 +196,7 @@ def median_or_none(values: list[float]) -> float | None:
 # measures the interpreter as much as the server.
 
 MATRIX_DIRS = {
-    "servers": "run85-scale-items",
+    "servers": "run85-scale-items-2",
     "servers_root": "run85-scale-root",
     "modes": "matrix85-volucer-modes",
     "prefork": "matrix85-prefork",
@@ -312,6 +312,137 @@ def load_meta(directory: str) -> dict:
         # repeat a key should not overwrite it.
         meta.setdefault(key, value)
     return meta
+
+
+# --------------------------------------------------------------------------
+# View: versions — what was measured, exactly
+# --------------------------------------------------------------------------
+
+# The version line of each participant, in the order the page lists them.
+#
+# Read out of `meta.txt`, not written here: a version written into the
+# generator is a second copy of a fact that the run recorded, and the second
+# copy is the one that goes stale. The run's own header block is the record,
+# and the page quotes it.
+#
+# The key is the `meta.txt` key, the value is the label the page shows.
+VERSION_SOURCES = (
+    ("php", "PHP (CLI)"),
+    ("php-cgi", "PHP (CGI)"),
+    ("php-fpm", "PHP (FPM)"),
+    ("volucer", "Volucer"),
+    ("volucer ref", "Volucer commit"),
+    ("roadrunner", "RoadRunner"),
+    ("frankenphp", "FrankenPHP"),
+    ("nginx", "nginx"),
+    ("app ref", "Bench app commit"),
+)
+
+
+def shorten_version(value: str) -> str:
+    """One version number out of a full version string.
+
+    `PHP 8.5.11 (cli) (built: Sep 24 2026 13:49:29) (NTS)` is what the run
+    recorded, and it is more than a table cell wants: the build date and the
+    SAPI are the run's own business, and a reader comparing two runs wants
+    the number. The full string stays in the run's `meta.txt`, which the
+    table links to.
+    """
+    # The build stamp and the SAPI are both parenthesised, and dropping them
+    # is what leaves `PHP 8.5.11 (cli)`.
+    text = value.split(" (built:")[0].strip()
+    return text
+
+
+def shorten_tool_version(value: str, label: str) -> str:
+    """The version number of a tool, without the rest of its version line.
+
+    `rr version 2025.1.15 (build time: ..., go1.26.4), OS: linux, arch:
+    amd64` names the build and the platform as well as the version. The
+    platform is the host's, and the build time is not a property of the
+    version — so what is left is the number a reader compares against the
+    release they would install.
+    """
+    if value.startswith("rr version "):
+        rest = value[len("rr version "):]
+        return rest.split(",")[0].split(" (")[0].strip()
+
+    if value.startswith("FrankenPHP v"):
+        # `FrankenPHP v1.13.0 PHP 8.5.11 Caddy v2.11.7 h1:...` — the
+        # FrankenPHP version, then the PHP it embeds, then the Caddy under
+        # it. The first is the version being compared; the PHP is already a
+        # row of its own, so it is dropped here rather than repeated.
+        parts = value.split()
+        if len(parts) >= 2:
+            return parts[1]
+        return value
+
+    if value.startswith("nginx version: "):
+        return value[len("nginx version: "):].strip()
+
+    return value
+
+
+def view_versions(meta: dict) -> list[str]:
+    """The versions the run was measured with, as a table.
+
+    A throughput number is a fact about a *version* of a program, and a
+    reader who cannot see which version cannot tell whether the number
+    applies to the one they would install. The charts carry a short stamp for
+    that reason; this is the long form of the same fact, in one place, for
+    every participant in the comparison.
+
+    The rows come from the run's own `meta.txt`, so they are the versions the
+    run recorded rather than the versions a later release happens to be.
+    """
+    lines: list[str] = []
+    rows: list[tuple[str, str]] = []
+
+    for key, label in VERSION_SOURCES:
+        value = meta.get(key, "")
+        if not value:
+            continue
+        if key == "volucer ref":
+            # The commit is already in the `volucer` row's version string
+            # only as a version number; the commit is what says which source
+            # produced the binary, so it is a row of its own.
+            value = value.strip()
+        elif key == "app ref":
+            value = value.strip()
+        elif key in ("roadrunner", "frankenphp", "nginx"):
+            value = shorten_tool_version(value, label)
+        else:
+            value = shorten_version(value)
+        rows.append((label, value))
+
+    if not rows:
+        return lines
+
+    lines.append("## What was measured")
+    lines.append("")
+    lines.append(
+        "**Every number on this page belongs to these versions.** A "
+        "throughput figure is a fact about a version of a program, not about "
+        "the program in general: the same measurement on another build is "
+        "another number. These are the versions this run used, read from the "
+        "run's own record, and the raw rows are in "
+        "[`volucer-competition`](https://github.com/sailantis/volucer-competition)."
+    )
+    lines.append("")
+    lines.append("| what | version |")
+    lines.append("|---|---|")
+    for label, value in rows:
+        lines.append(f"| {label} | {value} |")
+    lines.append("")
+    lines.append(
+        "The **host** is the machine all of them ran on, and the **method** "
+        "is the harness that drove them — both are printed on every chart "
+        "above. One host, one harness, one interpreter, one pass: that is "
+        "what makes a ratio between two arms a ratio between two "
+        "measurements made the same way."
+    )
+    lines.append("")
+    return lines
 
 
 def meta_stamp(meta: dict) -> str:
@@ -709,13 +840,26 @@ def view_benchmarks(out_dir: Path) -> dict:
 
     One page, one run, one data source.
 
-    The run is `results/run85-scale-items`: every arm, at 16, 32 and 64 serving
-    PHP processes, at c=8, 16, 32 and 64, in one interleaved pass over one
-    host. Every ratio the page prints is therefore a ratio between two
-    measurements made the same way, in the same round, on the same host —
-    which is the property the page's factor column depends on, and the reason
-    the page reads from this run alone rather than from the earlier 16-process
-    run, which was measured on a smaller host.
+    The run is `results/run85-scale-items-2`: every arm, at 16, 32 and 64
+    serving PHP processes, at c=8, 16, 32 and 64, in one interleaved pass
+    over one host. Every ratio the page prints is therefore a ratio between
+    two measurements made the same way, in the same round, on the same host
+    — which is the property the page's factor column depends on, and the
+    reason the page reads from this run alone rather than from the earlier
+    16-process run, which was measured on a smaller host.
+
+    This is the *second* pass of that grid, and it is the one the page
+    publishes because the first pass carried an artefact the second does
+    not: in `run85-scale-items` the `volucer-worker` arm lost about 6% of
+    its throughput from the first round to the third, in every cell, while
+    every other arm held. The re-measurement repeated the same grid on the
+    same host, with the same binary and the same application, and that
+    decline did not reproduce — the arm's mean change from round 1 to
+    round 3 is -0.02% against -5.92%. A published number that moves by
+    12% with the order of the run, and does not move at all when the run
+    is repeated, is measuring the run rather than the server, so the
+    cleaner pass is the one the page is built from. Both passes are in
+    the repository.
 
     The page has two parts. The first is the comparison: the servers, side by
     side, at the number of PHP processes each of them is given. The second is
@@ -1126,6 +1270,14 @@ def view_benchmarks(out_dir: Path) -> dict:
     memory = view_memory(rows, stamp, arms, MEASURED_TIERS, svg_dir, files)
     lines.extend(memory["lines"])
     files.extend(memory["files"])
+
+    # --- What was measured: the versions, in one place. ---
+    #
+    # The charts carry a one-line stamp for the same reason. This is the long
+    # form, and it is last on the page because it is the answer to "what do
+    # I have to install to get these numbers" rather than part of the
+    # comparison itself.
+    lines.extend(view_versions(meta))
 
     return {"pages": 1, "files": files, "body": "\n".join(lines)}
 

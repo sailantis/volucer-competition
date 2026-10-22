@@ -1,0 +1,145 @@
+arm	workers	opcache	phase	conc	pss_mb	rss_mb	pids	children
+volucer-worker	16	on	boot	0	264.6	752.6	17	
+volucer-worker	16	on	post	64	311.6	818.8	17	
+volucer-worker	32	on	boot	0	494.2	1494.3	33	
+volucer-worker	32	on	post	64	579.8	1619.5	33	
+volucer-worker	64	on	boot	0	950.1	2975.5	65	
+volucer-worker	64	on	post	64	1099.0	3198.6	65	
+volucer-unix	16	on	boot	0	264.7	753.3	17	
+volucer-unix	16	on	post	64	310.7	818.6	17	
+volucer-unix	32	on	boot	0	494.5	1493.6	33	
+volucer-unix	32	on	post	64	580.2	1619.2	33	
+volucer-unix	64	on	boot	0	950.6	2976.8	65	
+volucer-unix	64	on	post	64	1103.0	3205.2	65	
+volucer-attach	16	on	boot	0	48.3	315.8	18	
+volucer-attach	16	on	post	64	67.0	415.4	18	
+volucer-attach	32	on	boot	0	58.2	565.6	34	
+volucer-attach	32	on	post	64	85.1	760.3	34	
+volucer-attach	64	on	boot	0	78.4	1074.2	66	
+volucer-attach	64	on	post	64	116.9	1416.7	66	
+volucer-fastcgi	16	on	boot	0	243.3	721.3	17	
+volucer-fastcgi	16	on	post	64	311.6	818.1	17	
+volucer-fastcgi	32	on	boot	0	446.5	1424.4	33	
+volucer-fastcgi	32	on	post	64	573.8	1612.8	33	
+volucer-fastcgi	64	on	boot	0	850.3	2828.5	65	
+volucer-fastcgi	64	on	post	64	1102.9	3207.3	65	
+volucer-prefork	1	on	boot	0	39.7	245.1	18	16
+volucer-prefork	1	on	post	64	68.9	491.2	18	16
+volucer-prefork	1	on	boot	0	41.0	419.3	34	32
+volucer-prefork	1	on	post	64	89.0	910.2	34	32
+volucer-prefork	1	on	boot	0	43.7	769.0	66	64
+volucer-prefork	1	on	post	64	116.5	1700.6	66	64
+rr	16	on	boot	0	297.9	783.7	17	
+rr	16	on	post	64	373.8	879.2	17	
+rr	32	on	boot	0	522.8	1520.2	33	
+rr	32	on	post	64	657.0	1695.9	33	
+rr	64	on	boot	0	967.7	2987.5	65	
+rr	64	on	post	64	1209.1	3315.1	65	
+frankenphp	16	on	boot	0	122.9	123.0	1	
+frankenphp	16	on	post	64	139.7	139.7	1	
+frankenphp	32	on	boot	0	142.0	142.0	1	
+frankenphp	32	on	post	64	165.2	165.2	1	
+frankenphp	64	on	boot	0	173.0	173.0	1	
+frankenphp	64	on	post	64	205.6	205.6	1	
+fpm	16	on	boot	0	44.8	308.1	22	
+fpm	16	on	post	64	60.9	500.9	22	
+fpm	32	on	boot	0	47.5	508.2	38	
+fpm	32	on	post	64	79.2	929.9	38	
+fpm	64	on	boot	0	52.9	911.0	70	
+fpm	64	on	post	64	115.5	1789.4	70	
+volucer-worker	32	on	boot	0	494.2	1493.7	33	
+volucer-worker	32	on	post	64	579.7	1618.8	33	
+volucer-worker	64	on	boot	0	950.1	2974.6	65	
+volucer-worker	64	on	post	64	1101.3	3201.3	65	
+volucer-unix	16	on	boot	0	264.7	753.7	17	
+volucer-unix	16	on	post	64	310.3	818.1	17	
+volucer-unix	32	on	boot	0	494.3	1493.9	33	
+volucer-unix	32	on	post	64	578.5	1618.2	33	
+volucer-unix	64	on	boot	0	950.6	2975.7	65	
+volucer-unix	64	on	post	64	1100.6	3201.3	65	
+volucer-attach	16	on	boot	0	48.1	315.0	18	
+volucer-attach	16	on	post	64	67.0	414.4	18	
+volucer-attach	32	on	boot	0	58.3	566.0	34	
+volucer-attach	32	on	post	64	84.2	758.6	34	
+volucer-attach	64	on	boot	0	77.9	1069.6	66	
+volucer-attach	64	on	post	64	117.6	1417.2	66	
+volucer-fastcgi	16	on	boot	0	243.2	721.8	17	
+volucer-fastcgi	16	on	post	64	309.8	817.1	17	
+volucer-fastcgi	32	on	boot	0	446.6	1424.2	33	
+volucer-fastcgi	32	on	post	64	576.7	1615.4	33	
+volucer-fastcgi	64	on	boot	0	850.2	2830.7	65	
+volucer-fastcgi	64	on	post	64	1103.4	3210.6	65	
+volucer-prefork	1	on	boot	0	39.4	245.1	18	16
+volucer-prefork	1	on	post	64	69.1	489.6	18	16
+volucer-prefork	1	on	boot	0	40.8	420.2	34	32
+volucer-prefork	1	on	post	64	90.0	919.4	34	32
+volucer-prefork	1	on	boot	0	43.4	770.5	66	64
+volucer-prefork	1	on	post	64	116.7	1693.8	66	64
+rr	16	on	boot	0	298.5	785.5	17	
+rr	16	on	post	64	374.1	880.6	17	
+rr	32	on	boot	0	522.0	1518.4	33	
+rr	32	on	post	64	647.9	1686.4	33	
+rr	64	on	boot	0	967.6	2986.6	65	
+rr	64	on	post	64	1196.4	3302.4	65	
+frankenphp	16	on	boot	0	122.4	122.4	1	
+frankenphp	16	on	post	64	139.5	139.5	1	
+frankenphp	32	on	boot	0	140.2	140.2	1	
+frankenphp	32	on	post	64	161.1	161.2	1	
+frankenphp	64	on	boot	0	175.1	175.1	1	
+frankenphp	64	on	post	64	205.6	205.6	1	
+fpm	16	on	boot	0	44.8	309.0	22	
+fpm	16	on	post	64	60.8	499.5	22	
+fpm	32	on	boot	0	47.4	509.2	38	
+fpm	32	on	post	64	79.1	924.6	38	
+fpm	64	on	boot	0	52.9	908.8	70	
+fpm	64	on	post	64	115.8	1777.9	70	
+volucer-worker	16	on	boot	0	264.7	753.9	17	
+volucer-worker	16	on	post	64	313.0	821.4	17	
+volucer-worker	64	on	boot	0	949.8	2973.5	65	
+volucer-worker	64	on	post	64	1102.1	3201.1	65	
+volucer-unix	16	on	boot	0	264.7	753.6	17	
+volucer-unix	16	on	post	64	311.4	819.4	17	
+volucer-unix	32	on	boot	0	494.4	1493.3	33	
+volucer-unix	32	on	post	64	579.8	1618.2	33	
+volucer-unix	64	on	boot	0	950.6	2974.7	65	
+volucer-unix	64	on	post	64	1101.4	3200.8	65	
+volucer-attach	16	on	boot	0	48.1	317.0	18	
+volucer-attach	16	on	post	64	66.4	412.0	18	
+volucer-attach	32	on	boot	0	58.1	565.7	34	
+volucer-attach	32	on	post	64	86.4	759.5	34	
+volucer-attach	64	on	boot	0	78.0	1066.7	66	
+volucer-attach	64	on	post	64	118.0	1425.3	66	
+volucer-fastcgi	16	on	boot	0	243.5	722.8	17	
+volucer-fastcgi	16	on	post	64	309.8	817.3	17	
+volucer-fastcgi	32	on	boot	0	446.6	1424.3	33	
+volucer-fastcgi	32	on	post	64	574.4	1612.8	33	
+volucer-fastcgi	64	on	boot	0	850.2	2829.3	65	
+volucer-fastcgi	64	on	post	64	1101.0	3206.2	65	
+volucer-prefork	1	on	boot	0	39.7	245.9	18	16
+volucer-prefork	1	on	post	64	67.6	488.3	18	16
+volucer-prefork	1	on	boot	0	40.9	419.1	34	32
+volucer-prefork	1	on	post	64	85.9	914.2	34	32
+volucer-prefork	1	on	boot	0	43.3	773.6	66	64
+volucer-prefork	1	on	post	64	115.3	1702.5	66	64
+rr	16	on	boot	0	298.1	784.3	17	
+rr	16	on	post	64	374.6	880.5	17	
+rr	32	on	boot	0	522.3	1518.0	33	
+rr	32	on	post	64	653.0	1690.5	33	
+rr	64	on	boot	0	967.9	2988.2	65	
+rr	64	on	post	64	1199.3	3306.2	65	
+frankenphp	16	on	boot	0	123.1	123.1	1	
+frankenphp	16	on	post	64	140.5	140.5	1	
+frankenphp	32	on	boot	0	143.0	143.0	1	
+frankenphp	32	on	post	64	164.7	164.7	1	
+frankenphp	64	on	boot	0	173.1	173.1	1	
+frankenphp	64	on	post	64	207.1	207.1	1	
+fpm	16	on	boot	0	44.8	308.3	22	
+fpm	16	on	post	64	60.8	501.7	22	
+fpm	32	on	boot	0	47.4	507.5	38	
+fpm	32	on	post	64	79.4	925.6	38	
+fpm	64	on	boot	0	52.6	910.2	70	
+fpm	64	on	post	64	115.6	1788.6	70	
+volucer-worker	16	on	boot	0	264.6	753.7	17	
+volucer-worker	16	on	post	64	311.4	819.9	17	
+volucer-worker	32	on	boot	0	494.2	1494.6	33	
+volucer-worker	32	on	post	64	580.9	1621.1	33	

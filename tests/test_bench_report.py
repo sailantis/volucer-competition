@@ -1046,5 +1046,142 @@ class RetiredViewTest(unittest.TestCase):
         )
 
 
+class DataSourceTest(unittest.TestCase):
+    """The page is built from one run, and it is the one without the artefact.
+
+    The first scale run carried a decline in the `volucer-worker` arm that
+    every other arm did not have, and that did not reproduce when the same
+    grid was repeated on the same host with the same binary. A published
+    number that moves with the order of the run is measuring the run, so
+    the page is built from the second pass - and a test pins that, because
+    the choice of a run is exactly the kind of decision that is made once
+    and then forgotten.
+    """
+
+    def test_the_page_is_built_from_the_second_scale_run(self):
+        self.assertEqual(
+            br.MATRIX_DIRS["servers"], "run85-scale-items-2",
+            "the page is not built from the re-measurement",
+        )
+
+    def test_both_passes_are_in_the_repository(self):
+        """The artefact has to be inspectable, not merely asserted away.
+
+        A reader who is told that the first pass had an artefact and is
+        not shown the first pass has to take it on trust. Both are
+        committed, so the claim can be checked.
+        """
+        for run in ("run85-scale-items", "run85-scale-items-2"):
+            self.assertTrue(
+                (br.RESULTS / run / "matrix.tsv").exists(),
+                f"the {run} rows are not in the repository, so the "
+                f"artefact cannot be inspected",
+            )
+
+    def test_the_published_arm_does_not_decline_across_the_rounds(self):
+        """The arm that declined before does not decline now.
+
+        Measured on the run the page is built from: the `volucer-worker`
+        arm's mean change from round 1 to round 3, over every cell it was
+        measured in. On the first pass this was -5.92%; on this one it is
+        within a percent of zero. The bound is deliberately loose - the
+        point is not that the arm is perfectly flat, but that the decline
+        is gone.
+        """
+        rows = br.matrix_rows(br.MATRIX_DIRS["servers"])
+        changes = []
+        for tier in (16, 32, 64):
+            key = {"arm": "volucer-worker", "workers": str(tier),
+                   "opcache": "on", "conc": "64", "threads": "12"}
+            rounds = br.by_round(rows, key)
+            if "1" in rounds and "3" in rounds:
+                changes.append((rounds["3"] - rounds["1"]) / rounds["1"])
+        self.assertTrue(changes, "no volucer-worker cell was found at c=64")
+        mean = sum(changes) / len(changes)
+        self.assertGreater(
+            mean, -0.05,
+            f"the volucer-worker arm still declines by {mean:.1%} across the "
+            f"rounds, which is the artefact the first pass had",
+        )
+
+
+class VersionsSectionTest(unittest.TestCase):
+
+    def setUp(self):
+        self.out = Path(tempfile.mkdtemp(prefix="bench-versions-"))
+        self.addCleanup(shutil.rmtree, self.out, True)
+        br.build(self.out, "benchmarks")
+        self.markdown = (self.out / "benchmarks.md").read_text(encoding="utf-8")
+        self.meta = br.load_meta(br.MATRIX_DIRS["servers"])
+
+    def test_the_versions_section_is_published(self):
+        self.assertIn(
+            "What was measured", self.markdown,
+            "the page does not say what was measured",
+        )
+
+    def test_every_participant_carries_its_version(self):
+        """Each server in the comparison names its version.
+
+        A comparison between a server and a competitor is only meaningful
+        when both sides say which build they were, so each one gets a row.
+        """
+        for label in ("Volucer", "RoadRunner", "FrankenPHP", "nginx",
+                      "PHP (CLI)"):
+            self.assertIn(
+                f"| {label} |", self.markdown,
+                f"the versions table has no row for {label}",
+            )
+
+    def test_the_versions_come_from_the_run_and_not_from_a_constant(self):
+        """The table is read from the run's own record.
+
+        A version written into the generator is a second copy of a fact the
+        run recorded, and the second copy is the one that goes stale: a
+        later run would still print the version the last run earned. So the
+        table must carry the run's own value.
+        """
+        php = br.shorten_version(self.meta.get("php", ""))
+        self.assertIn(
+            f"| PHP (CLI) | {php} |", self.markdown,
+            "the PHP version on the page is not the one the run recorded",
+        )
+
+    def test_the_volucer_commit_is_published(self):
+        """The commit, not just the version number.
+
+        A version number does not say which source produced the binary, and
+        the benchmark ran on a commit that is ahead of the last tag - so a
+        reader who installs the released version is installing something
+        that was not measured.
+        """
+        ref = self.meta.get("volucer ref", "").strip()
+        self.assertTrue(ref, "the run recorded no volucer commit")
+        self.assertIn(
+            f"| Volucer commit | {ref} |", self.markdown,
+            "the page does not name the commit that was measured",
+        )
+
+    def test_the_build_stamp_does_not_crowd_the_version_cell(self):
+        """The version number, not the whole version line.
+
+        `PHP 8.5.11 (cli) (built: Sep 24 2026 13:49:29) (NTS)` is what the
+        run recorded. The build date and the SAPI are the run's own
+        business; a table cell wants the number a reader compares against
+        the build they would install.
+        """
+        self.assertIn("| PHP (CLI) | PHP ", self.markdown)
+        self.assertNotIn("(built:", self.markdown)
+
+    def test_the_roadrunner_version_is_the_number_and_not_the_build_line(self):
+        """RoadRunner's version line names the build and the platform too.
+
+        The platform is the host's, and the build time is not a property of
+        the version, so the cell carries the number.
+        """
+        self.assertIn("| RoadRunner | 2025", self.markdown)
+        self.assertNotIn("build time:", self.markdown)
+
+
 if __name__ == "__main__":
     unittest.main()

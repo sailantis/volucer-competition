@@ -2092,8 +2092,8 @@ invisible can be read as complete.
 
 The published server comparison measures **one** process count — 16 — at c=16, 32, 48
 and 64. That answers "how do the servers compare" and not "how does one server behave as
-the host is given more of it". The scale run in `results/run85-scale-items` and
-`results/run85-scale-root` answers the second question: the same eight arms, at **16,
+the host is given more of it". The scale runs in `results/run85-scale-items-2` and
+`results/run85-scale-root` answer the second question: the same eight arms, at **16,
 32 and 64 serving PHP processes**, at **c=8, 16, 32 and 64**.
 
 | | published run | scale run |
@@ -2179,12 +2179,23 @@ across a worker axis that the servers page already covered. Four pages meant fou
 places for a reader to find the same comparison stated against a different baseline,
 and four places for a number to be re-stated and drift.
 
-The one page is built from the **scale run** — `results/run85-scale-items` — and from
-nothing else. The earlier 16-process run (`results/matrix85`) was measured on a 3.9 GB
-host and the scale run on a 7.9 GB one; the factor column is a round-paired ratio, so
+The one page is built from the **second scale run** — `results/run85-scale-items-2` — and
+from nothing else. The earlier 16-process run (`results/matrix85`) was measured on a 3.9
+GB host and the scale run on a 7.9 GB one; the factor column is a round-paired ratio, so
 both rows of a comparison have to come from the same pass for the range beside the
 factor to mean anything. The old numbers are still in the repository; they are simply
 not the ones on the page.
+
+**The second pass, and why it is the one that is published.** The first scale run
+(`results/run85-scale-items`) carried an artefact the second does not: the
+`volucer-worker` arm lost about 6% of its throughput from its first round to its third,
+in every cell, while every other arm held. The arm was 12% down at 16 processes and
+flat at 64, which is not what a property of the server looks like — it is what a
+property of the *run* looks like. The grid was repeated on the same host, with the same
+binary and the same application, and the decline did not reproduce: the arm's mean
+change from round 1 to round 3 is -0.02% against -5.92%, and every other arm stayed
+within ±2%. The published page is built from the clean pass. Both passes are in the
+repository, so the artefact can be seen rather than taken on trust.
 
 What the page publishes, and what it does not:
 
