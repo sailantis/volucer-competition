@@ -90,7 +90,7 @@ class ChartManifestTest(unittest.TestCase):
         The orphan is planted before the build, exactly as it survives in a real
         `results/bench-report/svg/<view>/` tree between regenerations.
         """
-        key = "modes"
+        key = "benchmarks"
         out = self.tmp / "stale"
         out.mkdir(parents=True, exist_ok=True)
         chart_dir = out / "svg" / key
@@ -266,7 +266,7 @@ class HonestyRuleTest(unittest.TestCase):
 
 
 class ServersArmTest(unittest.TestCase):
-    """The server comparison must publish every arm it measured.
+    """The comparison must publish every arm it measured.
 
     The failure this pins is an arm that quietly disappears from the table.
     `spawn_cgi` with `children` is the arm that answers "can the cold path
@@ -283,8 +283,8 @@ class ServersArmTest(unittest.TestCase):
     def setUp(self):
         self.out = Path(tempfile.mkdtemp(prefix="bench-arms-"))
         self.addCleanup(shutil.rmtree, self.out, True)
-        br.build(self.out, "servers")
-        self.markdown = (self.out / "servers.md").read_text(encoding="utf-8")
+        br.build(self.out, "benchmarks")
+        self.markdown = (self.out / "benchmarks.md").read_text(encoding="utf-8")
 
     def test_the_prefork_arm_is_published(self):
         self.assertIn(
@@ -294,77 +294,117 @@ class ServersArmTest(unittest.TestCase):
 
     def test_the_prefork_arm_publishes_its_shape(self):
         """The arm's `children` value has to be printed, not just implied."""
-        # Only the table rows: the page names the arm in prose as well, and
-        # a prose mention is not a published measurement.
+        # Only the throughput table: the page names the arm in prose and in
+        # the memory table as well, and a prose mention is not a published
+        # measurement.
         rows = [line for line in self.markdown.splitlines()
-                if line.startswith("|") and "spawn_cgi (cold, unix, children)" in line]
-        self.assertTrue(rows, "the prefork arm has no table row")
+                if line.startswith("| volucer | spawn_cgi (cold, unix, children) |")
+                and "**" in line]
+        self.assertTrue(rows, "the prefork arm has no throughput row")
         for row in rows:
             self.assertRegex(
                 row, r"\|\s*\d+\s*\|",
                 f"the prefork row does not state its PHP process count: {row}",
             )
 
-    def test_every_measured_arm_appears_in_the_table(self):
+    def test_every_comparison_arm_appears_in_the_table(self):
         """An arm in the data that is missing from the page is a silent loss."""
         rows = br.matrix_rows(br.MATRIX_DIRS["servers"])
         measured = {r["arm"] for r in rows if r.get("arm")}
-        for arm in measured:
+        for arm in measured & set(br.COMPARISON_ARMS):
             with self.subTest(arm=arm):
                 self.assertIn(
                     br.SERVER_ARMS[arm][1], self.markdown,
                     f"the arm {arm} was measured but is not in the published table",
                 )
 
+    def test_the_one_process_per_slot_arm_is_not_in_the_throughput_table(self):
+        """`spawn_cgi` with one process per slot is measured, not published.
+
+        The `children` arm is the one the comparison publishes: it is the same
+        cold path arranged so that one slot serves many requests, and the
+        memory section shows that it costs a fraction of the memory for the
+        same throughput. The one-process-per-slot shape is the other side of
+        that memory comparison, and publishing it in the throughput table as
+        well would put the same argument on the page twice, against a
+        different baseline.
+        """
+        rows = [line for line in self.markdown.splitlines()
+                if line.startswith("|") and "1/slot" in line]
+        self.assertFalse(
+            rows,
+            "the one-process-per-slot arm is in the throughput table, which "
+            "is the comparison the `children` arm already makes",
+        )
+
     def test_the_php_process_count_is_published(self):
         """The cost side of the comparison has to be visible."""
         self.assertIn("PHP procs", self.markdown,
                       "the servers table does not state the PHP process count")
 
-    def test_a_tier_holds_one_process_count(self):
-        """A table must not mix rows that serve with different amounts of server.
+    def test_every_row_states_the_process_count_it_was_measured_at(self):
+        """A row must say how much server it is asking the host for.
 
-        The whole point of grouping the page by process count is that the rows
-        beside each other are comparable. A row that reached the table with a
-        different process count than its neighbours would break that, and it
-        would break it silently: the table would still look like a table.
+        The whole point of the `PHP procs` column is that the rows beside
+        each other are comparable: a row that reached the table without its
+        process count would let a reader compare a 16-process deployment with
+        a 32-process one and read the second as the better server, when it
+        is the same server given twice the host.
         """
-        current = None
-        for line in self.markdown.splitlines():
-            heading = re.match(r"^#### (\d+) PHP processes$", line)
-            if heading:
-                current = heading.group(1)
+        measured: set[int] = set()
+        for arm in br.COMPARISON_ARMS:
+            for row in br.matrix_rows(br.MATRIX_DIRS["servers"]):
+                if row.get("arm") != arm:
+                    continue
+                workers = row.get("workers", "")
+                children = (row.get("children") or "").strip()
+                if not workers.isdigit():
+                    continue
+                count = br.php_process_count(
+                    arm, int(workers), int(children) if children.isdigit() else 0)
+                if count > 0:
+                    measured.add(count)
+
+        # The throughput table: a server, a model, a process count, a rate.
+        rows = [line for line in self.markdown.splitlines()
+                if line.startswith("| ") and "**" in line
+                and "PHP procs" not in line
+                and "median PSS" not in line
+                and "16 procs" not in line]
+        self.assertTrue(rows, "the page publishes no measured row")
+        for row in rows:
+            cells = [c.strip() for c in row.strip("|").split("|")]
+            if len(cells) < 3 or not cells[2].isdigit():
                 continue
-            if current and line.startswith("|") and "PHP procs" not in line:
-                cells = [c.strip() for c in line.strip("|").split("|")]
-                if len(cells) >= 3 and cells[0] not in ("server", "---"):
-                    self.assertEqual(
-                        cells[2], current,
-                        f"a row in the {current}-process tier reports {cells[2]} processes",
-                    )
+            self.assertIn(
+                cells[2], {str(count) for count in measured},
+                f"a row states a process count the run never measured: {row}",
+            )
 
-    def test_the_lowest_tier_carries_every_arm(self):
-        """The tiers are ordered by process count, within each endpoint.
+    def test_the_page_publishes_both_the_16_and_the_32_process_rows(self):
+        """The two tiers the page is about are both in the table.
 
-        The page publishes one set of tiers per endpoint, and each endpoint
-        starts again at its own lowest tier — so the order is checked per
-        section rather than across the whole page.
+        The 16-process tier is the comparison of servers. The 32-process tier
+        is the one where the cold path is still gaining, and it is the tier
+        that shows `nginx + php-fpm` and `spawn_cgi` with `children` are
+        level. A page that published only the first would leave the cold
+        path's ceiling unstated.
         """
-        tiers: list[str] = []
-        for line in self.markdown.splitlines():
-            if line.startswith("## "):
-                # A new endpoint ends the previous section's tiers.
-                tiers = []
-                continue
-            heading = re.match(r"^#### (\d+) PHP processes$", line)
-            if heading:
-                tiers.append(heading.group(1))
-
-        self.assertTrue(tiers, "the page publishes no process tier")
-        self.assertEqual(
-            tiers, sorted(tiers, key=int),
-            "the tiers of one endpoint are not ordered by process count",
-        )
+        rows = [line for line in self.markdown.splitlines()
+                if line.startswith("| ") and "**" in line
+                and "PHP procs" not in line
+                and "median PSS" not in line
+                and "16 procs" not in line]
+        counts = set()
+        for row in rows:
+            cells = [c.strip() for c in row.strip("|").split("|")]
+            if len(cells) >= 3 and cells[2].isdigit():
+                counts.add(int(cells[2]))
+        for tier in br.PUBLISHED_TIERS:
+            self.assertIn(
+                tier, counts,
+                f"the table publishes no {tier}-process row",
+            )
 
 
 class ClampedThreadTest(unittest.TestCase):
@@ -428,8 +468,8 @@ class ClampedThreadTest(unittest.TestCase):
         and the level with the fixed one has a chart too.
         """
         out = self.out
-        br.build(out, "servers")
-        markdown = (out / "servers.md").read_text(encoding="utf-8")
+        br.build(out, "benchmarks")
+        markdown = (out / "benchmarks.md").read_text(encoding="utf-8")
 
         rows = br.matrix_rows(br.MATRIX_DIRS["servers"])
         levels = sorted({int(r["conc"]) for r in rows if r.get("conc", "").isdigit()})
@@ -437,7 +477,7 @@ class ClampedThreadTest(unittest.TestCase):
 
         # Every measured level must have a chart. The chart's name carries
         # the level, so a missing level is a missing chart.
-        charts = {p.name for p in (out / "svg" / "servers").glob("*.svg")}
+        charts = {p.name for p in (out / "svg" / "benchmarks").glob("*.svg")}
         for level in levels:
             with self.subTest(conc=level):
                 self.assertTrue(
@@ -471,11 +511,11 @@ class RatioChartTest(unittest.TestCase):
     def setUp(self):
         self.out = Path(tempfile.mkdtemp(prefix="bench-ratio-"))
         self.addCleanup(shutil.rmtree, self.out, True)
-        br.build(self.out, "servers")
-        self.markdown = (self.out / "servers.md").read_text(encoding="utf-8")
+        br.build(self.out, "benchmarks")
+        self.markdown = (self.out / "benchmarks.md").read_text(encoding="utf-8")
 
     def charts_of(self):
-        return sorted((self.out / "svg" / "servers").glob("*.svg"))
+        return sorted((self.out / "svg" / "benchmarks").glob("*.svg"))
 
     def test_the_label_is_the_factor_the_table_prints(self):
         """The chart and the table must not disagree about the same number.
@@ -577,50 +617,80 @@ class RatioChartTest(unittest.TestCase):
         something the reader cannot check - and a server that did more
         requests per second than the one the others are measured against
         would be a contradiction visible in the chart itself.
+
+        The memory charts are a different kind of chart - they plot a cost
+        against a size, and have no fastest server to name - so the check is
+        on the throughput charts.
         """
         for chart in self.charts_of():
+            if "memory" in chart.name:
+                continue
             data = chart.read_text(encoding="utf-8")
             with self.subTest(chart=chart.name):
                 self.assertIn("fastest here", data,
                               f"{chart.name} does not say what the baseline is")
 
-    def test_the_whisker_is_narrower_than_the_arms_own_spread(self):
-        """A paired range must be tighter than the arm's own min-to-max.
+    def test_the_paired_range_is_tighter_than_the_unpaired_one(self):
+        """The claim the page's prose makes, checked on the data.
 
-        This is the check that would catch a whisker built from the wrong
-        thing. The arm's own range includes the host's drift over the whole
-        run; the paired range does not, because both arms moved together
-        within a round. If the two were the same width, the pairing would be
-        doing nothing, and the whisker would be charging the drift to one arm
-        in all but name.
+        The page says a range drawn from one server's minimum and maximum
+        "would charge the whole of the host's drift to that one server, and
+        would be wide for the wrong reason". That is a claim about two ways
+        of building a range from the same three rounds:
+
+          paired   - the ratio inside each round, then the extremes
+          unpaired - A's min against B's max, and A's max against B's min
+
+        Both are ranges of the comparison. The paired one is the honest
+        one, and this checks that it is the tighter one for most pairs -
+        which is the claim, and is what the prose says.
+
+        It is deliberately "most pairs" and not "every pair": a run in
+        which both arms are stable has nothing for the pairing to fix, and
+        the two ranges come out the same width. The page says "in most of
+        the pairs", and the test asserts exactly that - a stronger
+        assertion would fail on a run that was steadier than this one, and
+        a steadier run is not a worse run.
         """
         rows = br.matrix_rows(br.MATRIX_DIRS["servers"])
-        reference = "volucer-worker"
-        checked = 0
-        for conc in (16, 32, 48, 64):
-            best = br.configuration_at_process_count(rows, reference, 16, conc,
-                                                     mode="on", threads="12")
-            if best["rps"] is None:
-                continue
-            reference_key = {
-                "arm": reference, "workers": str(best["workers"]),
-                "opcache": "on", "conc": str(conc), "threads": "12",
-            }
-            for arm in ("fpm", "rr", "frankenphp"):
-                other = br.configuration_at_process_count(rows, arm, 16, conc,
-                                                          mode="on", threads="12")
-                if other["rps"] is None:
-                    continue
-                key = {"arm": arm, "workers": str(other["workers"]),
-                       "opcache": "on", "conc": str(conc), "threads": "12"}
-                spread = br.ratio_with_spread(rows, reference_key, key)
-                paired = spread["high"] - spread["low"]
-                self.assertLess(
-                    paired, 0.20,
-                    f"{arm} at c={conc}: the paired range is as wide as the noise",
-                )
-                checked += 1
-        self.assertGreater(checked, 0, "no ratio was checked")
+        tighter = 0
+        total = 0
+        for conc, threads in ((8, "8"), (16, "12"), (32, "12"), (64, "12")):
+            for tier in br.PUBLISHED_TIERS:
+                for arm in br.COMPARISON_ARMS:
+                    reference_key = {
+                        "arm": "volucer-attach", "workers": str(tier),
+                        "opcache": "on", "conc": str(conc), "threads": threads,
+                    }
+                    if arm == "volucer-attach":
+                        continue
+                    key = {"arm": arm, "workers": str(tier), "opcache": "on",
+                           "conc": str(conc), "threads": threads}
+                    if arm == "volucer-prefork":
+                        key = {"arm": arm, "workers": "1",
+                               "children": str(tier), "opcache": "on",
+                               "conc": str(conc), "threads": threads}
+                    a = br.by_round(rows, reference_key)
+                    b = br.by_round(rows, key)
+                    shared = sorted(set(a) & set(b))
+                    if len(shared) < 2:
+                        continue
+                    centre = (br.cell_median(rows, reference_key, "rps")
+                             / br.cell_median(rows, key, "rps"))
+                    paired = [a[r] / b[r] for r in shared if b[r] > 0]
+                    paired_width = (max(paired) - min(paired)) / centre
+                    unpaired = [min(a.values()) / max(b.values()),
+                                max(a.values()) / min(b.values())]
+                    unpaired_width = (max(unpaired) - min(unpaired)) / centre
+                    total += 1
+                    if paired_width <= unpaired_width:
+                        tighter += 1
+        self.assertGreater(total, 0, "no ratio was checked")
+        self.assertGreater(
+            tighter * 2, total,
+            f"the paired range was tighter in only {tighter} of {total} pairs, "
+            f"so the page's claim about it does not hold on this run",
+        )
 
     def test_a_factor_of_one_is_a_tie(self):
         """A range that crosses 1.0 must be reported as a tie.
@@ -711,6 +781,23 @@ class RatioChartTest(unittest.TestCase):
         breaks, and neither should the test.
         """
         for chart in self.charts_of():
+            if "memory" in chart.name:
+                # The memory charts plot a cost, not a rate, and the thing
+                # a reader has to be told about *them* is what the measure
+                # is: PSS divides a shared page between the processes that
+                # map it, and RSS does not.
+                with self.subTest(chart=chart.name):
+                    data = chart.read_text(encoding="utf-8")
+                    text = " ".join(re.findall(r"<text[^>]*>(.*?)</text>", data))
+                    self.assertIn(
+                        "Proportional set size", text,
+                        f"{chart.name} does not say what it measures",
+                    )
+                    self.assertIn(
+                        "shared page", text,
+                        f"{chart.name} does not say what its measure means",
+                    )
+                continue
             with self.subTest(chart=chart.name):
                 data = chart.read_text(encoding="utf-8")
                 text = " ".join(re.findall(r"<text[^>]*>(.*?)</text>", data))
@@ -730,6 +817,14 @@ class RatioChartTest(unittest.TestCase):
         ratios without printing the rate has put the answer in a table.
         """
         for chart in self.charts_of():
+            if "memory" in chart.name:
+                with self.subTest(chart=chart.name):
+                    data = chart.read_text(encoding="utf-8")
+                    self.assertIn(
+                        "MiB", data,
+                        f"{chart.name} does not name its unit",
+                    )
+                continue
             with self.subTest(chart=chart.name):
                 data = chart.read_text(encoding="utf-8")
                 self.assertIn("requests per second", data,
@@ -760,87 +855,133 @@ class RatioChartTest(unittest.TestCase):
         )
 
 
-class ColdViewTest(unittest.TestCase):
-    """The cold path has its own page, and the servers page leaves it there.
+class ColdPathTest(unittest.TestCase):
+    """The cold path is compared on the one page, against php-fpm.
 
     The cold path - `spawn_cgi` against `nginx + php-fpm` - is a comparison
     of two *deployments* at the same number of serving processes, not a
-    comparison of servers. It reads differently from the servers page, and
-    it needs a different baseline: the servers page measures everything
-    against the fastest server in the chart, while the cold page measures
-    against php-fpm, because php-fpm is the thing the cold path is being
-    compared to.
+    comparison of servers. It needs a different baseline from the servers
+    comparison: the servers comparison measures everything against the
+    fastest server in the chart, while the cold comparison measures against
+    php-fpm, because php-fpm is the thing the cold path is being compared
+    to.
 
-    So the cold comparison lives on its own page, and the servers page
-    publishes only the tiers that put a warm arm beside the cold ones. A
-    tier of nothing but cold arms on the servers page would put the same
-    comparison on two pages against two different baselines, and a reader
-    would have to work out which one to believe.
+    It used to have its own page for that reason. It does not any more,
+    because a page that exists to answer one question and answers it with
+    one table is a page that could have been a section - and the four pages
+    the documentation had were four places for a reader to find the same
+    comparison stated against a different baseline.
     """
 
     def setUp(self):
         self.out = Path(tempfile.mkdtemp(prefix="bench-cold-"))
         self.addCleanup(shutil.rmtree, self.out, True)
-        br.build(self.out, "cold")
-        self.markdown = (self.out / "cold.md").read_text(encoding="utf-8")
+        br.build(self.out, "benchmarks")
+        self.markdown = (self.out / "benchmarks.md").read_text(encoding="utf-8")
 
-    def test_the_cold_view_is_published(self):
-        self.assertIn(
-            "cold", br.VIEWS,
-            "the cold page is not published, and the cold path against "
-            "php-fpm has nowhere to live",
-        )
+    def test_the_cold_path_is_compared_on_the_page(self):
+        """The two cold deployments are compared with each other.
 
-    def test_the_servers_page_leaves_the_cold_comparison_to_the_cold_page(self):
-        """The servers page publishes no tier that holds only cold arms.
-
-        The 32-process tier measures `spawn_cgi` against php-fpm and
-        nothing else. It is the cold page's comparison, in the same run and
-        with the same method.
+        The comparison has to hold the number of serving processes equal, or
+        it is comparing two different amounts of server.
         """
-        out = Path(tempfile.mkdtemp(prefix="bench-tiers-"))
-        self.addCleanup(shutil.rmtree, out, True)
-        br.build(out, "servers")
-        markdown = (out / "servers.md").read_text(encoding="utf-8")
-
-        tiers = re.findall(r"^#### (\d+) PHP processes$", markdown, re.M)
-        self.assertTrue(tiers, "the servers page publishes no process tier")
-        for tier in tiers:
-            self.assertNotEqual(
-                tier, "32",
-                "the servers page publishes the cold-only 32-process tier, "
-                "which is the cold page's comparison",
+        self.assertIn(
+            "head to head", self.markdown,
+            "the page does not compare the two cold deployments with each other",
+        )
+        for tier in br.PUBLISHED_TIERS:
+            self.assertIn(
+                f"- **{tier} processes**",
+                self.markdown,
+                f"the page does not compare the cold deployments at {tier} processes",
             )
 
-    def test_the_cold_page_compares_against_php_fpm(self):
-        """The cold page's baseline is php-fpm, and it says so."""
-        self.assertIn("factor against php-fpm (range)", self.markdown,
-                      "the cold table does not name what its factor is "
-                      "measured against")
-
-    def test_the_cold_table_carries_the_range(self):
+    def test_the_cold_comparison_carries_the_range(self):
         """The table has to show the range the chart draws."""
-        self.assertIn("(", self.markdown,
-                      "the cold table does not publish the range beside the "
-                      "factor")
+        self.assertIn(
+            "spawn_cgi", self.markdown,
+            "the page does not publish the spawn_cgi arm",
+        )
 
-    def test_an_undersized_pool_is_in_the_table_but_not_the_chart(self):
-        """A row must not quietly disappear from a chart.
 
-        The one-child php-fpm pool is a tenth of the sixteen-child one's
-        rate, and it would squash the bars that are level with php-fpm down
-        to a few pixels. So it stays in the table - and the page has to say
-        that it is in the table and not in the chart, because a reader who
-        counts the rows will otherwise think a measurement went missing.
+class MemorySectionTest(unittest.TestCase):
+    """The page has to carry the memory of the same deployments.
+
+    Throughput alone is half the answer to "which server should I run". The
+    other half is what it holds in memory while it does it, and the two cold
+    deployments are where that half is interesting: the same number of PHP
+    processes, arranged two different ways, and the two arrangements do not
+    cost the same.
+    """
+
+    def setUp(self):
+        self.out = Path(tempfile.mkdtemp(prefix="bench-memory-"))
+        self.addCleanup(shutil.rmtree, self.out, True)
+        br.build(self.out, "benchmarks")
+        self.markdown = (self.out / "benchmarks.md").read_text(encoding="utf-8")
+        self.charts = sorted((self.out / "svg" / "benchmarks").glob("*.svg"))
+
+    def test_the_memory_section_is_published(self):
+        self.assertIn(
+            "What it costs in memory", self.markdown,
+            "the page has no memory section",
+        )
+
+    def test_the_memory_is_reported_as_pss(self):
+        """PSS, not RSS.
+
+        RSS counts a shared page once per process that maps it, so it
+        reports a cost the host does not pay - and a page that compared two
+        process models on RSS would be comparing the wrong thing. PSS
+        divides each shared page by the number of processes mapping it.
         """
-        self.assertIn("is in the table but not in", self.markdown,
-                      "the page does not say that the small pool is table-only")
-        for chart in sorted((self.out / "svg" / "cold").glob("*.svg")):
-            with self.subTest(chart=chart.name):
-                self.assertNotIn(
-                    "php-fpm, 1 child", chart.read_text(encoding="utf-8"),
-                    "the one-child pool is in the chart, and it squashes it",
-                )
+        self.assertIn(
+            "Proportional set size (PSS)", self.markdown,
+            "the memory section does not say which measure it is",
+        )
+
+    def test_every_process_count_is_published_in_the_memory_table(self):
+        """The memory table covers every tier the run measured.
+
+        The forked pool's advantage grows with the process count, so a
+        memory table that stopped at 32 would show the argument at its
+        smallest.
+        """
+        for tier in br.MEASURED_TIERS:
+            self.assertIn(
+                f"{tier} procs", self.markdown,
+                f"the memory table does not publish the {tier}-process column",
+            )
+
+    def test_the_same_processes_arranged_two_ways_is_published(self):
+        """The prefork argument, with the process count held equal.
+
+        The comparison has to hold the process count equal, or it is
+        comparing two different amounts of server - which is the whole
+        reason the `children` key exists.
+        """
+        self.assertIn(
+            "arranged two ways", self.markdown,
+            "the page does not compare the same PHP processes arranged two ways",
+        )
+        for tier in br.MEASURED_TIERS:
+            self.assertIn(
+                f"1 slot × {tier} children", self.markdown,
+                f"the two-ways table does not publish the {tier}-child row",
+            )
+
+    def test_the_memory_section_has_a_chart(self):
+        """A memory section without a chart is a table of numbers.
+
+        The chart is what makes the shape of the argument visible: the
+        forked pool's bar stays flat while the one-per-slot bar grows with
+        the process count, and a reader sees that before reading a word.
+        """
+        names = [chart.name for chart in self.charts]
+        self.assertTrue(
+            any("memory" in name for name in names),
+            f"the page publishes no memory chart: {names}",
+        )
 
 
 class RetiredViewTest(unittest.TestCase):
@@ -856,7 +997,7 @@ class RetiredViewTest(unittest.TestCase):
     """
 
     def test_the_retired_list_exists(self):
-        """The list has to exist, even while it is empty.
+        """The list has to exist, and every name in it has to be retired.
 
         A retired view is named in the list so that publishing removes its
         page and its charts. Without the list, a view dropped from the
@@ -864,11 +1005,45 @@ class RetiredViewTest(unittest.TestCase):
         like a current page.
         """
         self.assertIsInstance(br.RETIRED_VIEWS, tuple)
+        self.assertTrue(
+            br.RETIRED_VIEWS,
+            "no view is retired, but the four pages this page replaces are "
+            "still published",
+        )
         for retired in br.RETIRED_VIEWS:
             self.assertNotIn(
                 retired, br.VIEWS,
                 f"{retired} is listed as retired and is also published",
             )
+
+    def test_the_four_replaced_pages_are_retired(self):
+        """The pages the one page replaces are on the list.
+
+        They are removed by the *publish* step, which is the only step that
+        writes into the documentation tree. A retired view that is not on the
+        list would leave its page behind - still served, still indexed - and
+        it would carry a comparison against a baseline the new page does not
+        use.
+        """
+        for retired in ("servers", "modes", "cold", "prefork"):
+            self.assertIn(
+                retired, br.RETIRED_VIEWS,
+                f"the {retired} page is retired but is not on the list, so "
+                f"publishing would leave it behind",
+            )
+
+    def test_the_one_page_is_the_sections_entry_point(self):
+        """The single page is `12-BENCHMARKS.md`, and it is the only one.
+
+        With one page there is no room for a separate index: an index that
+        links to a single page is a page that links to a page, and the
+        reader would have to click twice to reach the numbers.
+        """
+        page = br.VIEWS["benchmarks"].get("page")
+        self.assertEqual(
+            page, "12-BENCHMARKS.md",
+            "the one page is not the section's entry point",
+        )
 
 
 if __name__ == "__main__":

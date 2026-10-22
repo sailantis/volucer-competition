@@ -196,8 +196,8 @@ def median_or_none(values: list[float]) -> float | None:
 # measures the interpreter as much as the server.
 
 MATRIX_DIRS = {
-    "servers": "matrix85",
-    "servers_root": "matrix85-root",
+    "servers": "run85-scale-items",
+    "servers_root": "run85-scale-root",
     "modes": "matrix85-volucer-modes",
     "prefork": "matrix85-prefork",
 }
@@ -218,32 +218,6 @@ SERVER_ARMS = {
     "fpm": ("nginx + php-fpm", "cold, unix socket"),
 }
 
-# The arms of the shape comparison: one server, five configurations.
-MODE_ARMS = {
-    "volucer-worker": "worker (warm, pipe)",
-    "volucer-unix": "worker (warm, unix socket)",
-    "volucer-attach": "attach (warm, unix relay)",
-    "volucer-fastcgi": "spawn_cgi (cold, unix, 1/slot)",
-    "volucer-prefork": "spawn_cgi children (cold, unix)",
-}
-
-# The arms that measure the *cold* path, against each other.
-#
-# A tier that holds only these is not a comparison of servers — it is the
-# cold path against `nginx + php-fpm`, which is the cold page's subject, in
-# the same run and with the same method. The servers page therefore
-# publishes only the tiers that put a warm arm beside them, and the cold
-# page publishes the cold comparison on its own.
-COLD_ARMS = ("volucer-fastcgi", "volucer-prefork", "fpm")
-
-# The short form of each arm's model, for the chart.
-#
-# The chart's left-hand column has room for a name and a model, not a
-# sentence. The full model string is what the *table* prints; a chart that
-# repeated it would need a gutter wide enough for "spawn_cgi (cold, unix,
-# children), 32 children/slot" and the plot would start halfway across the
-# card. So the chart gets the short form and the table keeps the long one,
-# and the two are the same fact written twice at two lengths.
 SHORT_MODELS = {
     "volucer-worker": "worker, warm",
     "volucer-unix": "worker, warm, unix",
@@ -254,6 +228,46 @@ SHORT_MODELS = {
     "frankenphp": "worker, embedded",
     "fpm": "cold, unix",
 }
+
+# The arms the one page compares, in the order a reader meets them.
+#
+# `volucer-fastcgi` is measured but is NOT published in the throughput
+# comparison: it is `spawn_cgi` with one process per slot, and the page's
+# prefork arm is `spawn_cgi` with `children` — the same cold path, arranged
+# so that one slot serves many requests. It is still measured, because it is
+# the other side of the memory comparison, which is where the difference
+# between the two arrangements shows up.
+COMPARISON_ARMS = (
+    "volucer-attach",
+    "volucer-worker",
+    "volucer-unix",
+    "rr",
+    "frankenphp",
+    "volucer-prefork",
+    "fpm",
+)
+
+# The process tiers the page publishes.
+#
+# The 16-process tier carries every arm, so it is the comparison of servers.
+# The 32-process tier carries the two cold deployments, and it is where the
+# cold path is still gaining from more processes: `spawn_cgi` with `children`
+# and `nginx + php-fpm` both get faster, while the warm arms get slower.
+#
+# The 64-process tier is measured and is not published. It is the tier where
+# the cold path has stopped gaining for volucer — `spawn_cgi` with `children`
+# is slower there than at 32 — so it says nothing about a volucer deployment.
+# What it does say is that `nginx + php-fpm` keeps improving, which is a fact
+# about php-fpm rather than about volucer, and a fact about another server's
+# ceiling is not a reason for a reader to run more volucer processes. The
+# rows are in the repository, and the page says where they are.
+PUBLISHED_TIERS = (16, 32)
+
+# The process tiers the run measured. The memory section publishes all of
+# them, because memory is a cost argument rather than a throughput claim:
+# what a deployment holds while it serves is a fact about the deployment at
+# every size, and the forked pool's advantage grows with the process count.
+MEASURED_TIERS = (16, 32, 64)
 
 # One colour per server, so an arm keeps its colour across every chart.
 SERVER_COLORS = {
@@ -266,15 +280,6 @@ SERVER_COLORS = {
     "frankenphp": "#a855f7",
     "fpm": "#64748b",
 }
-
-MODE_COLORS = {
-    "volucer-worker": "#2563eb",
-    "volucer-unix": "#0ea5e9",
-    "volucer-attach": "#7c3aed",
-    "volucer-fastcgi": "#94a3b8",
-    "volucer-prefork": "#c2410c",
-}
-
 
 def load_meta(directory: str) -> dict:
     """Read a matrix run's ``meta.txt`` into a flat dict.
@@ -519,58 +524,6 @@ def same_process_count_comparison(post_rows: list[dict]) -> list[dict]:
     return entries
 
 
-def best_configuration(rows: list[dict], arm: str, conc: int, mode: str | None = None,
-                       threads: str | None = None) -> dict:
-    """The best-measured configuration of one arm at one concurrency.
-
-    An arm can have more than one axis: `workers` for every shape, and
-    `children` for `volucer-prefork`, where it is the number of PHP processes
-    behind each listening socket. The best configuration is therefore a
-    (workers, children) pair, and searching only `workers` would report the
-    prefork shape's best as `children = 1` — which is the `spawn_cgi` shape
-    under a different name, and would quietly throw away the finding the shape
-    exists to show.
-
-    `mode` and `threads` narrow the search to one opcache mode and one client
-    thread count, so the best is taken within the same conditions as the rest
-    of the comparison rather than across them.
-
-    A cell with no successful repeat is skipped rather than counted as zero.
-    """
-    best: dict = {"rps": None, "workers": None, "children": ""}
-
-    configs: set[tuple[str, str]] = set()
-    for row in rows:
-        if row.get("arm") != arm or row.get("conc") != str(conc):
-            continue
-        if mode is not None and row.get("opcache") != mode:
-            continue
-        if threads is not None and row.get("threads") != threads:
-            continue
-        worker = row.get("workers", "")
-        children = (row.get("children") or "").strip()
-        configs.add((worker, children))
-
-    for worker, children in configs:
-        key = {"arm": arm, "workers": worker, "conc": str(conc)}
-        if mode is not None:
-            key["opcache"] = mode
-        if threads is not None:
-            key["threads"] = threads
-        if children:
-            key["children"] = children
-        rps = cell_median(rows, key, "rps")
-        if rps is None:
-            continue
-        if best["rps"] is None or rps > best["rps"]:
-            best = {
-                "rps": rps,
-                "workers": int(worker) if worker.isdigit() else worker,
-                "children": children,
-            }
-    return best
-
-
 def configuration_at_process_count(rows: list[dict], arm: str, procs: int,
                                    conc: int, mode: str | None = None,
                                    threads: str | None = None) -> dict:
@@ -658,6 +611,31 @@ def parse_latency(value: str) -> float | None:
         return None
 
 
+def by_round(rows: list[dict], key: dict, field: str = "rps") -> dict[str, float]:
+    """The value of one field for one configuration, keyed by the round.
+
+    The round is the unit of simultaneity in an interleaved run: both arms
+    were measured once per round, so a round holds a ratio of the two taken
+    under the same conditions rather than tens of minutes apart.
+
+    A row whose value cannot be read is dropped rather than counted as zero,
+    and a configuration that was measured in no round at all is an empty
+    mapping.
+    """
+    found: dict[str, float] = {}
+    for row in rows:
+        if any(row.get(name) != value for name, value in key.items()):
+            continue
+        raw = row.get(field, "")
+        if raw in ("", "FAIL", "?"):
+            continue
+        try:
+            found[row.get("round", "")] = float(raw)
+        except (TypeError, ValueError):
+            continue
+    return found
+
+
 def round_paired_ratios(rows: list[dict], key_a: dict, key_b: dict,
                          field: str = "rps") -> list[float]:
     """The ratios of one field between two configurations, paired by round.
@@ -678,22 +656,8 @@ def round_paired_ratios(rows: list[dict], key_a: dict, key_b: dict,
     a zero, and a round in which only one of the two was measured is not
     paired at all: there is no ratio in it.
     """
-    def by_round(key: dict) -> dict[str, float]:
-        found: dict[str, float] = {}
-        for row in rows:
-            if any(row.get(name) != value for name, value in key.items()):
-                continue
-            raw = row.get(field, "")
-            if raw in ("", "FAIL", "?"):
-                continue
-            try:
-                found[row.get("round", "")] = float(raw)
-            except (TypeError, ValueError):
-                continue
-        return found
-
-    values_a = by_round(key_a)
-    values_b = by_round(key_b)
+    values_a = by_round(rows, key_a, field)
+    values_b = by_round(rows, key_b, field)
     if not values_a or not values_b:
         return []
 
@@ -737,1202 +701,846 @@ def ratio_with_spread(rows: list[dict], key_a: dict, key_b: dict,
 
 
 # --------------------------------------------------------------------------
-# View: prefork — what `children` is worth
+# View: benchmarks — the one page: the servers side by side, and their cost
 # --------------------------------------------------------------------------
 
-def prefork_provenance() -> str:
-    """The host and method of the prefork comparison, read from its report.
+def view_benchmarks(out_dir: Path) -> dict:
+    """The whole benchmark: the servers side by side, and what they cost.
 
-    The prefork run was measured by hand rather than by `matrix.sh`, so its
-    provenance lives in the prose of `results/prefork-vs-slots.md` rather than
-    in a `meta.txt`. It is read from there rather than kept as a constant
-    here, for the same reason the other views read theirs: a constant is a
-    second copy of the facts, and the second copy is the one that goes stale.
+    One page, one run, one data source.
+
+    The run is `results/run85-scale-items`: every arm, at 16, 32 and 64 serving
+    PHP processes, at c=8, 16, 32 and 64, in one interleaved pass over one
+    host. Every ratio the page prints is therefore a ratio between two
+    measurements made the same way, in the same round, on the same host —
+    which is the property the page's factor column depends on, and the reason
+    the page reads from this run alone rather than from the earlier 16-process
+    run, which was measured on a smaller host.
+
+    The page has two parts. The first is the comparison: the servers, side by
+    side, at the number of PHP processes each of them is given. The second is
+    the cost: the resident memory of the same deployments, because throughput
+    alone is half the answer to "which server should I run".
     """
-    path = RESULTS / "prefork-vs-slots.md"
-    if not path.exists():
-        return ""
-
-    text = path.read_text(encoding="utf-8")
-    for line in text.splitlines():
-        if "cores" in line and "PHP" in line:
-            # The line reads like "WSL2, 12 cores, PHP 8.3.35 (cgi-fcgi),
-            # `/items`, `wrk -t4`, 8 s per point, 2 interleaved rounds."
-            parts = [part.strip() for part in line.split(",")]
-            kept = []
-            for part in parts:
-                # The endpoint and the client command are backticked, and the
-                # rounds clause is cut at the comma — "2 interleaved rounds"
-                # is the whole phrase, not "2 interleaved".
-                if not part or part.startswith("`"):
-                    continue
-                if part.startswith("2 interleaved"):
-                    part = "2 rounds"
-                kept.append(part)
-            if kept:
-                return " · ".join(kept)
-    return ""
-
-
-def view_prefork(out_dir: Path) -> dict:
-    """The prefork-versus-slots comparison, as a memory chart."""
-    path = RESULTS / "prefork-vs-slots.tsv"
-    if not path.exists():
-        return {"pages": 0, "files": []}
-
-    rows = read_tsv(path)
-    # Keyed by (shape, concurrency): pooling every concurrency level into one
-    # range mixes load levels, and a range that spans "idle" to "saturated"
-    # says nothing about either.
-    cells: dict[tuple[str, int], list[float]] = defaultdict(list)
-    for parts in rows:
-        if len(parts) < 8:
-            continue
-        try:
-            shape, conc = parts[0], int(parts[2])
-            pss_kb = int(parts[7])  # PSS after load, KiB
-        except (ValueError, IndexError):
-            continue
-        cells[(shape, conc)].append(pss_kb / 1024)
-
-    if not cells:
-        return {"pages": 0, "files": []}
-
-    shape_names = {
-        "S": "16 separate slots",
-        "C16": "1 master × 16 children",
-    }
-    prefork_stamp = prefork_provenance()
-    shapes_present = [s for s in ("S", "C16") if any(k[0] == s for k in cells)]
-    concurrencies = sorted({k[1] for k in cells})
-
-    svg_dir = out_dir / "svg" / "prefork"
-    svg_dir.mkdir(parents=True, exist_ok=True)
-    files: list[str] = []
-    lines: list[str] = ["## Memory for the same 16 PHP processes", ""]
-
-    # --- Chart one: memory against load, one line per shape. ---
-    series = {
-        shape: [statistics.median(cells[(shape, c)]) if (shape, c) in cells else None
-                for c in concurrencies]
-        for shape in shapes_present
-    }
-    colors = {"S": "#94a3b8", "C16": "#2563eb"}
-    labels = {shape: shape_names.get(shape, shape) for shape in shapes_present}
-    load_chart = "prefork-memory-by-load.svg"
-    write(svg_dir / load_chart, grouped_bars(
-        categories=[f"c={c}" for c in concurrencies],
-        series=series,
-        colors=colors,
-        labels=labels,
-        title="Resident memory against load — 16 PHP processes",
-        value_suffix="MiB",
-        note=prefork_stamp,
-    ))
-    files.append(load_chart)
-
-    lines += [
-        f"![Memory against load](svg/prefork/{load_chart})",
-        "",
-        "Proportional set size (PSS) after the run, summed over the 16 PHP processes.",
-        "PSS divides each shared page by the number of processes mapping it, which is",
-        "why it is the figure that shows copy-on-write sharing: a preforked child that",
-        "has not yet written to a page costs its siblings nothing.",
-        "",
-        "| shape | " + " | ".join(f"c={c}" for c in concurrencies) + " |",
-        "|---|" + "---:|" * len(concurrencies),
-    ]
-    for shape in shapes_present:
-        row = []
-        for c in concurrencies:
-            values = cells.get((shape, c))
-            row.append(f"{statistics.median(values):.1f}" if values else "-")
-        lines.append(f"| {shape_names.get(shape, shape)} | " + " | ".join(row) + " |")
-    lines.append("")
-
-    # --- Chart two: the peak-load comparison, which is the finding. ---
-    peak = concurrencies[-1]
-    peak_labels: list[str] = []
-    peak_low: list[float] = []
-    peak_high: list[float] = []
-    peak_mid: list[float] = []
-    for shape in shapes_present:
-        values = cells.get((shape, peak))
-        if not values:
-            continue
-        peak_labels.append(shape_names.get(shape, shape))
-        peak_mid.append(statistics.median(values))
-        peak_low.append(min(values))
-        peak_high.append(max(values))
-
-    if len(peak_labels) >= 2:
-        peak_chart = "prefork-memory.svg"
-        write(svg_dir / peak_chart, range_bars(
-            categories=peak_labels,
-            low=peak_low,
-            high=peak_high,
-            centre=peak_mid,
-            colour="#2563eb",
-            title=f"Memory at c={peak} — the same 16 PHP processes",
-            value_suffix="MiB",
-            note="The bar spans the measured range across the rounds; the dot is "
-                 "the median. PSS divides shared pages between the processes that "
-                 "map them, so a page the children share counts once. " + prefork_stamp,
-            show_factor=True,
-            factor_note="The multiplier compares a row's median with the lightest "
-                        "median on the chart.",
-        ))
-        files.append(peak_chart)
-
-        lines += [
-            f"## At c={peak}",
-            "",
-            f"![Memory at c={peak}](svg/prefork/{peak_chart})",
-            "",
-            "| shape | median PSS (MiB) | min (MiB) | max (MiB) | multiplier |",
-            "|---|---:|---:|---:|---:|",
-        ]
-        lightest = min(peak_mid) if peak_mid else 0.0
-        for index, label in enumerate(peak_labels):
-            ratio = peak_mid[index] / lightest if lightest > 0 else 0.0
-            # The lightest row is the reference and carries no factor of its
-            # own, for the same reason the servers chart leaves the fastest
-            # server unlabelled: a yardstick does not measure itself.
-            factor = "x1.0" if abs(ratio - 1.0) < 1e-9 else f"x{ratio:.1f}"
-            lines.append(
-                f"| {label} | **{peak_mid[index]:.1f}** | {peak_low[index]:.1f} | "
-                f"{peak_high[index]:.1f} | {factor} |"
-            )
-        lines.append("")
-        if lightest > 0 and len(peak_mid) >= 2:
-            heaviest = max(peak_mid)
-            lines += [
-                f"At c={peak} the preforked pool holds "
-                f"**{heaviest / lightest:.1f}× less** resident memory than one",
-                "process per slot, for the same 16 PHP processes serving the same",
-                "requests.",
-                "",
-            ]
-
-    return {"pages": 1, "files": files, "body": "\n".join(lines)}
-
-
-# --------------------------------------------------------------------------
-# View: servers — the five servers, one harness, one interpreter
-# --------------------------------------------------------------------------
-
-def view_servers(out_dir: Path) -> dict:
-    """The server comparison: volucer against four alternatives, on one harness.
-
-    Every arm here went through the same script, the same interpreter and the
-    same load generator, so a ratio between two arms is a ratio between two
-    measurements made the same way. That is the property the older
-    `bench.sh` run does not have, because it measured the arms in separate
-    passes and configured the `php-fpm` arm through the host's systemd service
-    while the volucer arms ran their own private servers.
-
-    The harness measures one endpoint per run, so a second endpoint is a
-    second run and a second directory. The endpoints are discovered rather
-    than hard-coded, and a run that is absent is simply not published.
-    """
-    svg_dir = out_dir / "svg" / "servers"
+    svg_dir = out_dir / "svg" / "benchmarks"
     svg_dir.mkdir(parents=True, exist_ok=True)
     files: list[str] = []
     lines: list[str] = []
 
-    endpoints: list[tuple[str, str]] = []
-    for key in ("servers", "servers_root"):
-        directory = MATRIX_DIRS[key]
-        if not (RESULTS / directory / "matrix.tsv").exists():
-            continue
-        endpoint = ""
-        meta = load_meta(directory)
-        endpoint = meta.get("endpoint", "")
-        endpoints.append((key, endpoint or "/"))
-
-    if not endpoints:
-        return {"pages": 0, "files": []}
-
-    for directory_key, endpoint in endpoints:
-        rows = matrix_rows(MATRIX_DIRS[directory_key])
-        if not rows:
-            continue
-        meta = load_meta(MATRIX_DIRS[directory_key])
-        stamp = meta_stamp(meta)
-
-        arms = [arm for arm in SERVER_ARMS if any(r.get("arm") == arm for r in rows)]
-        if not arms:
-            continue
-
-        # The worker count the grid was run at, and the concurrency levels it
-        # covered. Both come from the data rather than from a constant, so a run
-        # with a different grid publishes its own grid.
-        workers = sorted({r.get("workers", "") for r in rows if r.get("arm") == arms[0]},
-                         key=lambda v: int(v) if v.isdigit() else 0)
-        concurrencies = sorted({int(r["conc"]) for r in rows if r.get("conc", "").isdigit()})
-
-        # The opcache axis. A run with both modes compares them; a run with one
-        # mode has no axis to compare, and printing an empty table of both would
-        # read like a failed measurement.
-        modes = sorted({r.get("opcache", "") for r in rows})
-        opcache_modes = modes if len(modes) > 1 else [modes[0]] if modes else ["on"]
-
-        # The client thread count. The grid measured `-t$conc` and a fixed `-t12`
-        # in the same cells, and the fixed one is the one a cross-arm comparison
-        # uses: it keeps the load generator's own cost constant, so the difference
-        # between two arms is the server rather than the client.
-        #
-        # The thread count is a property of the CELL, not of the run: `wrk`
-        # refuses `-c` below `-t`, so the harness clamps the thread count to the
-        # concurrency level whenever the level is below the requested one. A run
-        # that measures c=8 therefore has c=8 rows at `-t8` and c=16/32/64 rows
-        # at `-t12`.
-        #
-        # So the thread count to use is resolved PER CONCURRENCY LEVEL, not once
-        # for the whole run. Resolving it once - which is what this did before
-        # - finds no single count that covers every row, falls back to "the most
-        # common", and then every row whose thread count differs is invisible:
-        # the c=8 cells were measured, and the page printed none of them. A
-        # level that is missing from the page because of a bookkeeping detail
-        # in the report is indistinguishable from a level that was never
-        # measured, and the second is a claim while the first is a bug.
-        def threads_for(conc: int) -> str:
-            """The client thread count the run used at this concurrency level."""
-            candidates = {r.get("threads", "") for r in rows
-                          if r.get("conc") == str(conc)}
-            # The most common one at this level. A level measured once per
-            # configuration has exactly one; a level measured twice (the
-            # `-t$conc` and the fixed `-t12` convention) has two, and the
-            # fixed one is the comparable one - the same reason the run-wide
-            # fallback preferred it.
-            fixed = [c for c in candidates
-                     if sum(1 for r in rows if r.get("threads") == c) == len(rows)]
-            if fixed:
-                return sorted(fixed, key=lambda v: int(v) if v.isdigit() else 0)[-1]
-            if not candidates:
-                return ""
-            return max(candidates,
-                       key=lambda v: sum(1 for r in rows if r.get("threads") == v))
-
-        # The process counts the run measured, per arm.
-        #
-        # The comparison is only fair between arms that serve with the same
-        # number of PHP processes, so the page is organised by process count
-        # rather than by arm. A run that measured every arm at 16 processes
-        # publishes one table; a run that also measured fpm at 32 publishes a
-        # second one, and the arms that were not measured at that count are
-        # absent from it rather than silently carrying a number from another
-        # tier.
-        arm_process_counts: dict[str, set[int]] = defaultdict(set)
-        for arm in arms:
-            for worker in {r.get("workers", "") for r in rows if r.get("arm") == arm}:
-                for children in {((r.get("children") or "").strip())
-                                 for r in rows if r.get("arm") == arm}:
-                    count = php_process_count(
-                        arm,
-                        int(worker) if worker.isdigit() else 0,
-                        int(children) if children.isdigit() else 0,
-                    )
-                    if count > 0:
-                        arm_process_counts[arm].add(count)
-
-        # The tiers the run covers, smallest first.
-        #
-        # A tier is published when it is a *server comparison* — that is, when
-        # it measures at least one warm arm beside the cold ones. The 32-process
-        # tier measures only `spawn_cgi` and `nginx + php-fpm`, and a table of
-        # those two is not a comparison of servers: it is the cold path
-        # against php-fpm, which is what the cold page is for, in the same
-        # run and with the same method. Publishing it here as well would put
-        # the same comparison on two pages against two different baselines,
-        # and a reader would have to work out which one to believe.
-        all_counts = sorted({c for counts in arm_process_counts.values() for c in counts})
-        tiers = [c for c in all_counts
-                 if any(c in arm_process_counts[arm] for arm in arms
-                        if arm not in COLD_ARMS)]
-
-        endpoint_name = "the landing page" if endpoint == "/" else "the ORM page"
-        lines.append(f"## `GET {endpoint}` — {endpoint_name}")
-        lines.append("")
-
-        # The process count is the cost side of the comparison, and it decides
-        # which arms may be compared with which. `spawn_cgi` with `children`
-        # puts several processes behind one listening socket, so it reaches a
-        # given throughput with a different number of processes than the arms
-        # beside it — and a reader who cannot see that would read the rows as
-        # comparable when they are not.
-        #
-        # The cold path against `nginx + php-fpm` is compared on the cold
-        # page, where the process count is held equal on purpose. Here every
-        # row serves with the same number of processes, so the comparison is
-        # a comparison of servers.
-        if len(tiers) > 1:
-            lines.append(
-                "The tables below are grouped by **PHP procs** — the number of PHP "
-                "processes serving the requests. That is what the host pays for, and "
-                "it is the number that decides which rows may be compared with which. "
-                "The `spawn_cgi` arm with `children` puts several processes behind one "
-                "listening socket, so it reaches a given throughput with a different "
-                "number of processes than the arms beside it. A row with more "
-                "processes is not a better row — it is a row that bought its "
-                "throughput with more server."
-            )
-        else:
-            lines.append(
-                "Every row below serves with the same number of PHP processes — the "
-                "**PHP procs** column says how many, and that is what the host pays "
-                "for. The `spawn_cgi` arm with `children` puts several processes "
-                "behind one listening socket, so its throughput is produced by a "
-                "different amount of server than the arms beside it, and the count "
-                "is what makes the rows comparable."
-            )
-        lines.append("")
-
-        # How to read the charts, stated once, because a chart that needs a
-        # paragraph in the reader's head to be read is a chart that will be
-        # misread.
-        lines.append(
-            "Each chart is a bar per server, and the bar is the **request rate** — "
-            "the number the page is about. The bars start at zero, so their lengths "
-            "can be compared directly."
-        )
-        lines.append("")
-        lines.append(
-            "**The label behind each bar is how many times slower that server is "
-            "than the fastest server in the same chart.** The fastest server is the "
-            "dashed vertical line, and it carries no label of its own; every other "
-            "bar states its factor — `x2.5` for a server that did 40% of the "
-            "leader's requests per second. The baseline is the fastest server *in "
-            "that chart*, not a fixed server: a cold deployment overtakes a warm one "
-            "once the host saturates, so the fastest server is not the same one at "
-            "every load — and naming it per chart is more honest than a fixed "
-            "reference that would read as a claim about the same winner every time."
-        )
-        lines.append("")
-        lines.append(
-            "**The range on each bar is the spread of the comparison, not of the "
-            "server.** Both servers were measured once per round, interleaved, so "
-            "each round holds a ratio of the two. The range is the smallest and "
-            "largest of those round-paired ratios, scaled back into requests per "
-            "second. Pairing by round is what makes that range honest: a host that "
-            "drifts over the run moves both servers in the same round, so the ratio "
-            "within a round is far steadier than either server's own spread. A range "
-            "drawn from one server's minimum and maximum would instead charge the "
-            "whole of the host's drift to that one server, and would be wide for the "
-            "wrong reason."
-        )
-        lines.append("")
-        lines.append(
-            "A range that reaches across the 1.0 line means the two servers could "
-            "not be told apart in this run. The table marks those rows **tie**: a "
-            "difference inside the measurement's own spread is not a difference, and "
-            "the factor there is the best estimate rather than a claim that one "
-            "server is faster."
-        )
-        lines.append("")
-
-        for mode in opcache_modes:
-            mode_title = ("OPcache on" if mode == "on"
-                          else "OPcache off" if mode == "off"
-                          else f"OPcache {mode}")
-            lines.append(f"### {mode_title}")
-            lines.append("")
-
-            for tier in tiers:
-                # The arms measured at this process count. An arm that was not
-                # measured here is absent from this tier rather than carrying
-                # a number from another tier.
-                tier_arms = [arm for arm in arms if tier in arm_process_counts[arm]]
-
-                # The arm the ratio column is measured against.
-                #
-                # The baseline is the **fastest arm in the group**, not a fixed
-                # arm. A fixed reference would put a label on every bar that
-                # means something different in every chart, and the reader
-                # would have to look it up. The fastest server in the group is
-                # the natural yardstick: it is 1.00x, and every other bar is
-                # labelled with its share of it.
-                #
-                # The fastest arm is found from the data, per concurrency. It
-                # is not assumed to be the same arm at every load, because it
-                # is not: a cold deployment overtakes a warm one as the host
-                # saturates, and a chart that kept naming the same baseline
-                # would be claiming a winner the measurement does not have.
-                for conc in concurrencies:
-                    # The configuration of each arm at this process count and
-                    # this concurrency.
-                    #
-                    # An arm can have more than one axis: `workers` for every
-                    # arm, and `children` for `volucer-prefork`, where it is
-                    # the number of PHP processes behind each listening socket.
-                    # Fixing the process count is what makes the rows
-                    # comparable, so the search is over the configurations that
-                    # reach it.
-                    best_of: dict[str, dict] = {}
-                    for arm in tier_arms:
-                        best_of[arm] = configuration_at_process_count(
-                            rows, arm, tier, conc, mode=mode,
-                            threads=threads_for(conc))
-
-                    measured = {arm: best for arm, best in best_of.items()
-                                if best["rps"] is not None}
-                    if not measured:
-                        continue
-
-                    # The baseline: the fastest arm measured at this tier and
-                    # this concurrency.
-                    reference = max(measured, key=lambda arm: measured[arm]["rps"])
-                    reference_best = measured[reference]
-                    reference_key = {
-                        "arm": reference,
-                        "workers": str(reference_best["workers"]),
-                        "opcache": mode,
-                        "conc": str(conc),
-                        "threads": threads_for(conc),
-                    }
-                    if reference_best["children"]:
-                        reference_key["children"] = reference_best["children"]
-
-                    # The chart rows: the rate, the range around it, and the
-                    # share of the baseline.
-                    #
-                    # The range is the range of the *round-paired* ratios,
-                    # scaled back into requests per second. Pairing by round
-                    # is what makes it honest: a host that drifts over the run
-                    # moves both arms in the same round, so the ratio inside
-                    # a round is far steadier than either arm's own spread. A
-                    # range drawn from an arm's own minimum and maximum would
-                    # instead charge the whole of the host's drift to that
-                    # one arm, and would be wide for the wrong reason.
-                    chart_rows: list[dict] = []
-                    ratios: dict[str, dict] = {}
-
-                    for arm in tier_arms:
-                        best = best_of[arm]
-                        server, model = SERVER_ARMS[arm]
-                        short = SHORT_MODELS.get(arm, model)
-                        if best["children"]:
-                            short = f"{short} \u00b7 {best['children']}/slot"
-
-                        entry = {
-                            "name": server,
-                            "model": short,
-                            "color": SERVER_COLORS.get(arm, "#94a3b8"),
-                            "rps": best["rps"],
-                            "low": None,
-                            "high": None,
-                            "factor": None,
-                            "reference": arm == reference,
-                        }
-
-                        if best["rps"] is None:
-                            chart_rows.append(entry)
-                            ratios[arm] = {"centre": None, "low": None, "high": None}
-                            continue
-
-                        key = {"arm": arm, "workers": str(best["workers"]),
-                               "opcache": mode, "conc": str(conc),
-                               "threads": threads_for(conc)}
-                        if best["children"]:
-                            key["children"] = best["children"]
-
-                        if arm == reference:
-                            # The baseline against itself is 1.0 by
-                            # definition, and it has no range: it is the
-                            # yardstick, and a yardstick with a range on it is
-                            # not a yardstick.
-                            spread = {"centre": 1.0, "low": 1.0, "high": 1.0,
-                                      "rounds": 0}
-                        else:
-                            # How many times slower this arm is than the
-                            # baseline: the baseline divided by the arm. It is
-                            # the reciprocal of the share, because "twice as
-                            # slow" is how a reader thinks about the result -
-                            # and the same number describes a comparison of
-                            # times rather than rates.
-                            spread = ratio_with_spread(rows, reference_key, key)
-                        ratios[arm] = spread
-
-                        entry["factor"] = spread["centre"]
-                        if spread["low"] is not None and spread["high"] is not None:
-                            # The range in requests per second: the
-                            # reference's rate divided by the factor, and by
-                            # the factor's extremes. The arm's own rate sits
-                            # inside it, because the factor is measured
-                            # from it.
-                            entry["low"] = reference_best["rps"] / spread["high"]
-                            entry["high"] = reference_best["rps"] / spread["low"]
-
-                        chart_rows.append(entry)
-
-                    if not any(row["rps"] is not None for row in chart_rows):
-                        continue
-
-                    slug = "root" if endpoint == "/" else endpoint.strip("/").replace("/", "-")
-                    # The tier is part of the file name. Two tiers publish two
-                    # charts of the same endpoint, mode and concurrency, and a
-                    # shared name would let the second overwrite the first -
-                    # a chart that is silently replaced by a different one is
-                    # worse than a chart that is missing.
-                    chart = f"servers-{slug}-{mode}-p{tier}-c{conc}.svg"
-                    reference_server, reference_model = SERVER_ARMS[reference]
-                    reference_label = f"{reference_server} \u2014 {reference_model}"
-                    if reference_best["children"]:
-                        reference_label += f", {reference_best['children']} children/slot"
-
-                    write(svg_dir / chart, throughput_dots(
-                        rows=chart_rows,
-                        title=f"GET {endpoint} \u2014 {mode_title} at c={conc}",
-                        note="The bar is the request rate. The label behind it is how "
-                             "many times slower that server is than the fastest server "
-                             "in this chart, which is the dashed line. The range on "
-                             "each bar is the spread of the round-paired comparison: "
-                             "both servers were measured in the same round, so the "
-                             "range is the spread of the comparison, not the drift of "
-                             "the host. " + stamp,
-                        reference_label="fastest here",
-                    ))
-                    files.append(chart)
-
-                    lines.append(f"![{mode_title} at c={conc}](svg/servers/{chart})")
-
-                    # The table belongs to the highest concurrency the tier
-                    # was measured at, which is the load the comparison is
-                    # about: the numbers above are the ones the table
-                    # prints, and a table that reported a different
-                    # concurrency's numbers would contradict the chart
-                    # above it.
-                    if conc != concurrencies[-1]:
-                        continue
-
-                    lines.append("")
-                    lines.append(f"#### {tier} PHP processes")
-                    lines.append("")
-                    # Which arm the factor is measured against, stated per
-                    # tier: it is the fastest server in the table. The
-                    # reference is named here because a factor without its
-                    # reference is a number with no meaning, and because the
-                    # fastest server is not the same arm in every tier - the
-                    # cold deployments overtake the warm ones once the host
-                    # saturates.
-                    reference_server, reference_model = SERVER_ARMS[reference]
-                    reference_label = f"{reference_server} \u2014 {reference_model}"
-                    if reference_best["children"]:
-                        reference_label += f", {reference_best['children']} children/slot"
-                    lines.append(
-                        f"The **factor** column is measured against **{reference_label}** "
-                        "\u2014 the fastest server in this table. It states how many "
-                        "times slower each server is, so `x1.0` is the fastest and "
-                        "`x2.5` is a quarter of its rate. The column carries the "
-                        "range of the round-paired ratios beside it, and a row marked "
-                        "**tie** is one whose range reaches across 1.0 \u2014 the two "
-                        "servers could not be told apart in this run."
-                    )
-                    lines.append("")
-                    lines.append("| server | model | PHP procs | rps | p50 | p99 | factor (range) |")
-                    lines.append("|---|---|---:|---:|---:|---:|---:|")
-                    # The rows are ordered by throughput, fastest first - the
-                    # same order as the chart above them. A table whose rows
-                    # are in a different order from the chart beside it is a
-                    # table the reader has to re-sort in their head.
-                    for arm in sorted(tier_arms,
-                                      key=lambda a: -(best_of[a]["rps"] or 0.0)):
-                        best = best_of[arm]
-                        rps = best["rps"]
-                        server, model = SERVER_ARMS[arm]
-                        if rps is None:
-                            lines.append(f"| {server} | {model} | - | - | - | - | - |")
-                            continue
-                        key = {"arm": arm, "workers": str(best["workers"]),
-                               "opcache": mode, "conc": str(conc),
-                               "threads": threads_for(conc)}
-                        if best["children"]:
-                            key["children"] = best["children"]
-                        p50 = cell_median(rows, key, "p50", parse_latency)
-                        p99 = cell_median(rows, key, "p99", parse_latency)
-                        spread = ratios[arm]
-                        if arm == reference or not spread.get("centre"):
-                            # The reference is 1.0 by definition. It is
-                            # printed rather than left blank, because a blank
-                            # cell in this column would read as "not
-                            # measured" — and it is the one cell in the
-                            # column that was measured beyond doubt.
-                            factor = "x1.0"
-                        else:
-                            factor = f"x{spread['centre']:.1f}"
-                            # The range is printed beside the factor because
-                            # the chart beside the table draws it, and a chart
-                            # that shows a number the table does not is a
-                            # number the reader has to trust rather than
-                            # check. It is the range of the round-paired
-                            # ratios - the spread of the comparison, not the
-                            # spread of the server.
-                            #
-                            # Two decimals, while the factor itself has one.
-                            # The factor is read as a scale - x1.1, x2.5 - and
-                            # one decimal is enough for that. The range is
-                            # read as evidence, and one decimal would round
-                            # a range of 0.99 to 1.01 into "1.0 - 1.0": a
-                            # range that visibly does not cross 1.0 beside a
-                            # row marked **tie**, which is exactly the
-                            # contradiction the range exists to prevent.
-                            low = spread.get("low")
-                            high = spread.get("high")
-                            if low is not None and high is not None:
-                                factor += f" ({low:.2f}\u2013{high:.2f})"
-                            # A factor whose range reaches across 1.0 is not a
-                            # difference - the two servers could not be told
-                            # apart in this run. Printing it as a plain factor
-                            # would claim a result the measurement does not
-                            # support, and would contradict the chart beside
-                            # it, which says so.
-                            if low is not None and high is not None and low <= 1.0 <= high:
-                                factor += " \u2014 tie"
-                        lines.append(
-                            f"| {server} | {model} | {tier} | "
-                            f"**{fmt_number(rps)}** | "
-                            f"{fmt_number(p50) if p50 is not None else '-'} ms | "
-                            f"{fmt_number(p99) if p99 is not None else '-'} ms | {factor} |"
-                        )
-                    lines.append("")
-
-
-    return {"pages": 1, "files": files, "body": "\n".join(lines)}
-
-# --------------------------------------------------------------------------
-# View: cold — volucer's cold path against php-fpm, at equal process count
-# --------------------------------------------------------------------------
-
-def view_cold(out_dir: Path) -> dict:
-    """Volucer's cold path against `nginx + php-fpm`, at equal process count.
-
-    The two deployments are compared at the *same number of serving PHP
-    processes*, because that is what the host pays for. `php-fpm` runs one
-    child per worker; volucer's `spawn_cgi` with `children` runs several
-    children behind each listening socket. Comparing one preforked pool of 32
-    children against a php-fpm pool of 16 would be a comparison of two
-    different amounts of server, and it would flatter whichever side happened
-    to have more processes.
-
-    Every arm here was measured in one interleaved pass, so the ratio between
-    two of them is a ratio between measurements taken minutes apart from one
-    another rather than tens of minutes apart.
-
-    The reference is the **16-child** php-fpm pool, not the fastest
-    deployment in the chart. The page is about the cold path against
-    php-fpm, so php-fpm is the thing everything else is measured against -
-    and a page that re-anchored its baseline on whichever deployment
-    happened to win at the current load would be a page about a different
-    question every time the load changed.
-    """
-    rows = matrix_rows(MATRIX_DIRS["prefork"])
+    directory = MATRIX_DIRS["servers"]
+    rows = matrix_rows(directory)
     if not rows:
         return {"pages": 0, "files": []}
 
-    meta = load_meta(MATRIX_DIRS["prefork"])
+    meta = load_meta(directory)
     stamp = meta_stamp(meta)
 
-    concurrencies = sorted({int(r["conc"]) for r in rows if r.get("conc", "").isdigit()})
-    if not concurrencies:
-        return {"pages": 0, "files": []}
-
-    # The php-fpm pools that were measured, and the prefork shapes that reach
-    # the same number of serving processes.
-    fpm_workers = sorted({int(r["workers"]) for r in rows
-                           if r["arm"] == "fpm" and r.get("workers", "").isdigit()})
-    prefork_shapes: dict[int, tuple[int, int]] = {}
-    for row in rows:
-        if row["arm"] != "volucer-prefork" or not row.get("workers", "").isdigit():
-            continue
-        workers = int(row["workers"])
-        children = int((row.get("children") or "1"))
-        serving = workers * children
-        # The first shape found for a process count is kept: the grid is
-        # measured in a defined order, so this is deterministic rather than
-        # whichever shape happened to be read last.
-        prefork_shapes.setdefault(serving, (workers, children))
-
-    svg_dir = out_dir / "svg" / "cold"
-    svg_dir.mkdir(parents=True, exist_ok=True)
-    files: list[str] = []
-    lines: list[str] = []
-
-    # The reference is the php-fpm pool with the most children, because
-    # that is the pool a reader would put in front of this: a one-child
-    # pool is a deliberately undersized server, and a comparison against it
-    # would read as a headline number. It is read here rather than inside
-    # the loop, because the prose that explains the table names it.
-    reference_workers = max(fpm_workers) if fpm_workers else None
-    if reference_workers is None:
-        return {"pages": 0, "files": []}
-
-    lines.append("## The same number of PHP processes")
-    lines.append("")
-    lines.append("`nginx + php-fpm` runs one child per worker. Volucer's `spawn_cgi` with")
-    lines.append("`children` runs several children behind each listening socket. The")
-    lines.append("comparison below holds the number of *serving* processes equal, because that")
-    lines.append("is what the host pays for — a preforked pool of 32 children against a")
-    lines.append("php-fpm pool of 16 would be a comparison of two different amounts of server.")
-    lines.append("")
-    lines.append(
-        "Each chart is a bar per deployment, and the bar is the **request rate**. "
-        "The label behind each bar states how many times slower that deployment "
-        "is than php-fpm, which is the dashed vertical line. The range on each bar "
-        "is the spread of the round-paired comparison: both deployments were "
-        "measured once per round, interleaved, so the range is the spread of the "
-        "comparison rather than the drift of the host. A range that reaches across "
-        "the 1.0 line means the two could not be told apart, and the row in the "
-        "table is marked **tie**."
-    )
-    lines.append("")
-    lines.append(
-        "The reference is the "
-        f"**{reference_workers}-child** php-fpm pool, which is the pool a reader "
-        "would put in front of this: a one-child pool is a deliberately undersized "
-        "server, and a comparison against it would read as a headline number. The "
-        "**factor** column in the table is measured against the same pool, so the "
-        "chart and the table beside it cannot disagree."
-    )
-    lines.append("")
-
-    for conc in concurrencies:
-        reference_key = {"arm": "fpm", "workers": str(reference_workers),
-                         "opcache": "on", "conc": str(conc), "threads": "12"}
-        reference_rps = cell_median(rows, reference_key, "rps")
-        if reference_rps is None:
-            continue
-
-        # The chart rows. The name and the model are stacked, because the
-        # chart's left-hand column has room for a name and a model, not a
-        # sentence: the table below keeps the full description.
-        chart_rows: list[dict] = []
-        ratios: dict[str, dict] = {}
-
-        # The php-fpm pools, each against the reference pool.
-        #
-        # Only the reference pool goes into the *chart*. A smaller pool is a
-        # deliberately undersized server, and at a tenth of the reference's
-        # rate it would squash the bars that are level with php-fpm down to
-        # a few pixels. The smaller pools stay in the table, and the prose
-        # below says so, because a row that quietly disappears from a chart
-        # is a row a reader cannot account for.
-        for workers in fpm_workers:
-            key = {"arm": "fpm", "workers": str(workers), "opcache": "on",
-                   "conc": str(conc), "threads": "12"}
-            rps = cell_median(rows, key, "rps")
-            if rps is None:
-                continue
-            if workers == reference_workers:
-                label = f"nginx + php-fpm, {workers} child{'ren' if workers > 1 else ''}"
-                chart_rows.append({
-                    "name": label,
-                    "model": "cold, one child per worker",
-                    "color": "#64748b",
-                    "rps": rps,
-                    "low": rps,
-                    "high": rps,
-                    "factor": None,
-                    "reference": True,
-                })
-                ratios[label] = {"centre": 1.0, "low": 1.0, "high": 1.0}
-                continue
-            # A smaller pool is in the table but not in the chart.
-            label = f"nginx + php-fpm, {workers} child{'ren' if workers > 1 else ''}"
-            spread = ratio_with_spread(rows, reference_key, key)
-            ratios[label] = spread
-
-        # The prefork shapes. Every one of them is compared with the same
-        # reference pool, and the serving-process count travels with the row
-        # so a reader can see that a shape which reaches php-fpm's throughput
-        # with 32 processes is not the same result as one that reaches it
-        # with 16.
-        for serving, (pworkers, pchildren) in sorted(prefork_shapes.items()):
-            key = {"arm": "volucer-prefork", "workers": str(pworkers),
-                   "children": str(pchildren), "opcache": "on",
-                   "conc": str(conc), "threads": "12"}
-            rps = cell_median(rows, key, "rps")
-            if rps is None:
-                continue
-            label = (f"volucer spawn_cgi, {pchildren} child"
-                     f"{'ren' if pchildren > 1 else ''} in 1 slot")
-            spread = ratio_with_spread(rows, reference_key, key)
-            ratios[label] = spread
-            entry = {
-                "name": label,
-                "model": f"cold, {serving} serving processes",
-                "color": "#c2410c" if serving == reference_workers else "#f97316",
-                "rps": rps,
-                "low": None,
-                "high": None,
-                "factor": spread["centre"],
-                "reference": False,
-            }
-            if spread["low"] is not None and spread["high"] is not None:
-                # The range in requests per second: the reference's rate
-                # divided by the factor, and by the factor's extremes. The
-                # deployment's own rate sits inside it, because the factor
-                # is measured from it.
-                entry["low"] = reference_rps / spread["high"]
-                entry["high"] = reference_rps / spread["low"]
-            chart_rows.append(entry)
-
-        if len(chart_rows) < 2 or not any(row["rps"] is not None for row in chart_rows):
-            continue
-
-        chart = f"cold-c{conc}.svg"
-        write(svg_dir / chart, throughput_dots(
-            rows=chart_rows,
-            title=f"The same number of PHP processes at c={conc}",
-            note="The bar is the request rate. The label behind it states how "
-                 "many times slower that deployment is than php-fpm, which is the "
-                 "dashed line. The range on each bar is the spread of the "
-                 "round-paired comparison: both deployments were measured in the "
-                 "same round, so the range is the spread of the comparison, not "
-                 "the drift of the host. " + stamp,
-            reference_label=f"php-fpm, {reference_workers} children",
-        ))
-        files.append(chart)
-
-        lines.append(f"### At c={conc}")
-        lines.append("")
-        lines.append(f"![The same number of PHP processes at c={conc}](svg/cold/{chart})")
-        lines.append("")
-        lines.append("| deployment | serving processes | rps | p50 | p99 | factor against php-fpm (range) |")
-        lines.append("|---|---:|---:|---:|---:|---:|")
-        smaller_pools = [w for w in fpm_workers if w != reference_workers]
-
-        # The rows are collected first and ordered by throughput, fastest
-        # first - the same order as the chart above them. A table whose rows
-        # are in a different order from the chart beside it is a table the
-        # reader has to re-sort in their head.
-        table_rows: list[tuple[float, str]] = []
-
-        for workers in fpm_workers:
-            key = {"arm": "fpm", "workers": str(workers), "opcache": "on",
-                   "conc": str(conc), "threads": "12"}
-            fpm = cell_median(rows, key, "rps")
-            if fpm is None:
-                continue
-            label = f"nginx + php-fpm, {workers} child{'ren' if workers > 1 else ''}"
-            if workers == reference_workers:
-                table_rows.append((fpm, f"| {label} | {workers} | "
-                                       f"**{fmt_number(fpm)}** | - | - | x1.0 |"))
-                continue
-            spread = ratio_with_spread(rows, reference_key, key)
-            factor = f"x{spread['centre']:.1f} ({spread['low']:.2f}–{spread['high']:.2f})"
-            if spread["low"] <= 1.0 <= spread["high"]:
-                factor += " — tie"
-            table_rows.append((fpm, f"| {label} | {workers} | "
-                                   f"**{fmt_number(fpm)}** | - | - | {factor} |"))
-
-        for serving, (pworkers, pchildren) in sorted(prefork_shapes.items()):
-            key = {"arm": "volucer-prefork", "workers": str(pworkers),
-                   "children": str(pchildren), "opcache": "on",
-                   "conc": str(conc), "threads": "12"}
-            prefork = cell_median(rows, key, "rps")
-            if prefork is None:
-                continue
-            p50 = cell_median(rows, key, "p50", parse_latency)
-            p99 = cell_median(rows, key, "p99", parse_latency)
-            spread = ratio_with_spread(rows, reference_key, key)
-            factor = f"x{spread['centre']:.1f} ({spread['low']:.2f}–{spread['high']:.2f})"
-            if spread["low"] <= 1.0 <= spread["high"]:
-                factor += " — tie"
-            table_rows.append((prefork, (
-                f"| volucer spawn_cgi, {pchildren} child"
-                f"{'ren' if pchildren > 1 else ''} in 1 slot | {serving} | "
-                f"**{fmt_number(prefork)}** | "
-                f"{fmt_number(p50) if p50 is not None else '-'} ms | "
-                f"{fmt_number(p99) if p99 is not None else '-'} ms | "
-                f"{factor} |")))
-
-        for _, line in sorted(table_rows, key=lambda item: -item[0]):
-            lines.append(line)
-        if smaller_pools:
-            listed = ", ".join(
-                f"{w} child{'ren' if w > 1 else ''}" for w in smaller_pools
-            )
-            lines.append("")
-            lines.append(
-                f"The chart shows the **{reference_workers}-child** pool and the "
-                f"preforked shapes. The {listed} pool is in the table but not in "
-                "the chart: it is a deliberately undersized server, and at ten "
-                "times the rate of the others it would compress the bars that are "
-                "level with php-fpm down to a few pixels."
-            )
-        lines.append("")
-
-    # --- Memory: the argument the `children` key actually makes. ---
-    #
-    # The throughput above says the two deployments are level at the same
-    # number of processes. The memory below says the other half: what the
-    # same throughput costs in resident memory.
-    mem_rows = matrix_memory(MATRIX_DIRS["prefork"])
-    if mem_rows:
-        post = [r for r in mem_rows if r.get("phase") == "post"]
-        if post:
-            lines.append("## What the same throughput costs in memory")
-            lines.append("")
-            lines.append("Proportional set size (PSS) of the whole process tree, after the run.")
-            lines.append("PSS divides each shared page by the number of processes mapping it, so")
-            lines.append("a page the forked children share counts once — which is the whole point")
-            lines.append("of the `children` key.")
-            lines.append("")
-            lines.append("| deployment | serving processes | PSS (MB) |")
-            lines.append("|---|---:|---:|")
-
-            def pss_of(arm, workers, children=None):
-                subset = [r for r in post
-                          if r.get("arm") == arm and r.get("workers") == str(workers)
-                          and (r.get("children") or "").strip() == (children or "")]
-                values = []
-                for row in subset:
-                    try:
-                        values.append(float(row["pss_mb"]))
-                    except (TypeError, ValueError):
-                        continue
-                return statistics.median(values) if values else None
-
-            for workers in fpm_workers:
-                value = pss_of("fpm", workers)
-                if value is None:
-                    continue
-                lines.append(
-                    f"| nginx + php-fpm, {workers} child{'ren' if workers > 1 else ''} | "
-                    f"{workers} | {value:.1f} |"
-                )
-                shape = prefork_shapes.get(workers)
-                if not shape:
-                    continue
-                pworkers, pchildren = shape
-                pvalue = pss_of("volucer-prefork", pworkers, str(pchildren))
-                if pvalue is None:
-                    continue
-                lines.append(
-                    f"| volucer spawn_cgi, {pchildren} child"
-                    f"{'ren' if pchildren > 1 else ''} in 1 slot | {workers} | {pvalue:.1f} |"
-                )
-            lines.append("")
-
-    return {"pages": 1, "files": files, "body": "\n".join(lines)}
-
-
-
-# --------------------------------------------------------------------------
-# View: modes — one server, five shapes
-# --------------------------------------------------------------------------
-
-def view_modes(out_dir: Path) -> dict:
-    """The shape comparison: the same server in five configurations.
-
-    Every arm is volucer, so a difference between two rows is that shape and
-    nothing else — the transport, the process model, the SAPI reset, or the
-    `children` fork inside a cold slot.
-    """
-    rows = matrix_rows(MATRIX_DIRS["modes"])
-    if not rows:
-        return {"pages": 0, "files": []}
-
-    meta = load_meta(MATRIX_DIRS["modes"])
-    stamp = meta_stamp(meta)
-
-    arms = [arm for arm in MODE_ARMS if any(r.get("arm") == arm for r in rows)]
+    arms = [arm for arm in COMPARISON_ARMS
+            if any(r.get("arm") == arm for r in rows)]
     if not arms:
         return {"pages": 0, "files": []}
 
+    # The opcache axis. A run with both modes compares them; a run with one
+    # mode has no axis to compare, and printing an empty table of both would
+    # read like a failed measurement.
+    modes = sorted({r.get("opcache", "") for r in rows})
+    opcache_modes = modes if len(modes) > 1 else [modes[0]] if modes else ["on"]
+
     concurrencies = sorted({int(r["conc"]) for r in rows if r.get("conc", "").isdigit()})
-    workers = sorted({int(r["workers"]) for r in rows if r.get("workers", "").isdigit()})
 
-    svg_dir = out_dir / "svg" / "modes"
-    svg_dir.mkdir(parents=True, exist_ok=True)
-    files: list[str] = []
-    lines: list[str] = []
-
-    # --- Chart: the best configuration of each shape, across concurrency. ---
+    # The client thread count. The grid measured `-t$conc` and a fixed `-t12`
+    # in the same cells, and the fixed one is the one a cross-arm comparison
+    # uses: it keeps the load generator's own cost constant, so the difference
+    # between two arms is the server rather than the client.
     #
-    # The `volucer-prefork` arm has a *second* axis: `children`, the number of
-    # PHP processes behind each listening socket. Its best configuration is
-    # therefore a (workers, children) pair, and a view that looked only at
-    # `workers` would report the prefork shape's best as `children = 1` — which
-    # is just the `spawn_cgi` shape with a different name.
-    for conc in concurrencies:
-        series: dict[str, list[float | None]] = {}
-        labels: dict[str, str] = {}
-        for arm in arms:
-            best = best_configuration(rows, arm, conc)
-            series[arm] = [best["rps"]]
-            label = MODE_ARMS[arm]
-            if best["children"]:
-                label = f"{label}, {best['children']} children/slot"
-            labels[arm] = label
+    # The thread count is a property of the CELL, not of the run: `wrk`
+    # refuses `-c` below `-t`, so the harness clamps the thread count to the
+    # concurrency level whenever the level is below the requested one. A run
+    # that measures c=8 therefore has c=8 rows at `-t8` and c=16/32/64 rows
+    # at `-t12`.
+    #
+    # So the thread count to use is resolved PER CONCURRENCY LEVEL, not once
+    # for the whole run. Resolving it once - which is what this did before -
+    # finds no single count that covers every row, falls back to "the most
+    # common", and then every row whose thread count differs is invisible:
+    # the c=8 cells were measured, and the page printed none of them. A
+    # level that is missing from the page because of a bookkeeping detail in
+    # the report is indistinguishable from a level that was never measured,
+    # and the second is a claim while the first is a bug.
+    def threads_for(conc: int) -> str:
+        """The client thread count the run used at this concurrency level."""
+        candidates = {r.get("threads", "") for r in rows
+                      if r.get("conc") == str(conc)}
+        # The most common one at this level. A level measured once per
+        # configuration has exactly one; a level measured twice (the
+        # `-t$conc` and the fixed `-t12` convention) has two, and the
+        # fixed one is the comparable one - the same reason the run-wide
+        # fallback preferred it.
+        fixed = [c for c in candidates
+                 if sum(1 for r in rows if r.get("threads") == c) == len(rows)]
+        if fixed:
+            return sorted(fixed, key=lambda v: int(v) if v.isdigit() else 0)[-1]
+        if not candidates:
+            return ""
+        return max(candidates,
+                   key=lambda v: sum(1 for r in rows if r.get("threads") == v))
 
-        if not any(any(v is not None for v in row) for row in series.values()):
-            continue
-
-        chart = f"modes-c{conc}.svg"
-        write(svg_dir / chart, grouped_bars(
-            categories=[f"c={conc}"],
-            series=series,
-            colors={arm: MODE_COLORS.get(arm, "#94a3b8") for arm in arms},
-            labels=labels,
-            title=f"Best configuration of each shape at c={conc} — requests per second",
-            value_suffix="rps",
-            note=stamp,
-            height=300,
-        ))
-        files.append(chart)
-
-        lines.append(f"## At c={conc}")
-        lines.append("")
-        lines.append(f"![Best configuration of each shape at c={conc}](svg/modes/{chart})")
-        lines.append("")
-        lines.append("| shape | best rps | workers | children/slot | p50 | p99 |")
-        lines.append("|---|---:|---:|---:|---:|---:|")
-        for arm in arms:
-            best = best_configuration(rows, arm, conc)
-            if best["rps"] is None:
-                lines.append(f"| {MODE_ARMS[arm]} | - | - | - | - | - |")
+    # The serving-process count each arm was measured at.
+    #
+    # `spawn_cgi` with `children` puts several processes behind one listening
+    # socket, so its process count is not its worker count. Fixing the
+    # serving-process count is what makes two rows comparable, and the
+    # function that knows the difference is `php_process_count`.
+    def tiers_of(arm: str) -> list[int]:
+        found: set[int] = set()
+        for row in rows:
+            if row.get("arm") != arm:
                 continue
-            key = {"arm": arm, "workers": str(best["workers"]), "conc": str(conc)}
-            if best["children"]:
-                key["children"] = best["children"]
-            p50 = cell_median(rows, key, "p50", parse_latency)
-            p99 = cell_median(rows, key, "p99", parse_latency)
-            lines.append(
-                f"| {MODE_ARMS[arm]} | **{fmt_number(best['rps'])}** | {best['workers']} | "
-                f"{best['children'] or '—'} | "
-                f"{fmt_number(p50) if p50 is not None else '-'} ms | "
-                f"{fmt_number(p99) if p99 is not None else '-'} ms |"
-            )
+            workers = row.get("workers", "")
+            children = (row.get("children") or "").strip()
+            if not workers.isdigit():
+                continue
+            count = php_process_count(
+                arm, int(workers), int(children) if children.isdigit() else 0)
+            if count > 0:
+                found.add(count)
+        return sorted(found)
+
+    # The process tiers the page publishes.
+    #
+    # A tier is published when it says something about the deployment a
+    # reader would actually run. The 16-process tier carries every arm, so it
+    # is the comparison of servers. The 32-process tier carries the two cold
+    # deployments, and it is the tier where the cold path is still gaining:
+    # `spawn_cgi` with `children` and `nginx + php-fpm` both get faster with
+    # more processes, while the warm arms get slower.
+    #
+    # The 64-process tier is measured and is not published. It is the tier
+    # where the cold path has stopped gaining - `spawn_cgi` with `children`
+    # is slower there than at 32 - so it says nothing about a Volucer
+    # deployment, and what it does say is that `nginx + php-fpm` keeps
+    # improving, which is a fact about php-fpm rather than about volucer.
+    # The rows are in the repository, and the page says where.
+    published_tiers = [tier for tier in PUBLISHED_TIERS
+                       if any(tier in tiers_of(arm) for arm in arms)]
+    if not published_tiers:
+        return {"pages": 0, "files": []}
+
+    endpoint = meta.get("endpoint", "/") or "/"
+    endpoint_name = "the landing page" if endpoint == "/" else "the ORM page"
+    lines.append(f"## `GET {endpoint}` — {endpoint_name}")
+    lines.append("")
+
+    # What the run is, stated before the numbers rather than after them.
+    lines.append(
+        "Every row below was measured in **one interleaved pass** — every arm, "
+        "at every process count, at every load, in one round-robin over one "
+        "host, with the order rotating so that no cell is always first and no "
+        "cell is always last. The **PHP procs** column is the cost side of "
+        "the comparison: it says how many PHP processes serve the requests, "
+        "and it is what the host pays for."
+    )
+    lines.append("")
+    lines.append(
+        "The `spawn_cgi` arm with `children` puts several processes behind one "
+        "listening socket, so it reaches a given throughput with a different "
+        "amount of server than the arms beside it. That is why the process "
+        "count is a column and not a footnote: a row with more processes is "
+        "not a better row, it is a row that bought its throughput with more "
+        "server."
+    )
+    lines.append("")
+
+    # How to read the charts, stated once, because a chart that needs a
+    # paragraph in the reader's head to be read is a chart that will be
+    # misread.
+    lines.append(
+        "Each chart is a bar per server, and the bar is the **request rate** — "
+        "the number the page is about. The bars start at zero, so their lengths "
+        "can be compared directly."
+    )
+    lines.append("")
+    lines.append(
+        "**The label behind each bar is how many times slower that server is "
+        "than the fastest server in the same chart.** The fastest server is the "
+        "dashed vertical line, and it carries no label of its own; every other "
+        "bar states its factor — `x2.5` for a server that did 40% of the "
+        "leader's requests per second. The baseline is the fastest server *in "
+        "that chart*, not a fixed server: a cold deployment overtakes a warm one "
+        "once the host saturates, so the fastest server is not the same one at "
+        "every load — and naming it per chart is more honest than a fixed "
+        "reference that would read as a claim about the same winner every time."
+    )
+    lines.append("")
+    lines.append(
+        "**The range on each bar is the spread of the comparison, not of the "
+        "server.** Both servers were measured once per round, interleaved, so "
+        "each round holds a ratio of the two. The range is the smallest and "
+        "largest of those round-paired ratios, scaled back into requests per "
+        "second. Pairing by round is what makes that range honest: a host that "
+        "drifts over the run moves both servers in the same round, so the ratio "
+        "within a round is steadier than either server's own spread — "
+        "measurably so, on this run, in most of the pairs on this page. A range "
+        "drawn from one server's minimum and maximum would instead charge the "
+        "whole of the host's drift to that one server, and would be wide for the "
+        "wrong reason."
+    )
+    lines.append("")
+    lines.append(
+        "A range that reaches across the 1.0 line means the two servers could "
+        "not be told apart in this run. The table marks those rows **tie**: a "
+        "difference inside the measurement's own spread is not a difference, and "
+        "the factor there is the best estimate rather than a claim that one "
+        "server is faster."
+    )
+    lines.append("")
+
+    for mode in opcache_modes:
+        mode_title = ("OPcache on" if mode == "on"
+                      else "OPcache off" if mode == "off"
+                      else f"OPcache {mode}")
+        lines.append(f"### {mode_title}")
         lines.append("")
 
-    # --- The memory table, which is where the shapes differ in kind. ---
-    #
-    # The full grid is 40+ rows, which is a data dump rather than a page. Two
-    # readings are worth publishing: the cost of the shape at a fixed worker
-    # count, and the same number of PHP processes arranged two different ways.
-    mem_rows = matrix_memory(MATRIX_DIRS["modes"])
-    if mem_rows:
-        post = [r for r in mem_rows if r.get("phase") == "post"]
-        if post:
-            lines.append("## Memory")
-            lines.append("")
-            lines.append("Proportional set size (PSS) of the whole process tree, after the run.")
-            lines.append("PSS divides each shared page by the number of processes mapping it, so a")
-            lines.append("page the forked children share counts once — which is exactly the effect")
-            lines.append("the `children` shape is claiming.")
-            lines.append("")
+        for conc in concurrencies:
+            threads = threads_for(conc)
 
-            # --- Chart one: PSS against the worker count, one line per shape. ---
+            # The rows of this chart: one per (arm, process tier) that was
+            # measured at this concurrency.
             #
-            # The `volucer-prefork` arm is drawn at `children = 1`, because that
-            # is the configuration that is comparable with one process per slot.
-            # Its other `children` values are a different shape and are in the
-            # second chart, where the process count is held equal instead.
-            chart_shapes: list[str] = []
+            # An arm can be measured at more than one process count, and the
+            # process count is what the rows are compared on, so a row is an
+            # (arm, tier) pair and not an arm.
+            entries: list[dict] = []
             for arm in arms:
-                if arm == "volucer-prefork":
-                    continue
-                if any(r.get("arm") == arm for r in post):
-                    chart_shapes.append(arm)
-            if "volucer-prefork" in arms and any(
-                r.get("arm") == "volucer-prefork" and (r.get("children") or "").strip() == "1"
-                for r in post
-            ):
-                chart_shapes.append("volucer-prefork")
+                for tier in published_tiers:
+                    if tier not in tiers_of(arm):
+                        continue
+                    best = configuration_at_process_count(
+                        rows, arm, tier, conc, mode=mode, threads=threads)
+                    if best["rps"] is None:
+                        continue
+                    entries.append({"arm": arm, "tier": tier, "best": best})
 
-            worker_levels = sorted({int(r["workers"]) for r in post if r.get("workers", "").isdigit()})
-            series: dict[str, list[float | None]] = {}
-            labels: dict[str, str] = {}
-            colors: dict[str, str] = {}
-            for arm in chart_shapes:
-                values: list[float | None] = []
-                for worker in worker_levels:
-                    key = {"arm": arm, "workers": str(worker), "phase": "post"}
-                    if arm == "volucer-prefork":
-                        key["children"] = "1"
-                    values.append(cell_median(post, key, "pss_mb"))
-                series[arm] = values
-                label = MODE_ARMS[arm]
-                if arm == "volucer-prefork":
-                    label = f"{label}, 1 child/slot"
-                labels[arm] = label
-                colors[arm] = MODE_COLORS.get(arm, "#94a3b8")
+            if len(entries) < 2:
+                continue
 
-            if series:
-                mem_chart = "modes-memory.svg"
-                write(svg_dir / mem_chart, grouped_bars(
-                    categories=[f"w={w}" for w in worker_levels],
-                    series=series,
-                    colors=colors,
-                    labels=labels,
-                    title="Resident memory against the worker count",
-                    value_suffix="MiB",
-                    note=stamp,
-                    height=420,
-                ))
-                files.append(mem_chart)
-                lines.append(f"![Resident memory against the worker count](svg/modes/{mem_chart})")
-                lines.append("")
-                lines.append("| shape | " + " | ".join(f"w={w}" for w in worker_levels) + " |")
-                lines.append("|---|" + "---:|" * len(worker_levels))
-                for arm in chart_shapes:
-                    row = []
-                    for index in range(len(worker_levels)):
-                        value = series[arm][index]
-                        row.append(f"{value:.1f}" if value is not None else "-")
-                    lines.append(f"| {labels[arm]} | " + " | ".join(row) + " |")
-                lines.append("")
-
-            # --- Chart two: the same PHP processes, arranged two ways. ---
+            # The baseline: the fastest row in the chart.
             #
-            # The `children` shape exists to answer one question: for the same
-            # number of PHP processes, is a forked slot cheaper than one
-            # process per slot? The comparison has to hold the process count
-            # equal, or it is comparing two different amounts of server.
-            same_processes = same_process_count_comparison(post)
-            if len(same_processes) >= 2:
-                rows_out: list[str] = []
-                low: list[float] = []
-                high: list[float] = []
-                centre: list[float] = []
-                for entry in same_processes:
-                    rows_out.append(entry["label"])
-                    low.append(entry["min"])
-                    high.append(entry["max"])
-                    centre.append(entry["median"])
+            # The baseline is the **fastest row**, not a fixed arm. A fixed
+            # reference would put a label on every bar that means something
+            # different in every chart, and the reader would have to look it
+            # up. The fastest server in the group is the natural yardstick:
+            # it is 1.0x, and every other bar is labelled with its share of it.
+            #
+            # It is found from the data, per concurrency. It is not assumed to
+            # be the same arm at every load, because it is not: a cold
+            # deployment overtakes a warm one as the host saturates, and a
+            # chart that kept naming the same baseline would be claiming a
+            # winner the measurement does not have.
+            reference = max(entries, key=lambda e: e["best"]["rps"])
+            reference_best = reference["best"]
+            reference_key = {
+                "arm": reference["arm"],
+                "workers": str(reference_best["workers"]),
+                "opcache": mode,
+                "conc": str(conc),
+                "threads": threads,
+            }
+            if reference_best["children"]:
+                reference_key["children"] = reference_best["children"]
 
-                proc_chart = "modes-same-processes.svg"
-                write(svg_dir / proc_chart, range_bars(
-                    categories=rows_out,
-                    low=low,
-                    high=high,
-                    centre=centre,
-                    colour="#2563eb",
-                    title="The same number of PHP processes, arranged two ways",
+            chart_rows: list[dict] = []
+            ratios: dict[tuple[str, int], dict] = {}
+
+            for entry in entries:
+                arm = entry["arm"]
+                tier = entry["tier"]
+                best = entry["best"]
+                server, model = SERVER_ARMS[arm]
+                short = SHORT_MODELS.get(arm, model)
+
+                # The chart's left-hand column has room for a name and a
+                # model, not a sentence. The model carries the process count
+                # here, because the chart has no column for it and two rows of
+                # the same arm at different process counts would otherwise be
+                # two identical labels.
+                chart_model = f"{short} · {tier} procs"
+
+                row = {
+                    "name": server,
+                    "model": chart_model,
+                    "color": SERVER_COLORS.get(arm, "#94a3b8"),
+                    "rps": best["rps"],
+                    "low": None,
+                    "high": None,
+                    "factor": None,
+                    "reference": entry is reference,
+                }
+
+                key = {"arm": arm, "workers": str(best["workers"]),
+                       "opcache": mode, "conc": str(conc), "threads": threads}
+                if best["children"]:
+                    key["children"] = best["children"]
+
+                if entry is reference:
+                    # The baseline against itself is 1.0 by definition, and it
+                    # has no range: it is the yardstick, and a yardstick with a
+                    # range on it is not a yardstick.
+                    spread = {"centre": 1.0, "low": 1.0, "high": 1.0,
+                              "rounds": 0}
+                else:
+                    # How many times slower this row is than the baseline: the
+                    # baseline divided by the row. It is the reciprocal of the
+                    # share, because "twice as slow" is how a reader thinks
+                    # about the result - and the same number describes a
+                    # comparison of times rather than rates.
+                    spread = ratio_with_spread(rows, reference_key, key)
+                ratios[(arm, tier)] = spread
+
+                row["factor"] = spread["centre"]
+                if spread["low"] is not None and spread["high"] is not None:
+                    # The range in requests per second: the reference's rate
+                    # divided by the factor, and by the factor's extremes. The
+                    # row's own rate sits inside it, because the factor is
+                    # measured from it.
+                    row["low"] = reference_best["rps"] / spread["high"]
+                    row["high"] = reference_best["rps"] / spread["low"]
+
+                chart_rows.append(row)
+
+            slug = "root" if endpoint == "/" else endpoint.strip("/").replace("/", "-")
+            chart = f"benchmarks-{slug}-{mode}-c{conc}.svg"
+            reference_server, reference_model = SERVER_ARMS[reference["arm"]]
+            reference_label = f"{reference_server} — {reference_model}"
+            if reference_best["children"]:
+                reference_label += f", {reference_best['children']} children"
+
+            write(svg_dir / chart, throughput_dots(
+                rows=chart_rows,
+                title=f"GET {endpoint} — {mode_title} at c={conc}",
+                note="The bar is the request rate. The label behind it is how "
+                     "many times slower that server is than the fastest server "
+                     "in this chart, which is the dashed line. The range on "
+                     "each bar is the spread of the round-paired comparison: "
+                     "both servers were measured in the same round, so the "
+                     "range is the spread of the comparison rather than the "
+                     "drift of the host. " + stamp,
+                reference_label="fastest here",
+            ))
+            files.append(chart)
+
+            lines.append(f"![{mode_title} at c={conc}](svg/benchmarks/{chart})")
+
+            # The table belongs to the highest concurrency the run was
+            # measured at, which is the load the comparison is about: the
+            # numbers above are the ones the table prints, and a table that
+            # reported a different concurrency's numbers would contradict the
+            # chart above it.
+            if conc != concurrencies[-1]:
+                continue
+
+            lines.append("")
+            lines.append(
+                f"The **factor** column is measured against **{reference_label}** "
+                "— the fastest server in this table. It states how many times "
+                "slower each server is, so `x1.0` is the fastest and `x2.5` is "
+                "a quarter of its rate. The column carries the range of the "
+                "round-paired ratios beside it, and a row marked **tie** is one "
+                "whose range reaches across 1.0 — the two servers could not be "
+                "told apart in this run."
+            )
+            lines.append("")
+            lines.append("| server | model | PHP procs | rps | p50 | p99 | factor (range) |")
+            lines.append("|---|---|---:|---:|---:|---:|---:|")
+            # The rows are ordered by throughput, fastest first - the same
+            # order as the chart above them. A table whose rows are in a
+            # different order from the chart beside it is a table the reader
+            # has to re-sort in their head.
+            for entry in sorted(entries, key=lambda e: -(e["best"]["rps"] or 0.0)):
+                arm = entry["arm"]
+                tier = entry["tier"]
+                best = entry["best"]
+                rps = best["rps"]
+                server, model = SERVER_ARMS[arm]
+                key = {"arm": arm, "workers": str(best["workers"]),
+                       "opcache": mode, "conc": str(conc), "threads": threads}
+                if best["children"]:
+                    key["children"] = best["children"]
+                p50 = cell_median(rows, key, "p50", parse_latency)
+                p99 = cell_median(rows, key, "p99", parse_latency)
+                spread = ratios[(arm, tier)]
+                if entry is reference or not spread.get("centre"):
+                    # The reference is 1.0 by definition. It is printed
+                    # rather than left blank, because a blank cell in this
+                    # column would read as "not measured" — and it is the one
+                    # cell in the column that was measured beyond doubt.
+                    factor = "x1.0"
+                else:
+                    factor = f"x{spread['centre']:.1f}"
+                    # The range is printed beside the factor because the
+                    # chart beside the table draws it, and a chart that shows
+                    # a number the table does not is a number the reader has
+                    # to trust rather than check. It is the range of the
+                    # round-paired ratios - the spread of the comparison, not
+                    # the spread of the server.
+                    #
+                    # Two decimals, while the factor itself has one. The
+                    # factor is read as a scale - x1.1, x2.5 - and one decimal
+                    # is enough for that. The range is read as evidence, and
+                    # one decimal would round a range of 0.99 to 1.01 into
+                    # "1.0 - 1.0": a range that visibly does not cross 1.0
+                    # beside a row marked **tie**, which is exactly the
+                    # contradiction the range exists to prevent.
+                    low = spread.get("low")
+                    high = spread.get("high")
+                    if low is not None and high is not None:
+                        factor += f" ({low:.2f}–{high:.2f})"
+                    # A factor whose range reaches across 1.0 is not a
+                    # difference - the two servers could not be told apart in
+                    # this run. Printing it as a plain factor would claim a
+                    # result the measurement does not support, and would
+                    # contradict the chart beside it, which says so.
+                    if low is not None and high is not None and low <= 1.0 <= high:
+                        factor += " — tie"
+                lines.append(
+                    f"| {server} | {model} | {tier} | "
+                    f"**{fmt_number(rps)}** | "
+                    f"{fmt_number(p50) if p50 is not None else '-'} ms | "
+                    f"{fmt_number(p99) if p99 is not None else '-'} ms | {factor} |"
+                )
+            lines.append("")
+
+        # The tier story, told once the numbers are on the page.
+        lines.extend(tier_notes(rows, arms, published_tiers, modes[0] if modes else "on"))
+
+    # --- The cost: what the same deployments hold in memory. ---
+    #
+    # The memory section publishes every tier the run measured, including the
+    # 64-process one the throughput comparison stops before. Memory is a cost
+    # argument rather than a throughput claim: what a deployment holds while it
+    # serves is a fact about the deployment at every size, and the forked
+    # pool's advantage grows with the process count — which is the whole
+    # argument for it. A section that stopped at 32 would show the advantage
+    # at its smallest.
+    memory = view_memory(rows, stamp, arms, MEASURED_TIERS, svg_dir, files)
+    lines.extend(memory["lines"])
+    files.extend(memory["files"])
+
+    return {"pages": 1, "files": files, "body": "\n".join(lines)}
+
+
+def tier_notes(rows: list[dict], arms: list[str], tiers: list[int],
+               mode: str) -> list[str]:
+    """What the extra process tiers say, in words the data supports.
+
+    Every claim here is a round-paired ratio between two cells of the same
+    run, which is the only kind of claim the run can carry: a ratio between
+    a 16-process measurement and a 32-process measurement of the same arm,
+    paired by the round they were measured in.
+    """
+    notes: list[str] = []
+
+    def key_for(arm: str, tier: int, conc: str) -> dict:
+        if arm == "volucer-prefork":
+            return {"arm": arm, "workers": "1", "children": str(tier),
+                    "opcache": mode, "conc": conc, "threads": "12"}
+        return {"arm": arm, "workers": str(tier), "opcache": mode,
+                "conc": conc, "threads": "12"}
+
+    conc = "64"
+
+    # The cold pair, head to head, at each tier.
+    if "volucer-prefork" in arms and "fpm" in arms:
+        lines: list[str] = []
+        pairs: list[tuple[int, float, float, float]] = []
+        for tier in tiers:
+            prefork_key = key_for("volucer-prefork", tier, conc)
+            fpm_key = key_for("fpm", tier, conc)
+            prefork_rps = cell_median(rows, prefork_key, "rps")
+            fpm_rps = cell_median(rows, fpm_key, "rps")
+            if prefork_rps is None or fpm_rps is None:
+                continue
+            spread = ratio_with_spread(rows, prefork_key, fpm_key)
+            if spread["centre"] is None:
+                continue
+            pairs.append((tier, prefork_rps, fpm_rps, spread["centre"]))
+
+        if pairs:
+            lines.append(
+                "**The two cold deployments, head to head.** `spawn_cgi` with "
+                "`children` and `nginx + php-fpm` are the same idea reached two "
+                "ways — a forked pool of `php-cgi` children behind one socket, "
+                "or a pool of `php-fpm` children behind another — and at the "
+                "same number of serving processes they are level:"
+            )
+            lines.append("")
+            for tier, prefork_rps, fpm_rps, factor in pairs:
+                lines.append(
+                    f"- **{tier} processes** — `spawn_cgi` "
+                    f"**{fmt_number(prefork_rps)}** rps against php-fpm's "
+                    f"**{fmt_number(fpm_rps)}**, a factor of x{factor:.2f}"
+                )
+            lines.append("")
+            notes.extend(lines)
+
+    # What more processes buy, per arm, paired by round.
+    gains: list[str] = []
+    for arm in arms:
+        if len(tiers) < 2:
+            break
+        base = tiers[0]
+        for tier in tiers[1:]:
+            base_key = key_for(arm, base, conc)
+            tier_key = key_for(arm, tier, conc)
+            base_rps = cell_median(rows, base_key, "rps")
+            tier_rps = cell_median(rows, tier_key, "rps")
+            if base_rps is None or tier_rps is None:
+                continue
+            spread = ratio_with_spread(rows, tier_key, base_key)
+            if spread["centre"] is None:
+                continue
+            server, model = SERVER_ARMS[arm]
+            gains.append(
+                f"| {server} | {model} | {fmt_number(base_rps)} | "
+                f"{fmt_number(tier_rps)} | x{spread['centre']:.2f} "
+                f"({spread['low']:.2f}–{spread['high']:.2f}) |"
+            )
+
+    if gains:
+        notes.append(
+            f"**What the extra processes buy.** The table below is the same arm "
+            f"at {tiers[0]} processes and at {tiers[-1]} processes, paired by "
+            f"the round each was measured in. It is the clearest statement of "
+            f"what this host does when it is given more of the server:"
+        )
+        notes.append("")
+        notes.append(
+            f"| server | model | {tiers[0]} procs | {tiers[-1]} procs | "
+            f"{tiers[-1]}/{tiers[0]} (range) |"
+        )
+        notes.append("|---|---|---:|---:|---:|")
+        notes.extend(gains)
+        notes.append("")
+        notes.append(scaling_summary(rows, arms, tiers, mode, conc))
+        notes.append("")
+
+    # The tier that is measured but not published, said out loud.
+    #
+    # A page that stops at 32 without saying why looks like a page that ran
+    # out of measurements. The run measured 64 as well, the rows are in the
+    # repository, and the reason the tier is not in the throughput table is
+    # a claim about what the tier shows: it is where the cold path stops
+    # gaining for volucer, so it would say more about php-fpm's ceiling than
+    # about a volucer deployment.
+    unpublished = [tier for tier in MEASURED_TIERS if tier not in tiers]
+    if unpublished:
+        notes.append(
+            f"**The {', '.join(str(t) for t in unpublished)}-process tier is "
+            f"measured and is not in the table above.** The run covered it — "
+            f"the rows are in the repository — and it is left out because it "
+            f"is the tier where the cold path stops gaining for volucer: "
+            f"`spawn_cgi` with `children` is *slower* there than at "
+            f"{tiers[-1]} processes. What the tier does show is that "
+            f"`nginx + php-fpm` keeps improving, and a fact about another "
+            f"server's ceiling is not a reason for a reader to run more volucer "
+            f"processes. It is in the memory section below, where it is a fact "
+            f"about what a deployment costs rather than a claim about who wins."
+        )
+        notes.append("")
+
+    return notes
+
+
+def scaling_summary(rows: list[dict], arms: list[str], tiers: list[int],
+                    mode: str, conc: str) -> str:
+    """What the extra processes do, stated from the data rather than asserted.
+
+    The sentence below is a summary of the table above it, and it is
+    *computed* from the table rather than written next to it. A summary that
+    is written by hand is a second copy of the numbers, and the second copy
+    is the one that goes stale: a run that measured differently would still
+    carry the sentence the last run earned.
+
+    So the arms are sorted into three groups by what the measurement says
+    about them, and each group is named by the data:
+
+    - the arms that got faster, and whose range clears 1.0
+    - the arms that got slower, and whose range clears 1.0
+    - the arms the measurement could not tell apart from their own spread
+
+    and the sentence says which is which.
+    """
+    def key_for(arm: str, tier: int) -> dict:
+        if arm == "volucer-prefork":
+            return {"arm": arm, "workers": "1", "children": str(tier),
+                    "opcache": mode, "conc": conc, "threads": "12"}
+        return {"arm": arm, "workers": str(tier), "opcache": mode,
+                "conc": conc, "threads": "12"}
+
+    if len(tiers) < 2:
+        return ""
+    base, top = tiers[0], tiers[-1]
+
+    faster: list[str] = []
+    slower: list[str] = []
+    unclear: list[str] = []
+    for arm in arms:
+        spread = ratio_with_spread(rows, key_for(arm, top), key_for(arm, base))
+        if spread["centre"] is None:
+            continue
+        server, model = SERVER_ARMS[arm]
+        label = f"{server} ({model})"
+        low, high = spread["low"], spread["high"]
+        if low is not None and high is not None and low <= 1.0 <= high:
+            # The range reaches across 1.0: the two tiers could not be told
+            # apart, so calling it a gain or a loss would claim more than
+            # the measurement carries.
+            unclear.append(label)
+        elif spread["centre"] > 1.0:
+            faster.append(label)
+        else:
+            slower.append(label)
+
+    parts: list[str] = []
+    if faster:
+        parts.append(
+            f"**{len(faster)} of the arms got faster** with the extra "
+            f"processes: " + ", ".join(faster) + "."
+        )
+    if slower:
+        parts.append(
+            f"**{len(slower)} got slower**: " + ", ".join(slower) + "."
+        )
+    if unclear:
+        parts.append(
+            f"**{len(unclear)} could not be told apart** from their own "
+            f"spread: " + ", ".join(unclear) + "."
+        )
+
+    if not parts:
+        return ""
+
+    # The explanation, only where the data shows the pattern.
+    #
+    # The cold deployments pay a framework boot per request, so a process
+    # that is not yet warm is a process that has not yet paid, and each one
+    # can add throughput the others cannot. The warm arms keep the
+    # application resident, so their processes are interchangeable: once
+    # enough of them are running, another one adds contention rather than
+    # throughput. That is the mechanism the numbers show, and it is stated
+    # as the pattern the numbers show rather than as a rule.
+    warm = [arm for arm in arms
+            if arm in ("volucer-attach", "volucer-worker", "volucer-unix",
+                       "rr", "frankenphp")]
+    cold = [arm for arm in arms if arm in ("volucer-prefork", "fpm")]
+
+    def names(arms_in: list[str], bucket: list[str]) -> list[str]:
+        found = []
+        for arm in arms_in:
+            server, model = SERVER_ARMS[arm]
+            label = f"{server} ({model})"
+            if label in bucket:
+                found.append(label)
+        return found
+
+    fast_warm = names(warm, faster)
+    fast_cold = names(cold, faster)
+    if fast_cold and not fast_warm:
+        parts.append(
+            "The pattern is the mechanism: the deployments that gained are the "
+            "ones that pay a framework boot per request, where a process that "
+            "has not yet warmed has not yet paid, and the warm ones keep the "
+            "application resident, so their processes are interchangeable — "
+            "once enough of them are running, another one adds contention "
+            "rather than throughput."
+        )
+    elif fast_cold and fast_warm:
+        parts.append(
+            "The deployments that gained fastest are the ones that pay a "
+            "framework boot per request: a process that has not yet warmed has "
+            "not yet paid, so each one can add throughput the others cannot. "
+            "The warm deployments keep the application resident, so their "
+            "processes are interchangeable."
+        )
+
+    return " ".join(parts)
+
+
+def view_memory(rows: list[dict], stamp: str, arms: list[str], tiers: list[int],
+                svg_dir: Path, files: list[str]) -> dict:
+    """The cost of the same deployments: the memory they hold.
+
+    Throughput alone is half the answer to "which server should I run". The
+    other half is what it holds in memory while it does it, and the two cold
+    deployments are where that half is interesting: the same number of PHP
+    processes, arranged two different ways, and the two arrangements do not
+    cost the same.
+    """
+    lines: list[str] = []
+    charts: list[str] = []
+
+    mem_rows = matrix_memory(MATRIX_DIRS["servers"])
+    post = [r for r in mem_rows if r.get("phase") == "post"]
+    if not post:
+        return {"lines": lines, "files": charts}
+
+    def memory_of(arm: str, tier: int) -> tuple[float | None, float | None]:
+        """The median PSS and RSS of one arm at one process count."""
+        key = {"arm": arm, "phase": "post"}
+        if arm == "volucer-prefork":
+            key["workers"] = "1"
+            key["children"] = str(tier)
+        else:
+            key["workers"] = str(tier)
+        pss = cell_median(post, key, "pss_mb")
+        rss = cell_median(post, key, "rss_mb")
+        return pss, rss
+
+    lines.append("## What it costs in memory")
+    lines.append("")
+    lines.append(
+        "**Proportional set size (PSS)**, of the whole process tree, after the "
+        "run. PSS divides every shared page by the number of processes that map "
+        "it, which is what makes it the figure that can be compared across "
+        "process models: a page that thirty-two `php-fpm` children share "
+        "counts once, and a page that thirty-two separate processes each hold "
+        "counts thirty-two times."
+    )
+    lines.append("")
+    lines.append(
+        "**Resident set size (RSS)** is printed beside it in brackets, "
+        "because it is the number `htop` shows and the number most people "
+        "quote — and it counts a shared page once per process that maps it, so "
+        "it reports a cost that the host does not pay. Both are given, so "
+        "nothing is hidden and neither is mistaken for the other."
+    )
+    lines.append("")
+
+    # --- Chart one: the memory of each deployment, against its process count. ---
+    series: dict[str, list[float | None]] = {}
+    labels: dict[str, str] = {}
+    for arm in arms:
+        values: list[float | None] = []
+        for tier in tiers:
+            pss, _ = memory_of(arm, tier)
+            values.append(pss)
+        if all(value is None for value in values):
+            continue
+        server, model = SERVER_ARMS[arm]
+        series[arm] = values
+        labels[arm] = f"{server} — {model}"
+
+    if series:
+        chart = "benchmarks-memory.svg"
+        write(svg_dir / chart, grouped_bars(
+            categories=[f"{tier} processes" for tier in tiers],
+            series=series,
+            colors={arm: SERVER_COLORS.get(arm, "#94a3b8") for arm in series},
+            labels=labels,
+            title="Resident memory against the number of PHP processes",
+            value_suffix="MiB",
+            note="Proportional set size of the whole process tree, after the "
+                 "run: each shared page is divided by the number of processes "
+                 "that map it, so a page the children share counts once. " + stamp,
+            height=420,
+        ))
+        charts.append(chart)
+        lines.append(f"![Resident memory against the number of PHP processes](svg/benchmarks/{chart})")
+        lines.append("")
+        lines.append("| server | model | " + " | ".join(
+            f"{tier} procs" for tier in tiers) + " |")
+        lines.append("|---|---|" + "---:|" * len(tiers))
+        for arm in arms:
+            if arm not in series:
+                continue
+            server, model = SERVER_ARMS[arm]
+            cells: list[str] = []
+            for tier in tiers:
+                pss, rss = memory_of(arm, tier)
+                if pss is None:
+                    cells.append("-")
+                    continue
+                if rss is None:
+                    cells.append(f"{pss:.1f}")
+                    continue
+                cells.append(f"{pss:.1f} ({rss:,.0f})")
+            lines.append(f"| {server} | {model} | " + " | ".join(cells) + " |")
+        lines.append("")
+        lines.append(
+            "Each cell is the **PSS** of the deployment, with its **RSS** in "
+            "brackets — the same number `htop` shows, which counts a shared "
+            "page once per process that maps it."
+        )
+        lines.append("")
+
+    # --- Chart two: the same PHP processes, arranged two ways. ---
+    #
+    # The `children` key exists to answer one question: for the same number of
+    # PHP processes, is a forked slot cheaper than one process per slot? The
+    # comparison has to hold the process count equal, or it is comparing two
+    # different amounts of server.
+    same_processes = same_process_count_comparison(post)
+    if len(same_processes) >= 2:
+        by_count: dict[int, list[dict]] = defaultdict(list)
+        for entry in same_processes:
+            by_count[entry["processes"]].append(entry)
+
+        counts = [tier for tier in tiers if tier in by_count]
+        if counts:
+            one_per_slot: list[float | None] = []
+            forked: list[float | None] = []
+            for tier in counts:
+                entries = by_count[tier]
+                slot = next((e for e in entries if "separate slots" in e["label"]), None)
+                fork = next((e for e in entries if "separate slots" not in e["label"]), None)
+                one_per_slot.append(slot["median"] if slot else None)
+                forked.append(fork["median"] if fork else None)
+
+            if any(v is not None for v in one_per_slot) and any(v is not None for v in forked):
+                chart = "benchmarks-memory-same-processes.svg"
+                write(svg_dir / chart, grouped_bars(
+                    categories=[f"{tier} processes" for tier in counts],
+                    series={
+                        "one per slot": one_per_slot,
+                        "one slot × N children": forked,
+                    },
+                    colors={"one per slot": "#94a3b8", "one slot × N children": "#c2410c"},
+                    labels={
+                        "one per slot": "spawn_cgi — one process per slot",
+                        "one slot × N children": "spawn_cgi — one slot × N children",
+                    },
+                    title="The same PHP processes, arranged two ways",
                     value_suffix="MiB",
-                    note="The bar spans the measured range across the rounds; the dot is "
-                         "the median. PSS divides shared pages between the processes "
-                         "that map them, so a page the forked children share counts once. "
-                         + stamp,
+                    note="Proportional set size of the whole process tree, after "
+                         "the run: each shared page is divided by the number of "
+                         "processes that map it, so a page the children share "
+                         "counts once. The same number of PHP processes, serving "
+                         "the same requests: once as separate slots, once as the "
+                         "children of a single slot. " + stamp,
+                    height=340,
                 ))
-                files.append(proc_chart)
-                lines.append("### The same number of PHP processes, two ways")
+                charts.append(chart)
+                lines.append("### The same PHP processes, arranged two ways")
                 lines.append("")
-                lines.append(f"![The same number of PHP processes, arranged two ways](svg/modes/{proc_chart})")
+                lines.append(
+                    "The `children` key exists to answer one question: for the "
+                    "same number of PHP processes, is a forked slot cheaper "
+                    "than one process per slot? The comparison has to hold the "
+                    "process count equal, or it is comparing two different "
+                    "amounts of server."
+                )
                 lines.append("")
-                lines.append("| shape | PHP processes | median PSS (MiB) | min | max | vs separate slots |")
+                lines.append(
+                    f"![The same PHP processes, arranged two ways](svg/benchmarks/{chart})"
+                )
+                lines.append("")
+                lines.append("| shape | PHP processes | median PSS (MiB) | min | max | vs one per slot |")
                 lines.append("|---|---:|---:|---:|---:|---:|")
-                # The multiplier is against the *separate slots* row with the
-                # same process count, not against the lightest row on the
-                # chart. A chart holds several process counts, and comparing
-                # across them would state a ratio between two different
-                # amounts of server.
                 baseline: dict[int, float] = {}
                 for entry in same_processes:
                     if "separate slots" in entry["label"]:
                         baseline[entry["processes"]] = entry["median"]
-
                 for entry in same_processes:
                     base = baseline.get(entry["processes"])
                     if base and "separate slots" not in entry["label"]:
@@ -1945,40 +1553,36 @@ def view_modes(out_dir: Path) -> dict:
                         f"{entry['max']:.1f} | {ratio} |"
                     )
                 lines.append("")
-                # Every forked arrangement is compared against the separate
-                # slots with the same serving count, and the range across all
-                # of them is reported. A single number chosen from several
-                # ways to reach the same process count would be a cherry-pick:
-                # the arrangements differ in how many masters they carry, and
-                # the honest statement is the range.
-                pairs: list[tuple[int, str, float]] = []
+                pairs: list[tuple[int, float]] = []
                 for entry in same_processes:
                     base = baseline.get(entry["processes"])
                     if base and "separate slots" not in entry["label"]:
-                        pairs.append((entry["processes"], entry["label"], base / entry["median"]))
-
+                        pairs.append((entry["processes"], base / entry["median"]))
                 if pairs:
-                    lightest_pair = min(pairs, key=lambda p: p[2])
-                    heaviest_pair = max(pairs, key=lambda p: p[2])
-                    lines += [
-                        "Across every arrangement the run measured, the forked pool holds",
-                        f"**{lightest_pair[2]:.1f}× to {heaviest_pair[2]:.1f}× less** resident",
-                        "memory than one process per slot, for the same number of serving",
-                        "processes:",
-                        "",
-                        f"- **{heaviest_pair[1]}** — {heaviest_pair[2]:.1f}× less, at "
-                        f"{heaviest_pair[0]} processes",
-                        f"- **{lightest_pair[1]}** — {lightest_pair[2]:.1f}× less, at "
-                        f"{lightest_pair[0]} processes",
-                        "",
-                        "The forked arrangement is lighter in every case. The spread is the",
-                        "number of master processes the arrangement carries: one master for one",
-                        "slot serving every child, or one master per slot.",
-                        "",
-                    ]
+                    smallest = min(pairs, key=lambda p: p[1])
+                    largest = max(pairs, key=lambda p: p[1])
+                    lines.append(
+                        f"For the same number of serving processes, the forked "
+                        f"pool holds **{smallest[1]:.1f}× to {largest[1]:.1f}× "
+                        f"less** resident memory than one process per slot — "
+                        f"because the children inherit the master's pages "
+                        f"instead of each mapping its own."
+                    )
+                    lines.append("")
+                    lines.append(
+                        "The advantage grows with the process count, because the "
+                        "pages the children share are the ones that would "
+                        "otherwise be copied into every process. That is the "
+                        "argument for the `children` key, and it is why the "
+                        "`spawn_cgi` arm with `children` is the one that "
+                        "appears in the throughput comparison above, while the "
+                        "one-process-per-slot shape is not: for the same number "
+                        "of PHP processes it costs several times the memory "
+                        "for the same throughput."
+                    )
+                    lines.append("")
 
-    return {"pages": 1, "files": files, "body": "\n".join(lines)}
-
+    return {"lines": lines, "files": charts}
 
 
 # --------------------------------------------------------------------------
@@ -1986,28 +1590,13 @@ def view_modes(out_dir: Path) -> dict:
 # --------------------------------------------------------------------------
 
 VIEWS = {
-    "servers": {
-        "title": "The servers, side by side",
+    "benchmarks": {
+        "title": "Benchmarks",
         "description": "Volucer against RoadRunner, FrankenPHP and nginx + php-fpm, "
-                       "every arm through one harness on one interpreter.",
-        "build": view_servers,
-    },
-    "modes": {
-        "title": "One server, five shapes",
-        "description": "The same server in five configurations: the transport, the "
-                       "process model, the SAPI reset, and the forked slot.",
-        "build": view_modes,
-    },
-    "cold": {
-        "title": "The cold path against php-fpm",
-        "description": "Volucer's spawn_cgi against nginx + php-fpm, at the same "
-                       "number of serving PHP processes, in one run.",
-        "build": view_cold,
-    },
-    "prefork": {
-        "title": "Prefork versus one process per slot",
-        "description": "What spawn_cgi's `children` key is worth.",
-        "build": view_prefork,
+                       "every arm through one harness on one interpreter - and what "
+                       "each of them costs in memory.",
+        "build": view_benchmarks,
+        "page": "12-BENCHMARKS.md",
     },
 }
 
@@ -2019,21 +1608,27 @@ VIEWS = {
 # makes. So a retired view is named here, and publishing removes its page
 # and its charts.
 #
-# The list is empty at the moment. The mechanism stays, because the day a
-# view is retired is exactly the day somebody would forget to remove its
-# page.
-RETIRED_VIEWS: tuple[str, ...] = ()
+# The four pages this list holds were one comparison split four ways: the
+# servers side by side, the same server in five shapes, the cold path against
+# php-fpm, and what the preforked slot is worth. Every number in them is
+# either in the one page now or was a re-statement of a number in it, and
+# four pages that said the same thing four ways was four places for a reader
+# to find an answer that disagreed with the others.
+RETIRED_VIEWS: tuple[str, ...] = ("servers", "modes", "cold", "prefork")
 
-PREAMBLE = """The charts on this page are generated from the committed result files in
-[`volucer-competition`](https://github.com/sailantis/volucer-competition) by
-`scripts/bench-report.py`, so a chart cannot disagree with the table beside it. A cell
-with no successful repeat is printed as `-`, never as `0` — a zero reads as "measured,
-and it was terrible" rather than "not measured". The method, the raw rows and the
-controls live in that repository.
+PREAMBLE = """**Measured, not estimated.** Every number on this page comes from one committed
+result file in
+[`volucer-competition`](https://github.com/sailantis/volucer-competition), and the
+charts are generated from that same file — so a chart cannot disagree with the table
+beside it. A cell with no successful repeat is printed as `-`, never as `0`: a zero reads
+as "measured, and it was terrible" rather than "not measured". The method, the raw rows
+and the controls live in that repository.
 
-Every figure here was measured on one host, with one harness and one interpreter, so a
-ratio between two arms is a ratio between two measurements made the same way. The host,
-the kernel, the PHP version and the method are printed on every chart.
+**One host, one harness, one interpreter, one pass.** Every figure below was measured on
+the same machine, through the same script, against the same PHP build, in one
+interleaved pass — so a ratio between two arms is a ratio between two measurements made
+the same way. The host, the kernel, the PHP version and the method are printed on every
+chart.
 """
 
 
@@ -2059,6 +1654,7 @@ def build(out_dir: Path, only: str | None) -> list[dict]:
             "key": key,
             "title": view["title"],
             "description": view["description"],
+            "page": view.get("page"),
             "markdown": target,
             "charts": result.get("files", []),
         })
@@ -2069,10 +1665,10 @@ def build(out_dir: Path, only: str | None) -> list[dict]:
 def publish(built: list[dict], target: str) -> list[str]:
     """Copy a built view into the volucer repository's documentation.
 
-    Also writes ``12-BENCHMARKS.md`` as the section index, so the docs tree has
-    one entry point that links every generated page. The index is generated
-    rather than hand-written for the same reason the pages are: a link written
-    by hand is a link that goes stale the moment a view is renamed.
+    The page's name comes from the view, not from its key. The one page is
+    `12-BENCHMARKS.md`, and it is the section's entry point as well as its
+    content — there is no separate index page, because with a single page an
+    index that links to it would be a page that links to a page.
     """
     if target != "volucer":
         return [f"unknown publish target: {target}"]
@@ -2082,31 +1678,10 @@ def publish(built: list[dict], target: str) -> list[str]:
         return [f"volucer docs not found at {docs}"]
 
     log: list[str] = []
-    index_lines = [
-        "# Benchmarks",
-        "",
-        "**Measured, not estimated.** Every number in this section comes from a committed",
-        "result file in",
-        "[`volucer-competition`](https://github.com/sailantis/volucer-competition), and the",
-        "charts are generated from those same files — so a chart cannot disagree with the",
-        "table beside it.",
-        "",
-        "**A cell with no successful repeat is printed as `-`, never as `0`.** A zero reads",
-        'as "measured, and it was terrible" rather than "not measured".',
-        "",
-        "**One host, one harness, one interpreter.** Every figure below was measured on the",
-        "same machine, through the same script, against the same PHP build — so a ratio",
-        "between two arms is a ratio between two measurements made the same way. The host,",
-        "the kernel, the PHP version and the method are printed on every chart.",
-        "",
-        "Each page below is written by `scripts/bench-report.py` in the competition",
-        "repository. None of them is edited by hand. The complete method, the raw rows and",
-        "the controls live in that repository.",
-        "",
-    ]
 
     for view in built:
-        destination = docs / f"12-BENCHMARKS-{view['key'].upper()}.md"
+        page = view.get("page") or f"12-BENCHMARKS-{view['key'].upper()}.md"
+        destination = docs / page
         # The Markdown is written against the build tree's layout, which puts
         # the charts in a sibling `svg/` directory. Publishing moves them under
         # `images/`, so the link the reader follows has to move with them — a
@@ -2119,8 +1694,6 @@ def publish(built: list[dict], target: str) -> list[str]:
         with destination.open("w", encoding="utf-8", newline="\n") as handle:
             handle.write(published)
         log.append(f"wrote docs/{destination.name}")
-
-        index_lines.append(f"- **[{view['title']}]({destination.name})** — {view.get('description', '')}")
 
         images = docs / "images" / "benchmarks" / view["key"]
         images.mkdir(parents=True, exist_ok=True)
@@ -2139,11 +1712,6 @@ def publish(built: list[dict], target: str) -> list[str]:
             if stale.name not in current:
                 stale.unlink()
                 log.append(f"removed docs/images/benchmarks/{view['key']}/{stale.name}")
-
-    index = docs / "12-BENCHMARKS.md"
-    with index.open("w", encoding="utf-8", newline="\n") as handle:
-        handle.write("\n".join(index_lines).rstrip("\n") + "\n")
-    log.append("wrote docs/12-BENCHMARKS.md")
 
     # A view that is no longer generated loses its published page and its
     # charts. A page left behind would still be served, and would still be

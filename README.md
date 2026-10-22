@@ -2163,3 +2163,49 @@ its cells all share one thread count, so the per-level resolution and the run-wi
 return the same number, and the published dataset renders **byte-for-byte identically**
 before and after the fix — the same 21 charts, the same Markdown, checked by rendering
 both trees and diffing them.
+
+## The one benchmark page
+
+The documentation used to carry **four** benchmark pages: the servers side by side, the
+same server in five shapes, the cold path against php-fpm, and what the preforked slot
+is worth. They are now **one** page, `12-BENCHMARKS.md` in the volucer repository, and
+the four are gone.
+
+They were four renderings of the same measurements. The cold page compared
+`spawn_cgi` against php-fpm at an equal process count; the servers page published the
+same two arms in a table with a different baseline; the prefork page published the
+memory of the same two shapes; and the modes page published the five volucer shapes
+across a worker axis that the servers page already covered. Four pages meant four
+places for a reader to find the same comparison stated against a different baseline,
+and four places for a number to be re-stated and drift.
+
+The one page is built from the **scale run** — `results/run85-scale-items` — and from
+nothing else. The earlier 16-process run (`results/matrix85`) was measured on a 3.9 GB
+host and the scale run on a 7.9 GB one; the factor column is a round-paired ratio, so
+both rows of a comparison have to come from the same pass for the range beside the
+factor to mean anything. The old numbers are still in the repository; they are simply
+not the ones on the page.
+
+What the page publishes, and what it does not:
+
+| | published | why |
+|---|---|---|
+| 16 processes | every arm | the comparison of servers |
+| 32 processes | `spawn_cgi` with `children`, `nginx + php-fpm` | the cold path is still gaining at this tier |
+| 64 processes | the memory section only | the tier where the cold path stops gaining for volucer |
+
+The 64-process tier is measured, and its rows are in the repository, but it is not in
+the throughput table: `spawn_cgi` with `children` is *slower* there than at 32, and what
+the tier does show is that php-fpm keeps improving — a fact about another server's
+ceiling, and not a reason for a reader to run more volucer processes. It is in the
+memory section, where it is a fact about what a deployment costs rather than a claim
+about who wins.
+
+**The `spawn_cgi` arm with one process per slot is measured but not in the throughput
+table.** It is the other side of the memory comparison — the same cold path arranged so
+that one slot serves one request — and publishing it in both places would put the same
+argument on the page twice against two different baselines.
+
+The generator is `scripts/bench-report.py`, the tests are `tests/test_bench_report.py`,
+and the four retired views are listed in `RETIRED_VIEWS` so that publishing removes
+their pages and their charts rather than leaving them behind.
