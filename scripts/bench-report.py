@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Turn a benchmark run into a publishable report: Markdown plus SVG charts.
-
-The pattern is the one ``azera-competition`` established, reimplemented on this
-repository's data: a generator that reads the committed result files, prints the
-tables a page needs, and draws the charts — so a page is never edited by hand
-and never claims a number the data does not contain.
+"""Generate a Markdown benchmark report and SVG charts from committed results.
 
 Usage:
     python3 scripts/bench-report.py                      # every view
@@ -17,15 +12,12 @@ Output (default ``results/bench-report/``):
     <view>.md              the Markdown fragment, ready to publish
     svg/<view>/*.svg       the charts
 
-**The honesty rules this generator follows**, each one a rule the numbers have
-to obey rather than a style:
+The report follows these rules:
 
-- **A cell with no successful repeat is printed as ``-``, never as ``0``.** A zero
-  reads as "measured, and it was terrible" rather than "not measured".
-- **Every chart states the host, the method and the date it was measured.**
-- **The median is the median of the repeats, and the spread is printed beside
-  it** where there was more than one round — a median with no error bar cannot
-  distinguish a 3% effect from a host that drifted while the arms ran.
+- Missing measurements are shown as ``-``, not as zero.
+- Charts identify the host, method, date, and measured software versions.
+- Repeated measurements are summarized by their median and, where available,
+  their observed spread.
 """
 
 from __future__ import annotations
@@ -509,11 +501,9 @@ def view_versions(meta: dict) -> list[str]:
     lines.append("## What was measured")
     lines.append("")
     lines.append(
-        "**Every number on this page belongs to these versions.** A "
-        "throughput figure is a fact about a version of a program, not about "
-        "the program in general: the same measurement on another build is "
-        "another number. These are the versions this run used, read from the "
-        "run's own record, and the raw rows are in "
+        "These are the software versions recorded for this benchmark run. "
+        "Results may differ with other versions or builds. The values come "
+        "from the run metadata and raw measurements in "
         "[`volucer-competition`](https://github.com/sailantis/volucer-competition)."
     )
     lines.append("")
@@ -523,12 +513,8 @@ def view_versions(meta: dict) -> list[str]:
         lines.append(f"| {label} | {value} |")
     lines.append("")
     lines.append(
-        "The **host** is the machine all of them ran on, the **method** is the "
-        "harness that drove them, and the **builds** are the versions of the "
-        "programs compared — all three are printed on every chart above, so a "
-        "reader who has only the image still knows what it measured. One host, "
-        "one harness, one interpreter, one pass: that is what makes a ratio "
-        "between two arms a ratio between two measurements made the same way."
+        "Each chart also identifies the host, measurement method, and software "
+        "versions, so it can be understood independently of this page."
     )
     lines.append("")
     return lines
@@ -1054,21 +1040,16 @@ def view_benchmarks(out_dir: Path) -> dict:
 
     # What the run is, stated before the numbers rather than after them.
     lines.append(
-        "Every row below was measured in **one interleaved pass** — every arm, "
-        "at every process count, at every load, in one round-robin over one "
-        "host, with the order rotating so that no cell is always first and no "
-        "cell is always last. The **PHP procs** column is the cost side of "
-        "the comparison: it says how many PHP processes serve the requests, "
-        "and it is what the host pays for."
+        "Measurements were interleaved across server arms, process counts, and "
+        "load levels on the same host. The order rotated between rounds to "
+        "reduce ordering effects. **PHP procs** is the number of PHP processes "
+        "serving requests and provides a resource-use context for each result."
     )
     lines.append("")
     lines.append(
-        "The `spawn_cgi` arm with `children` puts several processes behind one "
-        "listening socket, so it reaches a given throughput with a different "
-        "amount of server than the arms beside it. That is why the process "
-        "count is a column and not a footnote: a row with more processes is "
-        "not a better row, it is a row that bought its throughput with more "
-        "server."
+        "With `spawn_cgi` and `children`, multiple PHP processes serve through "
+        "one slot. The process-count column makes this configuration comparable "
+        "with other arms that use one process per slot."
     )
     lines.append("")
 
@@ -1079,43 +1060,28 @@ def view_benchmarks(out_dir: Path) -> dict:
     # in them, so a re-measurement cannot leave a sentence behind claiming the
     # previous run's result.
     lines.append(
-        "Each chart is a bar per server, and the bar is the **request rate** — "
-        "the number the page is about. The bars start at zero, so their lengths "
-        "can be compared directly."
+        "Each chart shows request rate in requests per second, with bars that "
+        "start at zero for direct visual comparison."
     )
     lines.append("")
     lines.append(
-        "**The label behind each bar is how many times slower that server is "
-        "than the fastest server in the same chart.** The fastest server is the "
-        "dashed vertical line, and it carries no label of its own; every other "
-        "bar states its factor — `x2.5` for a server that did 40% of the "
-        "leader's requests per second. The baseline is the fastest server *in "
-        "that chart*, not a fixed server: a cold deployment can overtake a warm "
-        "one as the host saturates, so the fastest server is not necessarily "
-        "the same one at every load — and naming it per chart is more honest "
-        "than a fixed reference that would read as a claim about the same "
-        "winner every time."
+        "The label on each bar is its throughput factor relative to the fastest "
+        "server in that chart. The dashed line marks that reference. For example, "
+        "`x2.5` means the server handled about 1/2.5 of the reference's requests "
+        "per second. The reference can differ between charts."
     )
     lines.append("")
     lines.append(
-        "**The range on each bar is the spread of the comparison, not of the "
-        "server.** Both servers were measured once per round, interleaved, so "
-        "each round holds a ratio of the two. The range is the smallest and "
-        "largest of those round-paired ratios, scaled back into requests per "
-        "second. Pairing by round is what makes that range honest: a host that "
-        "drifts over the run moves both servers in the same round, so the ratio "
-        "within a round is steadier than either server's own spread. A range "
-        "drawn from one server's minimum and maximum would instead charge the "
-        "whole of the host's drift to that one server, and would be wide for the "
-        "wrong reason."
+        "The range shows the minimum and maximum of the round-paired throughput "
+        "ratios, converted back to requests per second. Pairing measurements "
+        "from the same round helps account for host variation during the run; "
+        "the range describes the comparison rather than either server alone."
     )
     lines.append("")
     lines.append(
-        "A range that reaches across the 1.0 line means the two servers could "
-        "not be told apart in this run. The table marks those rows **tie**: a "
-        "difference inside the measurement's own spread is not a difference, and "
-        "the factor there is the best estimate rather than a claim that one "
-        "server is faster."
+        "If a factor range includes 1.0, the measured range includes equal "
+        "throughput. The table marks that result **tie** to distinguish it from "
+        "a comparison whose observed range stays above or below 1.0."
     )
     lines.append("")
 
@@ -1239,13 +1205,10 @@ def view_benchmarks(out_dir: Path) -> dict:
             write(svg_dir / chart, throughput_dots(
                 rows=chart_rows,
                 title=f"GET {endpoint} — {mode_title} at c={conc}",
-                note="The bar is the request rate. The label behind it is how "
-                     "many times slower that server is than the fastest server "
-                     "in this chart, which is the dashed line. The range on "
-                     "each bar is the spread of the round-paired comparison: "
-                     "both servers were measured in the same round, so the "
-                     "range is the spread of the comparison rather than the "
-                     "drift of the host.",
+                note="Bars show requests per second. The label is the "
+                     "throughput factor relative to the fastest server, marked "
+                     "by the dashed line. Ranges show round-paired comparisons "
+                     "converted to requests per second.",
                 stamp=stamp,
                 versions=versions_line(meta, [entry["arm"] for entry in entries]),
                 reference_label="fastest here",
@@ -1264,13 +1227,10 @@ def view_benchmarks(out_dir: Path) -> dict:
 
             lines.append("")
             lines.append(
-                "The **factor** column is measured against **the fastest server "
-                "in the table**, which is the row marked `x1.0`. It states how "
-                "many times slower each server is, so `x1.0` is the fastest and "
-                "`x2.5` is a quarter of its rate. The column carries the range "
-                "of the round-paired ratios beside it, and a row marked **tie** "
-                "is one whose range reaches across 1.0 — the two servers could "
-                "not be told apart in this run."
+                "The **factor** compares each row with the fastest server in "
+                "the table (`x1.0`). A factor of `x2.5` means about 40% of the "
+                "reference throughput. The range shows the round-paired "
+                "comparison; **tie** marks a range that includes 1.0."
             )
             lines.append("")
             lines.append("| server | model | PHP procs | rps | p50 | p99 | factor (range) |")
@@ -1400,12 +1360,9 @@ def tier_notes(rows: list[dict], arms: list[str], tiers: list[int],
 
         if pairs:
             lines.append(
-                "**The two cold deployments, head to head.** `spawn_cgi` with "
-                "`children` and `nginx + php-fpm` are the same idea reached two "
-                "ways — a forked pool of `php-cgi` children behind one socket, "
-                "or a pool of `php-fpm` children behind another. The table below "
-                "holds the pair at each process count the run covered, so the "
-                "two are compared with the amount of server held equal:"
+                "This table compares the two cold PHP process pools at equal "
+                "process counts: `spawn_cgi` with `children` and nginx with "
+                "php-fpm."
             )
             lines.append("")
             lines.append("| PHP procs | server | model | rps | spawn_cgi ÷ php-fpm |")
@@ -1421,10 +1378,10 @@ def tier_notes(rows: list[dict], arms: list[str], tiers: list[int],
                 )
             lines.append("")
             lines.append(
-                "The factor is `spawn_cgi`'s rate divided by php-fpm's at the "
-                "same process count, so `x1.0` is level and a factor above 1.0 "
-                "means the forked pool served more requests with the same "
-                "number of PHP processes."
+                "The factor is `spawn_cgi` throughput divided by php-fpm "
+                "throughput at the same process count. Values above 1.0 indicate "
+                "higher measured throughput for `spawn_cgi`; values below 1.0 "
+                "indicate higher throughput for php-fpm."
             )
             lines.append("")
             notes.extend(lines)
@@ -1454,13 +1411,11 @@ def tier_notes(rows: list[dict], arms: list[str], tiers: list[int],
 
     if gains:
         notes.append(
-            "**What the extra processes buy.** The table below is each arm at "
-            "the smallest and the largest serving-process count this comparison "
-            "publishes, paired by the round each was measured in, with the ratio "
-            "of the two and its range. A ratio above 1.0 means the arm served "
-            "more requests with the larger process count; a ratio below 1.0 "
-            "means it served fewer; and a range that reaches across 1.0 means "
-            "the two tiers could not be told apart in this run:"
+            "This table compares each arm at the smallest and largest published "
+            "process counts. Ratios are paired by measurement round. A ratio "
+            "above 1.0 indicates higher throughput at the larger process count; "
+            "a range including 1.0 means the measured rounds also include equal "
+            "throughput."
         )
         notes.append("")
         notes.append(
@@ -1482,12 +1437,9 @@ def tier_notes(rows: list[dict], arms: list[str], tiers: list[int],
     unpublished = [tier for tier in MEASURED_TIERS if tier not in tiers]
     if unpublished:
         notes.append(
-            f"**The {', '.join(str(t) for t in unpublished)}-process tier is "
-            f"measured and is not in the throughput table above.** The rows are "
-            f"in the repository, and the memory section below publishes every "
-            f"tier the run covered — memory is a cost of a deployment rather "
-            f"than a claim about who is faster, so it has no reason to stop "
-            f"where the throughput comparison does."
+            f"The {', '.join(str(t) for t in unpublished)}-process tier was "
+            "measured but is not included in the throughput comparison. Its "
+            "memory measurements are included below."
         )
         notes.append("")
 
@@ -1496,14 +1448,7 @@ def tier_notes(rows: list[dict], arms: list[str], tiers: list[int],
 
 def view_memory(rows: list[dict], meta: dict, stamp: str, arms: list[str],
                 tiers: list[int], svg_dir: Path, files: list[str]) -> dict:
-    """The cost of the same deployments: the memory they hold.
-
-    Throughput alone is half the answer to "which server should I run". The
-    other half is what it holds in memory while it does it, and the two cold
-    deployments are where that half is interesting: the same number of PHP
-    processes, arranged two different ways, and the two arrangements do not
-    cost the same.
-    """
+    """Report proportional and resident memory for each deployment."""
     lines: list[str] = []
     charts: list[str] = []
 
@@ -1527,20 +1472,16 @@ def view_memory(rows: list[dict], meta: dict, stamp: str, arms: list[str],
     lines.append("## What it costs in memory")
     lines.append("")
     lines.append(
-        "**Proportional set size (PSS)**, of the whole process tree, after the "
-        "run. PSS divides every shared page by the number of processes that map "
-        "it, which is what makes it the figure that can be compared across "
-        "process models: a page that thirty-two `php-fpm` children share "
-        "counts once, and a page that thirty-two separate processes each hold "
-        "counts thirty-two times."
+        "Memory is measured after the run across the full process tree. The "
+        "table reports **proportional set size (PSS)** in MiB. PSS apportions "
+        "each shared memory page among the processes that use it, making it "
+        "useful for comparing deployments with different process models."
     )
     lines.append("")
     lines.append(
-        "**Resident set size (RSS)** is printed beside it in brackets, "
-        "because it is the number `htop` shows and the number most people "
-        "quote — and it counts a shared page once per process that maps it, so "
-        "it reports a cost that the host does not pay. Both are given, so "
-        "nothing is hidden and neither is mistaken for the other."
+        "RSS is shown in parentheses for reference. Summed across processes, "
+        "RSS counts shared pages once for every process that maps them, while "
+        "PSS divides their contribution among those processes."
     )
     lines.append("")
 
@@ -1565,7 +1506,7 @@ def view_memory(rows: list[dict], meta: dict, stamp: str, arms: list[str],
             series=series,
             colors={arm: SERVER_COLORS.get(arm, "#94a3b8") for arm in series},
             labels=labels,
-            title="Resident memory against the number of PHP processes",
+            title="Proportional memory against the number of PHP processes",
             value_suffix="MiB",
             note="Proportional set size of the whole process tree, after the "
                  "run: each shared page is divided by the number of processes "
@@ -1575,7 +1516,7 @@ def view_memory(rows: list[dict], meta: dict, stamp: str, arms: list[str],
             height=420,
         ))
         charts.append(chart)
-        lines.append(f"![Resident memory against the number of PHP processes](svg/benchmarks/{chart})")
+        lines.append(f"![Proportional memory against the number of PHP processes](svg/benchmarks/{chart})")
         lines.append("")
         lines.append("| server | model | " + " | ".join(
             f"{tier} procs" for tier in tiers) + " |")
@@ -1597,9 +1538,7 @@ def view_memory(rows: list[dict], meta: dict, stamp: str, arms: list[str],
             lines.append(f"| {server} | {model} | " + " | ".join(cells) + " |")
         lines.append("")
         lines.append(
-            "Each cell is the **PSS** of the deployment, with its **RSS** in "
-            "brackets — the same number `htop` shows, which counts a shared "
-            "page once per process that maps it."
+            "Each value is PSS in MiB; RSS in MiB is shown in parentheses."
         )
         lines.append("")
 
@@ -1659,11 +1598,9 @@ def view_memory(rows: list[dict], meta: dict, stamp: str, arms: list[str],
                 lines.append("### The same PHP processes, arranged two ways")
                 lines.append("")
                 lines.append(
-                    "The `children` key exists to answer one question: for the "
-                    "same number of PHP processes, is a forked slot cheaper "
-                    "than one process per slot? The comparison has to hold the "
-                    "process count equal, or it is comparing two different "
-                    "amounts of server."
+                    "This comparison holds the number of serving PHP processes "
+                    "constant: one process per slot versus multiple forked "
+                    "children behind a slot."
                 )
                 lines.append("")
                 lines.append(
@@ -1689,26 +1626,19 @@ def view_memory(rows: list[dict], meta: dict, stamp: str, arms: list[str],
                     )
                 lines.append("")
                 lines.append(
-                    "The **vs one per slot** column is the row's own median "
-                    "divided by the one-process-per-slot row at the same "
-                    "process count, so it states how much less memory the "
-                    "forked pool holds for the same amount of server. Read it "
-                    "across a row of the table, not between two rows: the "
-                    "comparison holds the process count equal, and comparing "
-                    "two different counts would compare two different amounts "
-                    "of server."
+                    "The **vs one per slot** value is the separate-slot median "
+                    "divided by the forked-pool median at the same process "
+                    "count. For example, `4.5× less` means the forked pool's "
+                    "median PSS is about one quarter of the separate-slot "
+                    "median."
                 )
                 lines.append("")
                 lines.append(
-                    "The reason the two arrangements differ is that the "
-                    "children inherit the master's pages instead of each "
-                    "mapping its own copy, so a page the pool shares is paid "
-                    "for once rather than once per process. That is the "
-                    "argument for the `children` key, and it is why the "
-                    "`spawn_cgi` arm with `children` is the shape that "
-                    "appears in the throughput comparison above: it is the "
-                    "same cold path as one process per slot, at a fraction of "
-                    "the memory."
+                    "Forked children can share memory pages inherited from "
+                    "their master. PSS accounts for this sharing, which is why "
+                    "the forked-pool and separate-slot arrangements can have "
+                    "different total PSS at the same number of serving "
+                    "processes."
                 )
                 lines.append("")
 
@@ -1722,9 +1652,9 @@ def view_memory(rows: list[dict], meta: dict, stamp: str, arms: list[str],
 VIEWS = {
     "benchmarks": {
         "title": "Benchmarks",
-        "description": "Volucer against RoadRunner, FrankenPHP and nginx + php-fpm, "
-                       "every arm through one harness on one interpreter - and what "
-                       "each of them costs in memory.",
+        "description": "A comparison of Volucer, RoadRunner, FrankenPHP, and "
+                       "nginx with PHP-FPM using a shared benchmark harness. "
+                       "Results include throughput, latency, and process-tree memory.",
         "build": view_benchmarks,
         "page": "12-BENCHMARKS.md",
     },
@@ -1746,20 +1676,13 @@ VIEWS = {
 # to find an answer that disagreed with the others.
 RETIRED_VIEWS: tuple[str, ...] = ("servers", "modes", "cold", "prefork")
 
-PREAMBLE = """**Measured, not estimated.** Every number on this page comes from one committed
-result file in
-[`volucer-competition`](https://github.com/sailantis/volucer-competition), and the
-charts are generated from that same file — so a chart cannot disagree with the table
-beside it. A cell with no successful repeat is printed as `-`, never as `0`: a zero reads
-as "measured, and it was terrible" rather than "not measured". The method, the raw rows
-and the controls live in that repository.
+PREAMBLE = """All values come from committed benchmark results in
+[`volucer-competition`](https://github.com/sailantis/volucer-competition). Tables and
+charts are generated from the same measurements. Missing successful measurements are
+shown as `-`, not as zero. The repository includes the method, raw rows, and controls.
 
-**One host, one harness, one interpreter, one pass.** Every figure below was measured on
-the same machine, through the same script, against the same PHP build, in one
-interleaved pass — so a ratio between two arms is a ratio between two measurements made
-the same way. **Each chart names the host and the method it was measured on, and the
-build of every program it measured**, so the image is readable on its own and a figure
-is never a fact about a version no one can identify.
+Measurements were interleaved on the same host using the same harness and PHP build.
+Each chart identifies its host, method, and measured software versions.
 """
 
 
