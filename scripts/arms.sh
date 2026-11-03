@@ -4,7 +4,8 @@
 #   arms.sh [secs] [conc] [rounds]
 #
 #   attach     volucer `attach` -> PHP, N forked children behind one unix relay
-#   worker     volucer `worker` -> PHP, N spawned processes (own interpreter + OPcache each)
+#   worker     volucer `worker` -> PHP, N spawned processes over pipes (own interpreter + OPcache each)
+#   worker_socket  the same, over unix sockets: the spawned worker a runtime can await
 #   cgi        volucer `spawn_cgi` -> `php-cgi`, cold: a full CGI SAPI reset per request
 #   cgi_dummy  volucer `spawn_cgi` -> a FastCGI dummy: the cold arm's own pool, no PHP
 #   upstream   volucer `upstream` -> Node/Fastify cluster
@@ -51,7 +52,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # bottom of the happy path. Nothing else in this script relies on the exit path being tidy.
 PROBE_INITIALISED=""
 cleanup() {
-    local pids="$VOL_A $VOL_W $VOL_U $ORIGIN $SUP_A ${VOL_C:-} ${VOL_D:-} ${VOL_F:-} ${FLOOR_NODE:-}"
+    local pids="$VOL_A $VOL_W ${VOL_WS:-} $VOL_U $ORIGIN $SUP_A ${VOL_C:-} ${VOL_D:-} ${VOL_F:-} ${FLOOR_NODE:-}"
     kill -TERM $pids 2>/dev/null
     sleep 1.5
     kill -9 $pids 2>/dev/null
@@ -92,6 +93,7 @@ PROBE_INITIALISED=1
 
 PORT_ATTACH=22950
 PORT_WORKER=22951
+PORT_WORKER_SOCKET=22955
 PORT_CGI=22952
 PORT_CGI_DUMMY=22954
 PORT_FLOOR=22953
@@ -123,21 +125,52 @@ rss_of() {  # total resident MB across every pid matching the given pattern
 # the most -- and sharing is exactly what `attach` is for (`fork` from one heap). PSS splits
 # each shared page across the processes mapping it, so the pool is counted once. The memory
 # column has to be PSS or it cannot be used to justify the arm it describes.
-pss_of() {
+pss_of() {   # $1 = arm
     local total=0 pid kb
-    for pid in $(pgrep -f "$1" 2>/dev/null); do
+    for pid in $(backend_pids "$1"); do
         kb=$(awk '/^Pss:/{print $2}' /proc/"$pid"/smaps_rollup 2>/dev/null)
         total=$(( total + ${kb:-0} ))
     done
     echo $(( total / 1024 ))
 }
 
+# Pids of one worker arm's PHP processes.
+#
+# **Not a pattern on the wrapper.** Both arms run the same `worker.php` through a wrapper, and the
+# wrapper `exec`s php, so the wrapper's own path is *gone* from argv by the time the process is
+# running — a pattern on it matches nothing, which was measured as "0 php processes" for a busy
+# arm. A pattern on `worker.php` matches both arms at once, which was measured as "192".
+#
+# What actually distinguishes them is the transport: volucer exports `VOLUCER_WORKER_SOCKET` only
+# for the socket transport, so the variable's presence in the process environment *is* the arm.
+worker_pids() {   # $1 = pipe | socket
+    local want=$1 pid
+    for pid in $(pgrep -f "apps/hello/worker.php" 2>/dev/null); do
+        if grep -qz "VOLUCER_WORKER_SOCKET=" "/proc/$pid/environ" 2>/dev/null; then
+            [ "$want" = socket ] && echo "$pid"
+        else
+            [ "$want" = pipe ] && echo "$pid"
+        fi
+    done
+}
+
 # A pooled backend is matched by pattern, and so is a `node --cluster` origin: its master
 # spends no CPU while twelve children do the work. Charging only the master reported
 # "0.00 cores / 0.0 us per request" for the busiest process on the box.
-ns_of_pattern() {
+#
+# The two worker arms are the exception and go through the transport test above, because they are
+# the only pair that runs the same program with the same arguments.
+backend_pids() {   # $1 = arm
+    case $1 in
+        worker)        worker_pids pipe ;;
+        worker_socket) worker_pids socket ;;
+        *)             pgrep -f "${BACKEND[$1]}" 2>/dev/null ;;
+    esac
+}
+
+ns_of_pattern() {   # $1 = arm
     local total=0 pid v
-    for pid in $(pgrep -f "$1" 2>/dev/null); do
+    for pid in $(backend_pids "$1"); do
         for t in /proc/"$pid"/task/*/schedstat; do
             [ -r "$t" ] || continue
             v=$(awk '{print $1}' "$t" 2>/dev/null)
@@ -152,13 +185,21 @@ echo "=== $(sha256sum "$BIN" | cut -c1-16)  workers=$WORKERS  c=$CONC  ${SECS}s 
 echo "=== host load: $(awk '{print $1}' /proc/loadavg)"
 
 # ---- the PHP wrapper, so `worker` and `attach` differ in ownership and nothing else ----
-PHP_WRAPPER="$PROBE/php-bench"
-cat > "$PHP_WRAPPER" <<WRAPPER
+# Two of them, with identical flags and different filenames. The flags must match `attach`'s
+# (hazard 28), and the *name* must differ: `worker` and `worker_socket` run the same
+# `worker.php` with the same arguments, so one wrapper would make both populations match both
+# arms' process patterns -- measured as "192 php processes" for a 96-worker arm, and a memory
+# column that counted the pool twice.
+PHP_WRAPPER="$PROBE/php-bench-pipe"
+PHP_WRAPPER_SOCKET="$PROBE/php-bench-socket"
+for wrapper in "$PHP_WRAPPER" "$PHP_WRAPPER_SOCKET"; do
+    cat > "$wrapper" <<WRAPPER
 #!/bin/sh
 exec $(command -v php) -d opcache.enable_cli=1 -d opcache.validate_timestamps=0 \\
     -d opcache.jit=off -d xdebug.mode=off -d memory_limit=512M "\$@"
 WRAPPER
-chmod +x "$PHP_WRAPPER"
+    chmod +x "$wrapper"
+done
 
 # ---- attach ---------------------------------------------------------------------------
 AT="$PROBE/attach"; mkdir -p "$AT"
@@ -179,9 +220,25 @@ VOL_A=$!
 WK="$PROBE/worker"; mkdir -p "$WK"
 sed -e "s|{{PORT}}|$PORT_WORKER|g" -e "s|{{ROOT}}|$ROOT|g" \
     -e "s|{{WORKERS}}|$WORKERS|g" -e "s|{{PHP}}|$PHP_WRAPPER|g" \
-    "$ROOT/conf/hello-worker.toml.template" > "$WK/cfg.toml"
+    "$ROOT/conf/hello-worker-pipe.toml.template" > "$WK/cfg.toml"
 "$BIN" serve -c "$WK/cfg.toml" >"$WK/volucer.log" 2>&1 &
 VOL_W=$!
+
+# ---- worker over a socket, which a runtime can adopt: the awaited spawned worker ------
+# The same server, the same page, the same process model as the arm above. Only the transport
+# differs -- a unix socket instead of stdin/stdout -- and a socket is a descriptor a runtime can
+# register, so this slot awaits its worker instead of parking a thread on a pipe it cannot.
+#
+# Its purpose is to split one question in two. `worker`'s front-end costs ~11 us more than
+# `attach`'s, and there were two candidate causes: the pipe, or the exchange thread a spawned slot
+# still owns. This arm keeps the thread and removes the pipe.
+WKS="$PROBE/worker-socket"; mkdir -p "$WKS"
+sed -e "s|{{PORT}}|$PORT_WORKER_SOCKET|g" -e "s|{{ROOT}}|$ROOT|g" \
+    -e "s|{{WORKERS}}|$WORKERS|g" -e "s|{{PHP}}|$PHP_WRAPPER_SOCKET|g" \
+    -e "s|{{SOCKET_DIR}}|$WKS|g" \
+    "$ROOT/conf/hello-worker-socket.toml.template" > "$WKS/cfg.toml"
+"$BIN" serve -c "$WKS/cfg.toml" >"$WKS/volucer.log" 2>&1 &
+VOL_WS=$!
 
 # ---- spawn_cgi (cold: a full CGI SAPI reset per request) -------------------------------
 # `php-cgi` is a different binary from `php`, and the arm is the *cold model* -- the
@@ -280,6 +337,7 @@ VOL_U=$!
 
 for _ in $(seq 1 400); do curl -sf -o /dev/null "http://127.0.0.1:$PORT_ATTACH/" && break; sleep 0.05; done
 for _ in $(seq 1 400); do curl -sf -o /dev/null "http://127.0.0.1:$PORT_WORKER/" && break; sleep 0.05; done
+for _ in $(seq 1 400); do curl -sf -o /dev/null "http://127.0.0.1:$PORT_WORKER_SOCKET/" && break; sleep 0.05; done
 if [ -n "$VOL_C" ]; then
     # A cold arm needs longer: every one of its workers is a fresh `php-cgi` that has to
     # bind before it can answer.
@@ -298,20 +356,21 @@ sleep 2
 echo "=== bodies"
 declare -A BODY PORT PID BACKEND
 PORT[attach]=$PORT_ATTACH;   PID[attach]=$VOL_A;  BACKEND[attach]="supervisor.php unix:$AT/relay"
-PORT[worker]=$PORT_WORKER;   PID[worker]=$VOL_W;  BACKEND[worker]="apps/hello/worker.php"
+PORT[worker]=$PORT_WORKER;   PID[worker]=$VOL_W;  BACKEND[worker]="php-bench-pipe"
+PORT[worker_socket]=$PORT_WORKER_SOCKET; PID[worker_socket]=$VOL_WS; BACKEND[worker_socket]="php-bench-socket"
 PORT[upstream]=$PORT_UPSTREAM; PID[upstream]=$VOL_U; BACKEND[upstream]="fastify-hello.js --port $PORT_ORIGIN"
 PORT[node]=$PORT_ORIGIN;     PID[node]=$ORIGIN;   BACKEND[node]="fastify-hello.js --port $PORT_ORIGIN"
-ARMS="attach worker upstream node"
+ARMS="attach worker worker_socket upstream node"
 if [ -n "$VOL_C" ]; then
     PORT[cgi]=$PORT_CGI; PID[cgi]=$VOL_C; BACKEND[cgi]="php-cgi"
-    ARMS="attach worker cgi upstream node"
+    ARMS="attach worker worker_socket cgi upstream node"
 fi
 if [ -n "$VOL_D" ]; then
     PORT[cgi_dummy]=$PORT_CGI_DUMMY; PID[cgi_dummy]=$VOL_D
     # Matched by the program's own path: `spawn_cgi` starts it once per slot, so this
     # is the population that costs CPU, not the volucer process that supervises it.
     BACKEND[cgi_dummy]="apps/hello/fcgi-dummy.py"
-    ARMS="attach worker cgi cgi_dummy upstream node"
+    ARMS="attach worker worker_socket cgi cgi_dummy upstream node"
 fi
 if [ -n "$VOL_F" ]; then
     PORT[floor]=$PORT_FLOOR; PID[floor]=$VOL_F; BACKEND[floor]="apps/hello/cgi-echo.js"
@@ -349,7 +408,8 @@ fi
 
 echo "=== backend processes"
 printf "  attach    %s php children\n" "$(pgrep -fc "supervisor.php unix:$AT/relay" 2>/dev/null || echo 0)"
-printf "  worker    %s php processes\n" "$(pgrep -fc "apps/hello/worker.php" 2>/dev/null || echo 0)"
+printf "  worker    %s php processes (pipe)\n" "$(worker_pids pipe | wc -l)"
+printf "  wk-socket %s php processes (socket)\n" "$(worker_pids socket | wc -l)"
 printf "  cgi       %s php-cgi processes\n" "$(pgrep -c -x php-cgi 2>/dev/null || echo 0)"
 printf "  cgi_dummy %s dummy processes\n" "$(pgrep -fc "apps/hello/fcgi-dummy.py" 2>/dev/null || echo 0)"
 printf "  floor     %s cgi-echo processes\n" "$(pgrep -fc "apps/hello/cgi-echo.js" 2>/dev/null || echo 0)"
@@ -362,17 +422,17 @@ measure() {
     local b0 b1 f0 f1 peak=0
     local sample="$PROBE/pss-$tag"
 
-    b0=$(ns_of_pattern "$be"); f0=$(ns_of "$vol")
+    b0=$(ns_of_pattern "$arm"); f0=$(ns_of "$vol")
     wrk -t"$CORES" -c"$CONC" -d"${SECS}s" --latency "http://127.0.0.1:${PORT[$arm]}/" \
         >"$PROBE/wrk-$tag.txt" 2>&1 &
     local wrk_pid=$!
     # Sample PSS while the load runs: the figure that matters is the backend's steady-state
     # footprint, not what it had before anything connected.
-    ( while kill -0 $wrk_pid 2>/dev/null; do pss_of "$be"; sleep 0.5; done ) >"$sample" 2>/dev/null &
+    ( while kill -0 $wrk_pid 2>/dev/null; do pss_of "$arm"; sleep 0.5; done ) >"$sample" 2>/dev/null &
     local sampler=$!
     wait $wrk_pid
     kill $sampler 2>/dev/null
-    b1=$(ns_of_pattern "$be"); f1=$(ns_of "$vol")
+    b1=$(ns_of_pattern "$arm"); f1=$(ns_of "$vol")
     peak=$(sort -n "$sample" 2>/dev/null | tail -1); peak=${peak:-0}
 
     local f="$PROBE/wrk-$tag.txt"

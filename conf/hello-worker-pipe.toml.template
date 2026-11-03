@@ -1,0 +1,47 @@
+# `default_backend` belongs to `[server]`, which is the unnamed site; see
+# `hello-attach.toml.template`.
+[server]
+http = "127.0.0.1:{{PORT}}"
+default_backend = "app"
+document_root = "{{ROOT}}/public"
+
+# Off for the same reason as every arm here; see `hello-attach.toml.template`.
+[server.static_files]
+enabled = false
+
+# The hello arm's `worker` backend — the control for `attach`.
+#
+# Same application, same boot, same page. The difference is who owns the process:
+# this backend starts one process per slot with `exec`, so each has its own
+# interpreter and its own OPcache segment, where `attach` forks N children from one
+# shared heap. Comparing the two prices the memory model and the fork, with the page
+# held equal.
+#
+# `{{PHP}}` is stamped to the harness's PHP wrapper rather than to bare `php`, for the
+# reason hazard 28 records: a worker started without the same opcache/xdebug settings
+# as the other arms is a different measurement, not a different server.
+[backends.app]
+kind = "worker"
+command = "{{PHP}} {{ROOT}}/apps/hello/worker.php"
+workers = {{WORKERS}}
+working_dir = "{{ROOT}}"
+max_requests = 0
+# `pipe` (the Linux default) or `socket`. The two are the same server, the same page and the same
+# process model; they differ only in what the protocol runs over -- stdin/stdout, or a unix socket
+# of this slot's own.
+#
+# The transport is not a preference here, it is **the thing that decides whether the slot can be
+# awaited**. A pipe has no descriptor a runtime can register, so a pipe worker's slot parks an
+# exchange thread on it. A socket does, so a socket worker's slot awaits it exactly as an `attach`
+# slot does -- the same `SlotExchange::Awaited`, the same zero thread crossings per request.
+#
+# Measured on this host, 96 workers, `wrk -t12 -c100`, comparing the three:
+#
+#   worker, pipe     56.4 us of front-end CPU, exchange thread per slot
+#   worker, socket   45.6 us                  , awaited
+#   attach           45.1 us                  , awaited (the reference)
+#
+# So the pipe was worth ~1 us and the thread was worth ~10. `transport = "socket"` is therefore
+# what a deployment on Linux should usually want; `pipe` stays the default only because it needs
+# no socket directory and no cleanup.
+transport = "pipe"
