@@ -1,0 +1,37 @@
+# HELLO ARM — volucer `external` -> a Node FastCGI responder, on the same page.
+#
+# This is not a competitor arm. It is the **floor of the FastCGI path**: the same
+# client, the same unix socket, the same `spawn_blocking` hop, the same per-request
+# scope and the same CGI header translation as `spawn_cgi`, with an application that
+# does nothing. Read `spawn_cgi` against this and the difference is PHP's own cost;
+# read it against `upstream` (which never leaves the runtime thread) and the
+# difference is the transport.
+#
+# `kind = "external"` rather than `spawn_cgi` because volucer must not start the far
+# end here — the harness starts `apps/hello/cgi-echo.js`, which is what makes the
+# backend warm in a way `spawn_cgi`'s per-request reset cannot be.
+#
+# Worth recording why this and not php-fpm. Pointing `external` at php-fpm would have
+# kept the *process* and its OPcache warm, but php-fpm still re-runs the front controller
+# and re-boots the application on every request — that is the cold model by definition,
+# so it would have moved the number by a little and isolated nothing. A responder that
+# answers without an application at all removes PHP from the sum entirely, which is the
+# only way to read the FastCGI path's own cost off the total.
+#
+# `max_connections` is left unset: the far side is a Node server that accepts many
+# connections at once, and a cap would add a wait without removing anything.
+[server]
+http = "127.0.0.1:{{PORT}}"
+default_backend = "cgi"
+document_root = "{{ROOT}}/public"
+
+# Off for the same reason as every arm here; see `hello-attach.toml.template`.
+[server.static_files]
+enabled = false
+
+[backends.cgi]
+kind = "external"
+# The full path, not a prefix: an `external` backend dials exactly what is written here,
+# where `spawn_cgi` derives `{prefix}.{index}.sock` per slot. The harness starts the
+# responder on this same path, so the two cannot disagree.
+socket = "unix:{{SOCKET_DIR}}/cgi.sock"

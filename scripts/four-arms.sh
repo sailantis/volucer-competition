@@ -5,8 +5,10 @@
 #
 #   attach   volucer `attach` -> PHP, N forked children behind one unix relay
 #   worker   volucer `worker` -> PHP, N spawned processes (own interpreter + OPcache each)
+#   cgi      volucer `spawn_cgi` -> `php-cgi`, cold: a full CGI SAPI reset per request
 #   upstream volucer `upstream` -> Node/Fastify cluster
-#   node     bare Node/Fastify, no front-end (a labelled ceiling, never the headline)
+#   floor   volucer `external` -> a Node FastCGI responder: the transport's floor, no PHP
+#   node    bare Node/Fastify, no front-end (a labelled ceiling, never the headline)
 #
 # Why `worker` is here rather than inferred: it is the arm `attach` is a control *for*. They
 # run the same application with the same boot and differ only in who owns the fork, so the
@@ -21,8 +23,10 @@
 #     supervisor's command line; `worker` starts `php` itself, so without the wrapper it
 #     would silently run with the host's CLI defaults (xdebug). That is hazard 28, and it is
 #     roughly a 2x difference -- it would look like a memory-model result and be a php.ini.
-#   - RSS is sampled during load, because the reason to prefer `attach` is memory, and a
-#     throughput table without it cannot justify the arm it is being compared to.
+#   - PSS is sampled during load, because the reason to prefer `attach` is memory, and a
+#     throughput table without it cannot justify the arm it is being compared to. PSS
+#     rather than RSS: RSS counts a fork-shared heap once per process, which flattered
+#     `attach` at 1,621 MB against its true 65.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SECS=${1:-16}
@@ -38,6 +42,7 @@ rm -rf "$PROBE"; mkdir -p "$PROBE"
 PORT_ATTACH=22950
 PORT_WORKER=22951
 PORT_CGI=22952
+PORT_FLOOR=22953
 PORT_UPSTREAM=22961
 PORT_ORIGIN=22960
 
@@ -158,6 +163,34 @@ else
     VOL_C=""
 fi
 
+# ---- the FastCGI floor: the same client, a responder that does nothing -----------------
+# Not a competitor. `spawn_cgi` and this arm reach the same `ClientPool`/`CgiPool` and the
+# same blocking FastCGI client over a unix socket, with the same per-request scope and the
+# same CGI header translation. The difference is only what answers. So `spawn_cgi` minus
+# this arm is PHP's own cost, and this arm minus `upstream` is the price of the transport.
+#
+# Without it a `spawn_cgi` figure cannot say whether the socket or the framework is
+# expensive, which is exactly the question the cold arm exists to answer.
+FL="$PROBE/floor"; mkdir -p "$FL"
+if [ -n "${NODE_BIN:-}" ] && [ -x "$NODE_BIN/node" ]; then
+    PATH="$NODE_BIN:$PATH" node "$ROOT/apps/hello/cgi-echo.js" "$FL/cgi.sock" \
+        >"$FL/node.log" 2>&1 &
+    FLOOR_NODE=$!
+    for _ in $(seq 1 200); do [ -S "$FL/cgi.sock" ] && break; sleep 0.05; done
+    if [ -S "$FL/cgi.sock" ]; then
+        sed -e "s|{{PORT}}|$PORT_FLOOR|g" -e "s|{{ROOT}}|$ROOT|g" \
+            -e "s|{{SOCKET_DIR}}|$FL|g" \
+            "$ROOT/conf/hello-cgi-node.toml.template" > "$FL/cfg.toml"
+        "$BIN" serve -c "$FL/cfg.toml" >"$FL/volucer.log" 2>&1 &
+        VOL_F=$!
+    else
+        echo "=== NOTE: the FastCGI responder never bound, its arm is skipped"
+        VOL_F=""
+    fi
+else
+    VOL_F=""
+fi
+
 # ---- node origin, shared by `upstream` (proxied) and `node` (bare) ---------------------
 UP="$PROBE/upstream"; mkdir -p "$UP"
 PATH="$NODE_BIN:$PATH" node "$ROOT/apps/hello/fastify-hello.js" \
@@ -177,6 +210,9 @@ if [ -n "$VOL_C" ]; then
     # bind before it can answer.
     for _ in $(seq 1 900); do curl -sf -o /dev/null "http://127.0.0.1:$PORT_CGI/" && break; sleep 0.05; done
 fi
+if [ -n "$VOL_F" ]; then
+    for _ in $(seq 1 400); do curl -sf -o /dev/null "http://127.0.0.1:$PORT_FLOOR/" && break; sleep 0.05; done
+fi
 for _ in $(seq 1 400); do curl -sf -o /dev/null "http://127.0.0.1:$PORT_UPSTREAM/" && break; sleep 0.05; done
 sleep 2
 
@@ -191,6 +227,10 @@ ARMS="attach worker upstream node"
 if [ -n "$VOL_C" ]; then
     PORT[cgi]=$PORT_CGI; PID[cgi]=$VOL_C; BACKEND[cgi]="php-cgi"
     ARMS="attach worker cgi upstream node"
+fi
+if [ -n "$VOL_F" ]; then
+    PORT[floor]=$PORT_FLOOR; PID[floor]=$VOL_F; BACKEND[floor]="apps/hello/cgi-echo.js"
+    ARMS="$ARMS floor"
 fi
 
 fail=0
@@ -212,6 +252,7 @@ echo "=== backend processes"
 printf "  attach    %s php children\n" "$(pgrep -fc "supervisor.php unix:$AT/relay" 2>/dev/null || echo 0)"
 printf "  worker    %s php processes\n" "$(pgrep -fc "apps/hello/worker.php" 2>/dev/null || echo 0)"
 printf "  cgi       %s php-cgi processes\n" "$(pgrep -c -x php-cgi 2>/dev/null || echo 0)"
+printf "  floor     %s cgi-echo processes\n" "$(pgrep -fc "apps/hello/cgi-echo.js" 2>/dev/null || echo 0)"
 printf "  node      %s node processes\n" "$(pgrep -fc "fastify-hello.js --port $PORT_ORIGIN" 2>/dev/null || echo 0)"
 
 # ---- measure --------------------------------------------------------------------------
@@ -257,34 +298,38 @@ done
 
 for round in $(seq 1 "$ROUNDS"); do
     echo "--- round $round"
-    # Rotate the order so no arm always gets the coldest or the quietest slot.
-    if [ -n "$VOL_C" ]; then
-        case $(( round % 5 )) in
-            1) ORDER="attach worker cgi upstream node" ;;
-            2) ORDER="node upstream cgi worker attach" ;;
-            3) ORDER="cgi node attach upstream worker" ;;
-            4) ORDER="upstream attach node worker cgi" ;;
-            0) ORDER="worker cgi upstream node attach" ;;
-        esac
-    else
-        case $(( round % 4 )) in
-            1) ORDER="attach worker upstream node" ;;
-            2) ORDER="node upstream worker attach" ;;
-            3) ORDER="worker node attach upstream" ;;
-            0) ORDER="upstream attach node worker" ;;
-        esac
+    # Rotate the arm list instead of writing one ORDER per round. A hand-maintained list
+    # silently drops an arm the day one is added -- which is exactly what happened when the
+    # floor arm arrived: it was guarded, launched, and then never timed, and the table looked
+    # complete without it. The offset changes every round and even rounds run backwards, so
+    # no arm keeps a fixed neighbour or a fixed position.
+    read -r -a ARM_LIST <<< "$ARMS"
+    n=${#ARM_LIST[@]}
+    offset=$(( (round - 1) % n ))
+    ORDER=""
+    for ((i = 0; i < n; i++)); do
+        ORDER="$ORDER ${ARM_LIST[$(( (i + offset) % n ))]}"
+    done
+    if [ $(( round % 2 )) -eq 0 ]; then
+        REVERSED=""
+        for arm in $ORDER; do REVERSED="$arm $REVERSED"; done
+        ORDER="$REVERSED"
     fi
     for arm in $ORDER; do measure "$arm" "$arm-r$round"; done
 done
 
 kill -TERM $VOL_A $VOL_W $VOL_U $ORIGIN 2>/dev/null
 [ -n "$VOL_C" ] && kill -TERM "$VOL_C" 2>/dev/null
+[ -n "$VOL_F" ] && kill -TERM "$VOL_F" 2>/dev/null
 sleep 1.5
 kill -9 $VOL_A $VOL_W $VOL_U $ORIGIN 2>/dev/null
 [ -n "$VOL_C" ] && kill -9 "$VOL_C" 2>/dev/null
+[ -n "$VOL_F" ] && kill -9 "$VOL_F" 2>/dev/null
+[ -n "${FLOOR_NODE:-}" ] && kill -9 "$FLOOR_NODE" 2>/dev/null
 kill -TERM $SUP_A 2>/dev/null; sleep 0.5; kill -9 $SUP_A 2>/dev/null
 pkill -f "supervisor.php unix:$AT/relay" 2>/dev/null
 pkill -f "apps/hello/worker.php" 2>/dev/null
 pkill -x php-cgi 2>/dev/null
+pkill -f "apps/hello/cgi-echo.js" 2>/dev/null
 pkill -f "fastify-hello.js --port $PORT_ORIGIN" 2>/dev/null
 echo "--- detail: $PROBE/wrk-*.txt"
