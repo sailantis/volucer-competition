@@ -17,6 +17,29 @@
  *
  *     node apps/hello/cgi-echo.js <unix-socket-path>
  *
+ * ## How many processes
+ *
+ * `--workers n` forks `n` responders sharing the listening socket (`cluster`, with
+ * `SCHED_NONE` so each child accepts on its own rather than having the primary hand fds
+ * over). It defaults to one.
+ *
+ * **The count decides the arm's ceiling, so it is measured rather than picked.** 96
+ * `spawn_cgi` slots dialling this responder, `wrk -t12 -c100`, 14 s on the 12-core bench
+ * host:
+ *
+ *     workers=1      50,423 rps   be 20.0 us   fe 39.6 us      33 MB
+ *     workers=2      94,282 rps   be 21.3 us   fe 39.1 us      72 MB
+ *     workers=4     119,306 rps   be 25.4 us   fe 41.4 us     103 MB
+ *     workers=12     86,073 rps   be 40.3 us   fe 57.8 us     237 MB
+ *     workers=96    ~18,000 rps   be 156  us   fe 345  us   1,494 MB
+ *
+ * One process is one core's worth of work, so it caps the arm at about half the client's
+ * headroom. Above four the arm goes *backwards*: the host has eight gigabytes, and a few
+ * hundred Node processes on it cost more in scheduler churn than they return. Four is the
+ * default the harness passes.
+ *
+ *     node apps/hello/cgi-echo.js <unix-socket-path> [--workers N]
+ *
  * Deliberately raw `net` and a hand-rolled record parser rather than any framework:
  * the point is to measure the protocol path, and a framework here would be measuring
  * a second application.
@@ -127,18 +150,47 @@ function handle(socket) {
 
 const path = process.argv[2]
 if (!path) {
-  console.error('usage: node cgi-echo.js <unix-socket-path>')
+  console.error('usage: node cgi-echo.js <unix-socket-path> [--workers N]')
   process.exit(2)
 }
 
+// `--workers` is the responder count and defaults to 1. `cluster` here rather than
+// `worker_threads`, because the thing under test is one process per connection and a
+// thread pool would share an event loop the way 96 `php-cgi` processes do not.
+const workersArg = process.argv.indexOf('--workers')
+const workers = workersArg === -1 ? 1 : Math.max(1, Number(process.argv[workersArg + 1]) || 1)
+
+if (workers > 1) {
+  const cluster = require('node:cluster')
+  // **`SCHED_NONE`, not the default.** Node's default on Linux is `SCHED_RR`: the primary
+  // keeps the listening socket, accepts every connection itself, and hands the fd to a
+  // child over a pipe. That puts one event loop in front of all the others — the exact
+  // bottleneck this arm is supposed to remove — so the children are given the listening
+  // socket directly and each accepts on its own. A unix socket has no `SO_REUSEPORT` to
+  // set; the shared descriptor is what the kernel's accept queue gives us for free.
+  cluster.schedulingPolicy = cluster.SCHED_NONE
+  if (cluster.isPrimary) {
+    for (let i = 0; i < workers; i += 1) cluster.fork()
+    cluster.on('exit', (worker) => {
+      console.error(`cgi-echo worker ${worker.process.pid} exited; reforking`)
+      cluster.fork()
+    })
+    return
+  }
+}
+
 // `unlink` first: a socket file left by a killed run makes the bind fail, and the
-// symptom is a server that will not start rather than a stale socket.
-try {
-  require('fs').unlinkSync(path)
-} catch (err) {
-  if (err.code !== 'ENOENT') throw err
+// symptom is a server that will not start rather than a stale socket. Only the primary
+// does it when clustering, or the children would race and one would remove the socket
+// the others are already listening on.
+if (workers <= 1 || require('node:cluster').isPrimary) {
+  try {
+    require('fs').unlinkSync(path)
+  } catch (err) {
+    if (err.code !== 'ENOENT') throw err
+  }
 }
 
 net.createServer(handle).listen(path, () => {
-  console.log(`cgi-echo listening on ${path}`)
+  console.log(`cgi-echo listening on ${path} (pid ${process.pid})`)
 })

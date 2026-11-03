@@ -1,11 +1,21 @@
 # HELLO ARM — volucer `external` -> a Node FastCGI responder, on the same page.
 #
-# This is not a competitor arm. It is the **floor of the FastCGI path**: the same
+# This is not a competitor arm. It is the **floor of the FastCGI client**: the same
 # client, the same unix socket, the same `spawn_blocking` hop, the same per-request
 # scope and the same CGI header translation as `spawn_cgi`, with an application that
-# does nothing. Read `spawn_cgi` against this and the difference is PHP's own cost;
-# read it against `upstream` (which never leaves the runtime thread) and the
-# difference is the transport.
+# does nothing.
+#
+# **Read it for CPU per request, and read its rps only against the sweep above.** The far
+# end is a Node responder whose process count is a harness parameter, not part of the
+# FastCGI path; measured, 2/4/12/96 responders give 94k/119k/86k/~18k rps at otherwise
+# identical settings. So the front-end's `fe` column is this arm's real contribution (a
+# request waiting on the responder is not burning CPU) and the rps column says as much
+# about the responder as about volucer.
+#
+# The pool-and-client floor is `hello-cgi-dummy.toml.template` instead: `kind =
+# "spawn_cgi"` with a dummy, so 96 processes answer in parallel through the very
+# code path `spawn_cgi` -> `php-cgi` uses. That arm measures 105,403 rps at 45 us of
+# front-end CPU, and being `spawn_cgi` it also includes the pool that `external` lacks.
 #
 # `kind = "external"` rather than `spawn_cgi` because volucer must not start the far
 # end here — the harness starts `apps/hello/cgi-echo.js`, which is what makes the

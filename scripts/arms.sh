@@ -1,14 +1,26 @@
 #!/usr/bin/env bash
-# The four arms that answer "how do the runtimes compare", on one front-end where possible.
+# The arms that answer "how do the runtimes compare", on one front-end where possible.
 #
-#   four-arms.sh [secs] [conc] [rounds]
+#   arms.sh [secs] [conc] [rounds]
 #
-#   attach   volucer `attach` -> PHP, N forked children behind one unix relay
-#   worker   volucer `worker` -> PHP, N spawned processes (own interpreter + OPcache each)
-#   cgi      volucer `spawn_cgi` -> `php-cgi`, cold: a full CGI SAPI reset per request
-#   upstream volucer `upstream` -> Node/Fastify cluster
-#   floor   volucer `external` -> a Node FastCGI responder: the transport's floor, no PHP
-#   node    bare Node/Fastify, no front-end (a labelled ceiling, never the headline)
+#   attach     volucer `attach` -> PHP, N forked children behind one unix relay
+#   worker     volucer `worker` -> PHP, N spawned processes (own interpreter + OPcache each)
+#   cgi        volucer `spawn_cgi` -> `php-cgi`, cold: a full CGI SAPI reset per request
+#   cgi_dummy  volucer `spawn_cgi` -> a FastCGI dummy: the cold arm's own pool, no PHP
+#   upstream   volucer `upstream` -> Node/Fastify cluster
+#   floor      volucer `external` -> a Node FastCGI responder: the transport's floor, no PHP
+#   node       bare Node/Fastify, no front-end (a labelled ceiling, never the headline)
+#
+# Two of these are references rather than competitors, and they are the reason the
+# table can be read at all:
+#
+#   floor is the **client** only -- `external` starts nothing, so it has no spawned
+#   slots, no per-slot socket the pool waited for, no permits and no lifecycle
+#   ownership. `spawn_cgi` -> any responder minus `floor` is the pool.
+#   cgi_dummy starts through the path `php-cgi` starts through -- `spawn_every_slot`,
+#   `drain`, `LifecycleGuard::adopt`, `wait_until_listening`, `SlotPermits` -- and
+#   answers with an application that does nothing. So `cgi` - `cgi_dummy` is PHP,
+#   `cgi_dummy` - `floor` is the pool, and `floor` - `upstream` is the blocking hop.
 #
 # Why `worker` is here rather than inferred: it is the arm `attach` is a control *for*. They
 # run the same application with the same boot and differ only in who owns the fork, so the
@@ -29,19 +41,59 @@
 #     `attach` at 1,621 MB against its true 65.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Leftovers from an aborted or killed run are the worst kind of measurement bug here, because
+# they do not fail: the previous run's `volucer` still owns the socket, the new arm's slot
+# cannot bind, and the run reports "bad gateway ... No such file or directory" -- which reads
+# like a missing binary and is actually a socket owned by a process nobody is looking at.
+#
+# So cleanup is one function installed on `EXIT`, `INT` and `TERM`, rather than a block at the
+# bottom of the happy path. Nothing else in this script relies on the exit path being tidy.
+PROBE_INITIALISED=""
+cleanup() {
+    local pids="$VOL_A $VOL_W $VOL_U $ORIGIN $SUP_A ${VOL_C:-} ${VOL_D:-} ${VOL_F:-} ${FLOOR_NODE:-}"
+    kill -TERM $pids 2>/dev/null
+    sleep 1.5
+    kill -9 $pids 2>/dev/null
+    if [ -n "$PROBE_INITIALISED" ]; then
+        # Anchored on the probe directory, so this can only ever reach processes this run
+        # started -- not a stray `php-cgi` somebody else is serving with, and not the host's
+        # own php-fpm children.
+        pkill -f "$PROBE/" 2>/dev/null
+        pkill -f "supervisor.php unix:$PROBE/attach/relay" 2>/dev/null
+        pkill -f "fastify-hello.js --port $PORT_ORIGIN" 2>/dev/null
+    fi
+}
+trap cleanup EXIT INT TERM
 SECS=${1:-16}
 CONC=${2:-100}
 ROUNDS=${3:-3}
 BIN=${BIN:-$HOME/hello-bench/bin/volucer-adopt}
 WORKERS=${WORKERS:-96}
+# `external` dials one address and has no slots of its own, so the responder's process count
+# is a free parameter -- and it decides the arm's ceiling rather than the FastCGI client's.
+# Measured on this host, 96 slots against the responder, `wrk -t12 -c100`, 14 s:
+#
+#     2 responders    94,282 rps   be 21.3 us   fe 39.1 us     72 MB
+#     4 responders   119,306 rps   be 25.4 us   fe 41.4 us    103 MB
+#    12 responders    86,073 rps   be 40.3 us   fe 57.8 us    237 MB
+#    96 responders    ~18,000 rps  be 156 us    fe 345 us   1,494 MB
+#
+# One responder (the original default) gives ~50k and 12 or more makes it *worse* -- 96 Node
+# processes on an 8 GB host thrash, and one event loop is one core's worth of work. Four is
+# the measured optimum and the default below; it is a floor, so the arm should be comfortably
+# above the client's own cost rather than tied with it.
+FLOOR_WORKERS=${FLOOR_WORKERS:-4}
 NODE_BIN=$HOME/hello-bench/bin/node-v24.11.1-linux-x64/bin
 CORES=$(nproc)
 PROBE="$ROOT/.probe/fa"
 rm -rf "$PROBE"; mkdir -p "$PROBE"
+PROBE_INITIALISED=1
 
 PORT_ATTACH=22950
 PORT_WORKER=22951
 PORT_CGI=22952
+PORT_CGI_DUMMY=22954
 PORT_FLOOR=22953
 PORT_UPSTREAM=22961
 PORT_ORIGIN=22960
@@ -163,6 +215,26 @@ else
     VOL_C=""
 fi
 
+# ---- spawn_cgi -> a dummy: the cold arm's pool, with no PHP behind it -------------------
+# The same `kind` as the arm above and therefore the same `CgiPool`: slots spawned,
+# drained, adopted, waited for, permit-counted and recycled by the same code. What
+# differs is the program. So `cgi - cgi_dummy` is PHP's per-request boot and nothing
+# else, which is the one decomposition `external` cannot give -- `external` starts
+# nothing, so it has no pool in it.
+CD="$PROBE/cgi-dummy"; mkdir -p "$CD"
+PYTHON_BIN=$(command -v python3 || true)
+if [ -n "$PYTHON_BIN" ]; then
+    sed -e "s|{{PORT}}|$PORT_CGI_DUMMY|g" -e "s|{{ROOT}}|$ROOT|g" \
+        -e "s|{{WORKERS}}|$WORKERS|g" -e "s|{{SOCKET_DIR}}|$CD|g" \
+        -e "s|{{PYTHON}}|$PYTHON_BIN|g" \
+        "$ROOT/conf/hello-cgi-dummy.toml.template" > "$CD/cfg.toml"
+    "$BIN" serve -c "$CD/cfg.toml" >"$CD/volucer.log" 2>&1 &
+    VOL_D=$!
+else
+    echo "=== NOTE: no python3 on PATH, the spawn_cgi-dummy arm is skipped"
+    VOL_D=""
+fi
+
 # ---- the FastCGI floor: the same client, a responder that does nothing -----------------
 # Not a competitor. `spawn_cgi` and this arm reach the same `ClientPool`/`CgiPool` and the
 # same blocking FastCGI client over a unix socket, with the same per-request scope and the
@@ -173,8 +245,11 @@ fi
 # expensive, which is exactly the question the cold arm exists to answer.
 FL="$PROBE/floor"; mkdir -p "$FL"
 if [ -n "${NODE_BIN:-}" ] && [ -x "$NODE_BIN/node" ]; then
+    # `--workers` is the responder count, and 4 is measured rather than assumed: see the
+    # sweep in the header. One process caps this arm at one core (~50k), 12 or more thrashes
+    # on an 8 GB host, and the arm must sit above the client's cost to be a floor at all.
     PATH="$NODE_BIN:$PATH" node "$ROOT/apps/hello/cgi-echo.js" "$FL/cgi.sock" \
-        >"$FL/node.log" 2>&1 &
+        --workers "$FLOOR_WORKERS" >"$FL/node.log" 2>&1 &
     FLOOR_NODE=$!
     for _ in $(seq 1 200); do [ -S "$FL/cgi.sock" ] && break; sleep 0.05; done
     if [ -S "$FL/cgi.sock" ]; then
@@ -210,6 +285,9 @@ if [ -n "$VOL_C" ]; then
     # bind before it can answer.
     for _ in $(seq 1 900); do curl -sf -o /dev/null "http://127.0.0.1:$PORT_CGI/" && break; sleep 0.05; done
 fi
+if [ -n "$VOL_D" ]; then
+    for _ in $(seq 1 900); do curl -sf -o /dev/null "http://127.0.0.1:$PORT_CGI_DUMMY/" && break; sleep 0.05; done
+fi
 if [ -n "$VOL_F" ]; then
     for _ in $(seq 1 400); do curl -sf -o /dev/null "http://127.0.0.1:$PORT_FLOOR/" && break; sleep 0.05; done
 fi
@@ -228,9 +306,32 @@ if [ -n "$VOL_C" ]; then
     PORT[cgi]=$PORT_CGI; PID[cgi]=$VOL_C; BACKEND[cgi]="php-cgi"
     ARMS="attach worker cgi upstream node"
 fi
+if [ -n "$VOL_D" ]; then
+    PORT[cgi_dummy]=$PORT_CGI_DUMMY; PID[cgi_dummy]=$VOL_D
+    # Matched by the program's own path: `spawn_cgi` starts it once per slot, so this
+    # is the population that costs CPU, not the volucer process that supervises it.
+    BACKEND[cgi_dummy]="apps/hello/fcgi-dummy.py"
+    ARMS="attach worker cgi cgi_dummy upstream node"
+fi
 if [ -n "$VOL_F" ]; then
     PORT[floor]=$PORT_FLOOR; PID[floor]=$VOL_F; BACKEND[floor]="apps/hello/cgi-echo.js"
     ARMS="$ARMS floor"
+fi
+
+# `ARMS="cgi cgi_dummy" ./arms.sh ...` measures a subset. It exists because seven arms
+# resident at 96 children is ~200 processes on an 8 GB host, and a focused pair is both
+# faster and less likely to disturb the arm it is comparing against. Requesting an arm
+# that did not start is refused rather than skipped, for the same reason a failed body
+# check is: a table missing a row looks complete.
+if [ -n "${ARMS_FILTER:-}" ]; then
+    keep=""
+    for arm in $ARMS_FILTER; do
+        case " $ARMS " in
+            *" $arm "*) keep="$keep $arm" ;;
+            *) echo "=== FATAL: requested arm '$arm' is not available (have:$ARMS)"; exit 2 ;;
+        esac
+    done
+    ARMS="${keep# }"
 fi
 
 fail=0
@@ -242,9 +343,7 @@ done
 if [ "$fail" -ne 0 ]; then
     echo "REFUSING TO MEASURE: an arm is not serving the page. A dead backend answers faster"
     echo "than a live one, so a timing here would be meaningless or backwards."
-    kill $VOL_A $VOL_W $VOL_U $ORIGIN $SUP_A $VOL_C 2>/dev/null
-    pkill -f "supervisor.php unix:$AT/relay" 2>/dev/null
-    pkill -f "apps/hello/worker.php" 2>/dev/null
+    # The `EXIT` trap reaps every process this run started; killing here as well would race it.
     exit 1
 fi
 
@@ -252,6 +351,7 @@ echo "=== backend processes"
 printf "  attach    %s php children\n" "$(pgrep -fc "supervisor.php unix:$AT/relay" 2>/dev/null || echo 0)"
 printf "  worker    %s php processes\n" "$(pgrep -fc "apps/hello/worker.php" 2>/dev/null || echo 0)"
 printf "  cgi       %s php-cgi processes\n" "$(pgrep -c -x php-cgi 2>/dev/null || echo 0)"
+printf "  cgi_dummy %s dummy processes\n" "$(pgrep -fc "apps/hello/fcgi-dummy.py" 2>/dev/null || echo 0)"
 printf "  floor     %s cgi-echo processes\n" "$(pgrep -fc "apps/hello/cgi-echo.js" 2>/dev/null || echo 0)"
 printf "  node      %s node processes\n" "$(pgrep -fc "fastify-hello.js --port $PORT_ORIGIN" 2>/dev/null || echo 0)"
 
@@ -318,18 +418,7 @@ for round in $(seq 1 "$ROUNDS"); do
     for arm in $ORDER; do measure "$arm" "$arm-r$round"; done
 done
 
-kill -TERM $VOL_A $VOL_W $VOL_U $ORIGIN 2>/dev/null
-[ -n "$VOL_C" ] && kill -TERM "$VOL_C" 2>/dev/null
-[ -n "$VOL_F" ] && kill -TERM "$VOL_F" 2>/dev/null
-sleep 1.5
-kill -9 $VOL_A $VOL_W $VOL_U $ORIGIN 2>/dev/null
-[ -n "$VOL_C" ] && kill -9 "$VOL_C" 2>/dev/null
-[ -n "$VOL_F" ] && kill -9 "$VOL_F" 2>/dev/null
-[ -n "${FLOOR_NODE:-}" ] && kill -9 "$FLOOR_NODE" 2>/dev/null
-kill -TERM $SUP_A 2>/dev/null; sleep 0.5; kill -9 $SUP_A 2>/dev/null
-pkill -f "supervisor.php unix:$AT/relay" 2>/dev/null
-pkill -f "apps/hello/worker.php" 2>/dev/null
-pkill -x php-cgi 2>/dev/null
-pkill -f "apps/hello/cgi-echo.js" 2>/dev/null
-pkill -f "fastify-hello.js --port $PORT_ORIGIN" 2>/dev/null
+# The `EXIT` trap tears everything down on the way out, so the happy path does not duplicate
+# it: `cleanup` is idempotent and the trap runs it again after this line.
+cleanup
 echo "--- detail: $PROBE/wrk-*.txt"

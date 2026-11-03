@@ -1,0 +1,61 @@
+# HELLO ARM — volucer `spawn_cgi` -> a FastCGI dummy, on the same page.
+#
+# This is not a competitor arm. It is the cold arm's own **control**: it starts
+# through exactly the path `spawn_cgi` -> `php-cgi` starts through, and answers
+# with an application that does nothing.
+#
+# Why it exists beside `floor` (which is `kind = "external"` -> a Node responder).
+# `external` starts nothing. Its row has no spawned slots, no per-slot socket the
+# pool had to wait for, no permits, no lifecycle ownership — it is a different
+# backend kind. So `floor` measures the *client*, and this arm measures the
+# **pool** as well: the same `SpawnCgiConfig`, `spawn_every_slot`, `drain`,
+# `LifecycleGuard::adopt`, `wait_until_listening`, `SlotPermits` and recycling
+# that `php-cgi` gets.
+#
+# Read the three together:
+#
+#   spawn_cgi -> php-cgi    = pool + blocking client + PHP's per-request boot
+#   spawn_cgi -> dummy      = pool + blocking client
+#   external  -> responder  =                 blocking client
+#
+# and `upstream` is the same front-end with neither the pool nor the blocking
+# client. `spawn_cgi - this` is PHP; `this - floor` is the pool; `floor - upstream`
+# is the blocking hop.
+#
+# `command` rather than `binary`, because this is the driver that starts **any**
+# FastCGI program. `{address}` is substituted per slot with that slot's own
+# address — `unix:.../cgi.0.sock`, `unix:.../cgi.1.sock`, … — which is why nothing
+# else in this file may spell a socket path: `spawn_cgi` treats `socket` as a
+# prefix and derives the suffix itself, and a second spelling would disagree with
+# it.
+#
+# `workers` is stamped from the same value as every other arm (96), so the arm is
+# comparable rather than handicapped. Each slot is one process, exactly as one
+# `php-cgi` slot is one process, so the process count is held equal.
+#
+# `concurrency = 1` because that is what a slot can honestly answer: `php-cgi`
+# cannot multiplex (`FCGI_MPXS_CONNS` is 0 and its accept loop is one request at
+# a time), so this dummy is written to the same limit. A number above 1 would let
+# this arm overlap requests that `spawn_cgi` -> `php-cgi` must serialise.
+[server]
+http = "127.0.0.1:{{PORT}}"
+default_backend = "cgi"
+# The same document root as the `php-cgi` arm, so the routing decision is identical
+# and the two arms differ only in what answers. The dummy ignores `SCRIPT_FILENAME`
+# — it answers every request — but a front controller has to be resolvable for the
+# request to be routed here at all.
+document_root = "{{ROOT}}/apps/hello/public"
+
+# Off for the same reason as every arm here; see `hello-attach.toml.template`. It is
+# default-on and sits ahead of dispatch, so leaving it on would charge this arm for a
+# lookup no other arm does.
+[server.static_files]
+enabled = false
+
+[backends.cgi]
+kind = "spawn_cgi"
+command = "{{PYTHON}} {{ROOT}}/apps/hello/fcgi-dummy.py {address}"
+workers = {{WORKERS}}
+concurrency = 1
+socket = "unix:{{SOCKET_DIR}}/cgi"
+max_requests = 0
