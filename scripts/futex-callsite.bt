@@ -1,0 +1,16 @@
+// Which call site parks, and which wakes?
+//
+// Phase 16 established the shape from the syscall side: ~2.2 FUTEX_WAIT_BITSET (129) and
+// ~2.2 FUTEX_WAKE_BITSET (137) per request on `tokio-rt-worker`, with `epoll_wait` at
+// 0.04. Almost equal counts on both directions means symmetric park/wake *pairs* rather
+// than a contended lock, but it does not say who is doing it. A parked thread and a
+// waking thread are two different call sites, so they are counted apart.
+//
+// Op codes: 1 = FUTEX_WAKE, 129 = FUTEX_WAIT_BITSET (park), 137 = FUTEX_WAKE_BITSET (wake),
+// 9 = FUTEX_WAIT_BITSET with a relative timeout in tokio's own spelling on some builds.
+tracepoint:syscalls:sys_enter_futex
+/comm == "tokio-rt-worker"/
+{
+    @op[args->op] = count();
+    @by_op[args->op, ustack] = count();
+}

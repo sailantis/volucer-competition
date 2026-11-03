@@ -1,0 +1,17 @@
+// Which call site reads the clock, and how often?
+//
+// 15.9 `clock_gettime` calls per request is the single largest syscall count on the request path
+// after the hand-off was removed, and on this hypervisor it is a syscall rather than a vDSO read
+// (`pvclock_clocksource_read` is 3.5% of the front-end's CPU). A count says how many; only the
+// stack says why, and the difference decides whether any of it is removable: a tokio timer that is
+// armed and immediately dropped, a metric that rounds a duration to microseconds, and a connection
+// idle-deadline that could be coarser are three different answers.
+//
+// Grouped by symbol sequence in the analysis rather than here: a raw `ustack` is unique per heap
+// address, so `@clk[key, ustack]` produces thousands of count-1 entries until the addresses are
+// dropped.
+tracepoint:syscalls:sys_enter_clock_gettime
+{
+    @total[comm] = count();
+    @clk[comm, ustack] = count();
+}

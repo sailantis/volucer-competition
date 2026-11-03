@@ -1,0 +1,16 @@
+// Park/wake split by thread, so the runtime's own threads can be told apart from the
+// blocking pool's.
+//
+// Both populations are named `tokio-rt-worker` (tokio spawns blocking-pool threads with the
+// same name), so `comm` cannot separate them. It does not need to: the runtime's threads
+// exist before any load starts, and a blocking thread only ever exists while it is running
+// a closure or idle in the pool. Recording the tid lets the analysis classify a park as
+// "one of the threads that were already there" or "one of the ones the pool added".
+//
+// Op codes seen on this kernel: 128 = FUTEX_LOCK_PI, 129 = FUTEX_WAIT_BITSET (park),
+// 137 = FUTEX_WAKE_BITSET (wake).
+tracepoint:syscalls:sys_enter_futex
+/comm == "tokio-rt-worker"/
+{
+    @by_tid[args->op, tid] = count();
+}

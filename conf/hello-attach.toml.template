@@ -1,0 +1,35 @@
+# `default_backend` belongs to `[server]`, which is the unnamed site. It moved there
+# in 0.3.0 and the top-level spelling is refused at startup rather than ignored, which
+# is the good behaviour: a benchmark arm that silently routed to no backend would
+# publish a real-looking number for a page nobody served.
+[server]
+http = "127.0.0.1:{{PORT}}"
+default_backend = "app"
+document_root = "{{ROOT}}/public"
+
+# Off, and that is what keeps this arm comparable. The static-file layer became
+# default-on after the published build and sits on the request path ahead of
+# dispatch: every path that names no file pays a `spawn_blocking` hop to be told so,
+# a near-constant ~6.5 us per request (matrix85, `new-nostat`). The Node arm has no
+# such layer, so leaving it on would charge this arm for a lookup the other one does
+# not do. See `volucer-pipe.toml.template` for the full measurement.
+[server.static_files]
+enabled = false
+
+# The hello arm's `attach` backend: volucer dials a relay that `apps/hello/
+# supervisor.php` listens on and holds one connection per slot. The supervisor
+# boots the application once and forks a child per accepted connection, so the
+# interpreter and the OPcache segment exist once for the whole pool.
+#
+# `workers` is the number of connections volucer dials, and the supervisor forks one
+# child per connection it accepts, so the two sides agree by construction — there is
+# no second number to keep in sync.
+#
+# No default: a supervisor has already forked a specific number, and a connection
+# count that differed from it would either leave children idle or queue requests
+# behind a connection nobody reads. The harness stamps both from one value.
+[backends.app]
+kind = "attach"
+relay = "unix:{{SOCKET_DIR}}/relay"
+workers = {{WORKERS}}
+max_requests = 0

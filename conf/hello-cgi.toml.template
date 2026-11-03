@@ -1,0 +1,34 @@
+# HELLO ARM — volucer + `spawn_cgi` over a unix socket: the COLD model, on the same
+# page as `attach`/`worker`/`upstream`.
+#
+# `document_root` points at the hello app's own `public/`, not the repository's,
+# because `public/index.php` there is the Azera + SQLite page. Measuring `spawn_cgi`
+# against a different page than the other arms would price the page, not the model —
+# which is exactly what every earlier `spawn_cgi` figure in this repository did.
+#
+# `workers` is stamped from the same value as every other arm (96 at the time of
+# writing) so the comparison is not a concurrency handicap. Note what that means for
+# this arm specifically: `php-cgi` serves one request at a time, so 96 workers is 96
+# processes. A deployment would size this to the cores; a benchmark that gave this arm
+# 12 slots while giving the others 96 would be measuring a queue.
+#
+# `socket` rather than loopback TCP: it is the cheaper transport and the one the
+# published unix-socket arm uses. The transport is not what is being compared here —
+# the model and the blocking hop are.
+[server]
+http = "127.0.0.1:{{PORT}}"
+default_backend = "cgi"
+document_root = "{{ROOT}}/apps/hello/public"
+
+# Off for the same reason as every arm here; see `hello-attach.toml.template`. It is
+# default-on and sits ahead of dispatch, so leaving it on would charge this arm for a
+# lookup no other arm does.
+[server.static_files]
+enabled = false
+
+[backends.cgi]
+kind = "spawn_cgi"
+binary = "{{PHP_CGI}}"
+workers = {{WORKERS}}
+socket = "unix:{{SOCKET_DIR}}/cgi"
+max_requests = 0

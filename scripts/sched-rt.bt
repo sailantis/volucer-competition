@@ -1,0 +1,17 @@
+tracepoint:sched:sched_switch
+/args->prev_comm == "tokio-rt-worker"/
+{
+    @start[args->prev_pid] = nsecs;
+    @state[args->prev_pid] = args->prev_state;
+}
+tracepoint:sched:sched_switch
+/args->next_comm == "tokio-rt-worker"/
+{
+    if (@start[args->next_pid]) {
+        $d = nsecs - @start[args->next_pid];
+        @ns[@state[args->next_pid]] = sum($d);
+        @cnt[@state[args->next_pid]] = count();
+        delete(@start[args->next_pid]);
+        delete(@state[args->next_pid]);
+    }
+}

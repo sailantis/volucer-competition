@@ -1,0 +1,31 @@
+# The like-for-like arm: the *same* volucer front-end as `volucer+attach`, in front of
+# a Node runtime instead of PHP. Only the runtime behind the server differs.
+#
+# `upstream` takes one `origin`, so the backend fan-out has to come from the origin's
+# own clustering — which is exactly how the Node arm is deployed in practice
+# (`pm2 start -i max`, or `SO_REUSEPORT`). The harness therefore starts
+# `apps/hello/fastify-hello.js --cluster reuseport` with one process per core on
+# `{{ORIGIN_PORT}}` and points this backend at it, so the comparison is 12 PHP workers
+# against 12 Node processes behind an identical front-end.
+#
+# Pointing this at a single Fastify process was the earlier harness bug: one origin
+# against twelve workers understates the Node arm by roughly the worker count and
+# makes the front-end look like the whole difference.
+[server]
+http = "127.0.0.1:{{PORT}}"
+default_backend = "app"
+document_root = "{{ROOT}}/public"
+
+# Off for the same reason as the other arms: the static-file layer sits ahead of
+# dispatch and charges every request a `spawn_blocking` hop to be told there is no
+# such file. See `hello-attach.toml.template`.
+[server.static_files]
+enabled = false
+
+# No `workers` here, and that is not an omission: `upstream` holds a connection pool to
+# one origin address, and the concurrency lives in the origin's cluster. The request
+# path streams request and response bodies, so this arm also doubles as the probe for
+# the front-end without the worker-exchange hop.
+[backends.app]
+kind = "upstream"
+origin = "http://127.0.0.1:{{ORIGIN_PORT}}"
