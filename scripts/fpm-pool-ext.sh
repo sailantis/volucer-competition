@@ -37,6 +37,19 @@ listen = $socket
 pm = static
 pm.max_children = $children
 pm.max_requests = 0
+EOF
+
+# The directives below are php-fpm's *operability* features, and several of them are serviced
+# per request rather than once per worker: `php_admin_value`/`php_admin_flag` are re-applied on
+# every request init, and `catch_workers_output` makes the master drain a pipe per child.
+# `FPM_LEAN=1` omits them so a difference against `cgi_prefork` can be attributed to the
+# supervision layer rather than to PHP's interpreter -- which is all a hello-world page should
+# be measuring. It is an experiment knob, not a recommendation: a real deployment wants the
+# error capture.
+if [ "${FPM_LEAN:-0}" = "1" ]; then
+    echo "; FPM_LEAN=1: supervision directives omitted for attribution" >> "$pool"
+else
+    cat >> "$pool" <<EOF
 
 catch_workers_output = yes
 php_admin_value[error_log] = $logs/fpm-ext-worker-error.log
@@ -45,3 +58,4 @@ php_admin_flag[log_errors] = on
 php_admin_value[memory_limit] = 512M
 php_admin_value[date.timezone] = UTC
 EOF
+fi
