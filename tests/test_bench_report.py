@@ -618,17 +618,40 @@ class RatioChartTest(unittest.TestCase):
         requests per second than the one the others are measured against
         would be a contradiction visible in the chart itself.
 
+        The chart marks the baseline with a dashed line rather than a caption,
+        so the check is on the geometry: the line has to sit at the same x as
+        the dot of the fastest bar, and to the right of every other dot. A line
+        drawn at some other bar would still be "a dashed line", which is why
+        its position is what gets asserted.
+
         The memory charts are a different kind of chart - they plot a cost
-        against a size, and have no fastest server to name - so the check is
+        against a size, and have no fastest server to mark - so the check is
         on the throughput charts.
         """
+        line = re.compile(
+            r'<line x1="([\d.]+)" y1="[\d.]+" x2="[\d.]+" y2="[\d.]+" '
+            r'stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray'
+        )
         for chart in self.charts_of():
             if "memory" in chart.name:
                 continue
             data = chart.read_text(encoding="utf-8")
             with self.subTest(chart=chart.name):
-                self.assertIn("fastest here", data,
-                              f"{chart.name} does not say what the baseline is")
+                match = line.search(data)
+                self.assertIsNotNone(
+                    match, f"{chart.name} does not draw the reference baseline")
+                baseline_x = float(match.group(1))
+
+                dots = [float(x) for x in re.findall(
+                    r'<circle cx="([\d.]+)" cy="[\d.]+" r="[\d.]+" '
+                    r'fill="#[0-9a-f]+" stroke="#ffffff" stroke-width="2"/>',
+                    data)]
+                self.assertTrue(dots, f"{chart.name} draws no bars")
+                self.assertAlmostEqual(
+                    baseline_x, max(dots), places=1,
+                    msg=f"{chart.name} marks a baseline that is not the "
+                        f"fastest bar",
+                )
 
     def test_the_paired_range_is_tighter_than_the_unpaired_one(self):
         """The claim the page's prose makes, checked on the data.
@@ -1008,6 +1031,235 @@ class MemorySectionTest(unittest.TestCase):
             any("memory" in name for name in names),
             f"the page publishes no memory chart: {names}",
         )
+
+
+class HomepageChartTest(unittest.TestCase):
+    """The product page's two charts, and the rules a product page needs.
+
+    These are a different shape from the report's: four bars, no legend, no
+    factor, no range, no axis ticks. What must survive is that they are honest
+    (one shared scale, starting at zero), that they carry their numbers as
+    text (so the reader is not measuring bar lengths), and that they can be
+    read by somebody who cannot see them at all.
+    """
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="bench-homepage-"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.charts = br.view_homepage(self.tmp)
+
+    def svg(self, name):
+        return (self.tmp / name).read_text(encoding="utf-8")
+
+    def svg_aria_label(self, data):
+        match = re.search(r'aria-label="([^"]*)"', data)
+        self.assertIsNotNone(match, "the chart has no accessible name")
+        return match.group(1)
+
+    def test_it_draws_a_throughput_chart_and_a_memory_chart(self):
+        self.assertEqual(len(self.charts), 2, self.charts)
+        self.assertTrue(any("throughput" in name for name in self.charts))
+        self.assertTrue(any("memory" in name for name in self.charts))
+        for name in self.charts:
+            self.assertTrue((self.tmp / name).exists(), f"{name} was not written")
+
+    def test_it_draws_one_bar_per_program(self):
+        """Four bars, one per program — not one per configuration.
+
+        The report's subject is volucer's shapes; the landing page's subject is
+        the comparison of programs. A page that drew every arm would be the
+        report again, which is what the link underneath it is for.
+        """
+        for name in self.charts:
+            data = self.svg(name)
+            bars = re.findall(r'<rect x="[\d.]+" y="[\d.]+" width="[\d.]+" '
+                              r'height="[\d.]+" rx="3" class="bar-\d+"', data)
+            self.assertEqual(len(bars), 4, f"{name} does not draw four bars")
+            for label in ("volucer", "RoadRunner", "FrankenPHP", "nginx + php-fpm"):
+                self.assertIn(f">{label}</text>", data,
+                              f"{name} does not name {label}")
+
+    def test_every_bar_carries_its_number_as_text(self):
+        """The value has to be printed, not left to the bar's length.
+
+        A four-bar chart is read by comparing lengths, and lengths are worth
+        nothing to a reader who wants the actual number or who cannot see the
+        bars at all.
+        """
+        rows = br.matrix_rows(br.MATRIX_DIRS["servers"])
+        best = br.configuration_at_process_count(rows, "volucer-attach", 32, 64,
+                                                 mode="on", threads="12")
+        data = self.svg([n for n in self.charts if "throughput" in n][0])
+        self.assertIn(f"{best['rps']:,.0f}", data,
+                      "the throughput chart does not print the volucer rate")
+
+    def test_the_bars_share_one_scale_and_start_at_zero(self):
+        """Both axes start at zero and are scaled by the same maximum.
+
+        A chart whose bars were scaled independently would show two servers as
+        equal when they are not, which is the failure a comparison chart exists
+        to avoid.
+        """
+        data = self.svg([n for n in self.charts if "throughput" in n][0])
+        rects = re.findall(r'<rect x="[\d.]+" y="([\d.]+)" width="[\d.]+" '
+                           r'height="([\d.]+)" rx="3"', data)
+        self.assertEqual(len(rects), 4)
+        bottoms = {round(float(y) + float(h), 1) for y, h in rects}
+        self.assertEqual(len(bottoms), 1,
+                         "the bars do not share a baseline, so their lengths "
+                         "are not comparable")
+
+    def test_the_accessible_name_carries_the_numbers(self):
+        """A reader who cannot see the bars has to be given their values."""
+        for name in self.charts:
+            data = self.svg(name)
+            match = re.search(r'aria-label="([^"]*)"', data)
+            self.assertIsNotNone(match, f"{name} has no accessible name")
+            label = match.group(1)
+            for expected in ("volucer", "RoadRunner", "FrankenPHP", "nginx"):
+                self.assertIn(expected, label,
+                              f"{name} does not name {expected} in its text "
+                              f"alternative")
+
+    def test_each_program_is_shown_at_its_best_measured_cell(self):
+        """A program is drawn at the load and size where it served best.
+
+        The four programs do not peak together: FrankenPHP serves most with 16
+        processes at concurrency 16, the others with 32 at concurrency 64.
+        Drawing them all at one setting would show a program at a configuration
+        it measured worse than it can do, and a chart that handicaps a
+        competitor is worth nothing to the reader deciding whether to trust it.
+        The rule is the same for all four, so it stays a comparison of programs.
+        """
+        rows = br.matrix_rows(br.MATRIX_DIRS["servers"])
+        data = self.svg([n for n in self.charts if "throughput" in n][0])
+        for arm, name in (("volucer-attach", "volucer"), ("rr", "RoadRunner"),
+                          ("frankenphp", "FrankenPHP"), ("fpm", "nginx + php-fpm")):
+            peak = br.homepage_peak(rows, arm)
+            self.assertIsNotNone(peak["rps"], f"{arm} has no measurement")
+            self.assertIn(f"{peak['rps']:,.0f}", data,
+                          f"the chart does not draw {name} at its best cell")
+            self.assertIn(f"{name} {peak['rps']:,.0f} with {peak['workers']} PHP processes "
+                          f"at concurrency {peak['conc']}",
+                          self.svg_aria_label(data),
+                          f"the chart does not say where {name} peaked")
+
+    def test_every_bar_says_the_load_it_was_measured_at(self):
+        """No two bars share their conditions, so the load goes on the bar.
+
+        With each program at its own best cell, a bar's height encodes both the
+        server and the load it ran at. A reader who compares heights without
+        that is comparing four different experiments, so the label has to be
+        beside the bar rather than in a footnote.
+        """
+        rows = br.matrix_rows(br.MATRIX_DIRS["servers"])
+        data = self.svg([n for n in self.charts if "throughput" in n][0])
+        for arm in ("volucer-attach", "rr", "frankenphp", "fpm"):
+            peak = br.homepage_peak(rows, arm)
+            label = f"{peak['workers']} procs at c={peak['conc']}"
+            self.assertIn(f">{label}</text>", data,
+                          f"the throughput chart does not print '{label}'")
+        self.assertIn(">32 procs at c=64</text>", data)
+        self.assertIn(">16 procs at c=16</text>", data)
+
+    def test_no_bar_exceeds_the_published_ceiling(self):
+        """The page stops where the report's comparison stops.
+
+        The run measured 64 processes, and only php-fpm is still improving up
+        there. A page that drew it would be making a point about another
+        server's ceiling, and would also pair a 64-process throughput with
+        memory sampled at a different load. Both are avoided by the cap.
+        """
+        rows = br.matrix_rows(br.MATRIX_DIRS["servers"])
+        for arm in ("volucer-attach", "rr", "frankenphp", "fpm"):
+            peak = br.homepage_peak(rows, arm)
+            self.assertLessEqual(peak["workers"], br.HOMEPAGE_MAX_PROCESSES,
+                                 f"{arm} is drawn above the published ceiling")
+
+    def test_frankenphp_is_drawn_at_the_size_it_served_best(self):
+        """The concrete case that made the per-program rule necessary.
+
+        Pinned by name because it is the bar the rule moves furthest today, and
+        a future run that flips it is exactly the thing somebody should look at
+        rather than a number quietly changing under the page.
+        """
+        rows = br.matrix_rows(br.MATRIX_DIRS["servers"])
+        peak = br.homepage_peak(rows, "frankenphp")
+        at_32_64 = br.configuration_at_process_count(rows, "frankenphp", 32, 64,
+                                                    mode="on", threads="12")
+        self.assertEqual((peak["workers"], peak["conc"]), (16, 16),
+                         "FrankenPHP no longer peaks at 16 procs / c=16; re-check the page")
+        self.assertGreater(peak["rps"], at_32_64["rps"],
+                           "FrankenPHP's peak is not higher than its 32-proc c=64 rate")
+
+    def test_it_carries_no_legend_factor_or_range(self):
+        """The compact shape is the point of these charts.
+
+        A factor label or a range would be a second reading of the same bar,
+        and the reader who wants the second reading is the reader the report is
+        for.
+        """
+        for name in self.charts:
+            data = self.svg(name)
+            self.assertNotIn("x1.", data, f"{name} draws a factor label")
+            self.assertNotIn("stroke-dasharray", data, f"{name} draws a reference line")
+
+    def test_the_numbers_come_from_the_committed_run(self):
+        """Regenerating from a re-measurement must move the chart with it.
+
+        The charts are generated rather than hand-drawn, so the one thing that
+        must not happen is a hard-coded figure surviving a new run.
+        """
+        rows = br.matrix_rows(br.MATRIX_DIRS["servers"])
+        mem = [r for r in br.matrix_memory(br.MATRIX_DIRS["servers"])
+               if r.get("phase") == "post"]
+        expected_pss = br.cell_median(
+            mem, {"arm": "rr", "phase": "post", "workers": "32"}, "pss_mb")
+        data = self.svg([n for n in self.charts if "memory" in n][0])
+        self.assertIn(f"{expected_pss:,.1f}", data,
+                      "the memory chart does not print the value from the run")
+
+    def test_the_charts_follow_the_reader_theme(self):
+        """Light and dark come from a style block, the way the illustration does.
+
+        These charts are served as static files into an `<img>`, not through a
+        Markdown renderer, so the style block survives and the chart can follow
+        the page's colour scheme. The card, ink and bar colours must each have
+        a dark value, or a dark reader gets a light card they cannot read.
+        """
+        for name in self.charts:
+            data = self.svg(name)
+            self.assertIn("<style>", data)
+            self.assertIn("@media (prefers-color-scheme: dark)", data)
+            for rule in (".card{", ".ink{", ".soft{", ".axis{", ".bar-0{", ".bar-3{"):
+                self.assertEqual(data.count(rule), 2,
+                                 f"{name} needs a light and a dark {rule} rule")
+
+    def test_the_dark_card_lets_the_page_through(self):
+        """The dark card is a tint, not a second surface.
+
+        The illustration and these charts both sit on a page that turns dark
+        with the reader's scheme. An opaque card drew a slightly different dark
+        rectangle on top of the page's own, which is a seam around every chart.
+        Half transparency keeps it a subtle tint. The light card stays opaque:
+        white on white has nothing to gain, and the page behind is not always
+        plain white.
+        """
+        for name in self.charts:
+            data = self.svg(name)
+            dark = data.split("@media (prefers-color-scheme: dark)", 1)[1]
+            self.assertIn(".card{fill:#1b2231;fill-opacity:0.5;", dark,
+                          f"{name} draws an opaque dark card")
+            light = data.split("@media (prefers-color-scheme: dark)", 1)[0]
+            self.assertIn(".card{fill:#ffffff;stroke:", light,
+                          f"{name} made the light card transparent too")
+
+    def test_volucer_is_drawn_in_the_brand_blue_in_both_themes(self):
+        """The bar the page is about uses the brand blue, lifted on dark."""
+        data = self.svg([n for n in self.charts if "throughput" in n][0])
+        self.assertIn(".bar-0{fill:#2F87F9}", data)
+        self.assertIn("@media (prefers-color-scheme: dark){", data)
+        self.assertIn(".bar-0{fill:#43BDFA}", data)
 
 
 class RetiredViewTest(unittest.TestCase):

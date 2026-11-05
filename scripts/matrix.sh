@@ -591,9 +591,9 @@ wait_socket() { # path
 cfg_volucer_worker() { # file port workers mode
     cat > "$1" <<EOF
 # volucer + resident worker: warm model, pipe transport.
+[server]
 default_backend = "app"
 
-[server]
 http = "127.0.0.1:$2"
 document_root = "$ROOT/public"
 
@@ -615,9 +615,9 @@ cfg_volucer_cgi() { # file port workers mode
     cat > "$1" <<EOF
 # volucer + spawn_cgi: the cold CGI SAPI reset php-fpm performs, in a pool volucer
 # supervises, over the unix-socket transport.
+[server]
 default_backend = "cgi"
 
-[server]
 http = "127.0.0.1:$2"
 document_root = "$ROOT/public"
 
@@ -640,9 +640,9 @@ cfg_volucer_unix() { # file port workers mode
 # existing meaning ("not a pipe"); \`socket\` is what decides *where* the worker
 # listens, and it is a PREFIX — slot i binds <prefix>.<i>.sock, which is what keeps
 # each slot recyclable and individually readable.
+[server]
 default_backend = "app"
 
-[server]
 http = "127.0.0.1:$2"
 document_root = "$ROOT/public"
 
@@ -671,9 +671,9 @@ cfg_volucer_attach() { # file port workers mode
 # supervisor has already forked a specific number, and a connection count that
 # differs is either idle children or requests queued behind a child that is not
 # there. The harness therefore passes the same $3 to both sides.
+[server]
 default_backend = "app"
 
-[server]
 http = "127.0.0.1:$2"
 document_root = "$ROOT/public"
 
@@ -698,9 +698,9 @@ cfg_volucer_prefork() { # file port workers mode children
 # \`children\` counts children, not processes: php-cgi forks them *in addition to
 # itself*, and the pool maps 0 and 1 to PHP_FCGI_CHILDREN=0 so that 1 means one
 # process rather than a hidden second one.
+[server]
 default_backend = "cgi"
 
-[server]
 http = "127.0.0.1:$2"
 document_root = "$ROOT/public"
 

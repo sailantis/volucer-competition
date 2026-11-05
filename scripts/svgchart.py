@@ -3,15 +3,18 @@
 
 Pure-Python SVG generation. No third-party dependency, no build step.
 
-**Everything is expressed with SVG *presentation attributes* — never ``<style>``
-blocks or CSS classes.** A ``<style>`` block is stripped by any Markdown
-renderer that sanitises HTML, so class-based styling silently disappears in a
-published page. Presentation attributes survive, and they also survive when the
-``.svg`` is embedded with ``<img src="...">``.
-
-**Because an ``<img>``-embedded SVG cannot depend on the host page's theme, each
-chart paints its own card background and uses fixed ink colours** that read on
+**Report charts are expressed with SVG *presentation attributes* — never
+``<style>`` blocks or CSS classes.** A ``<style>`` block is stripped by any
+Markdown renderer that sanitises HTML, so class-based styling silently
+disappears in a published page. Presentation attributes survive, and they also
+survive when the ``.svg`` is embedded with ``<img src="...">``. Each report
+chart paints its own card background and uses fixed ink colours that read on
 both a light and a dark page.
+
+The exception is ``compact_bars``. It is written as a static asset for the
+product page and is never passed through a Markdown renderer, so it carries a
+``<style>`` block with a ``prefers-color-scheme: dark`` rule, the same way the
+product illustration does. It follows the reader's theme.
 
 Usage:
 
@@ -41,8 +44,32 @@ AXIS = "#cbd5e1"
 GRID = "#f1f5f9"
 FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
 
-LEGEND_TOP = 74
-LEGEND_ROW_H = 17
+LEGEND_TOP = 84
+LEGEND_ROW_H = 22
+
+# Text sizes, named rather than written at each call site. A chart is read as
+# one picture, so a value printed larger than the axis it is read against
+# draws the eye to the wrong place; every size used to *lay out* a column is
+# the size that column is *drawn* at, and both read the same constant. These
+# are the report sizes, for a card displayed at roughly its own width — at the
+# default 960px canvas a report chart sits in a documentation column at about
+# 1:1, so a size here is a size on the screen.
+TITLE_SIZE = 18
+NOTE_SIZE = 13.0
+STAMP_SIZE = 12.5
+TICK_SIZE = 12.5
+NAME_SIZE = 15.0
+MODEL_SIZE = 12.5
+VALUE_SIZE = 15.0
+FACTOR_SIZE = 14.0
+CATEGORY_SIZE = 14.0
+LEGEND_SIZE = 13.5
+LEGEND_SWATCH = 14
+
+# The shortest a plot area may be drawn. A chart is read by comparing lengths,
+# so a plot squeezed under its header draws bars that say less than their
+# numbers; when the header has eaten the requested height, the card grows.
+MIN_PLOT_HEIGHT = 160
 
 
 def _escape(text: str) -> str:
@@ -58,11 +85,12 @@ def _escape(text: str) -> str:
 
 def _text(x: float, y: float, content: str, *, size: int = 12, fill: str = INK,
           anchor: str = "start", weight: str = "normal",
-          italic: bool = False) -> str:
+          italic: bool = False, css_class: str | None = None) -> str:
     style = ' font-style="italic"' if italic else ""
+    paint = f'class="{css_class}"' if css_class else f'fill="{fill}"'
     return (
         f'<text x="{x:.1f}" y="{y:.1f}" font-family="{FONT}" font-size="{size}" '
-        f'fill="{fill}" text-anchor="{anchor}" font-weight="{weight}"{style}>'
+        f'{paint} text-anchor="{anchor}" font-weight="{weight}"{style}>'
         f"{_escape(content)}</text>"
     )
 
@@ -144,19 +172,19 @@ def _layout_legend(series: Mapping[str, Sequence[float]], colors: Mapping[str, s
     """
     items: list[tuple[str, str, float, float]] = []
     x = pad_left
-    y = LEGEND_TOP - 22
+    y = LEGEND_TOP - 26
     rows = 1
 
     for key in series:
         colour = colors.get(key, FACTOR_INK)
         label = labels.get(key, key)
-        width = 12 + 6 + _approx_text_width(label, 12)
+        width = LEGEND_SWATCH + 8 + _approx_text_width(label, LEGEND_SIZE)
         if x + width > right_edge and x > pad_left:
             x = pad_left
             y += LEGEND_ROW_H
             rows += 1
         items.append((colour, label, x, y))
-        x += width + 18
+        x += width + 20
 
     return items, rows
 
@@ -166,23 +194,26 @@ def _legend_svg(items: Sequence[tuple[str, str, float, float]]) -> str:
     parts = []
     for colour, label, x, y in items:
         parts.append(
-            f'<rect x="{x:.1f}" y="{y - 9:.1f}" width="12" height="12" rx="3" fill="{colour}"/>'
+            f'<rect x="{x:.1f}" y="{y - LEGEND_SWATCH + 1:.1f}" '
+            f'width="{LEGEND_SWATCH}" height="{LEGEND_SWATCH}" rx="3" fill="{colour}"/>'
         )
-        parts.append(_text(x + 18, y + 1, label, size=12, fill=INK_SOFT))
+        parts.append(_text(x + LEGEND_SWATCH + 8, y + 2, label, size=LEGEND_SIZE,
+                           fill=INK_SOFT))
     return "".join(parts)
 
 
-def _chart_open(width: int, height: int, title: str) -> str:
+def _chart_open(width: int, height: int, title: str,
+                aria_label: str | None = None) -> str:
     """The card, the title and the subtitle line."""
     parts = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
         f'viewBox="0 0 {width} {height}" role="img" '
-        f'aria-label="{_escape(title)}">',
+        f'aria-label="{_escape(aria_label or title)}">',
         f'<rect x="0.5" y="0.5" width="{width - 1}" height="{height - 1}" rx="8" '
         f'fill="{CARD_BG}" stroke="{CARD_EDGE}"/>',
     ]
     if title:
-        parts.append(_text(64, 34, title, size=15, fill=INK, weight="600"))
+        parts.append(_text(64, 38, title, size=TITLE_SIZE, fill=INK, weight="600"))
     return "".join(parts)
 
 
@@ -221,19 +252,27 @@ def grouped_bars(categories: Sequence[str],
 
     None of the three carries a datum: the bar carries the number.
     """
-    pad_left, pad_right, pad_bottom = 74, 16, 74
-    note_lines = _wrap(note, width - pad_left - pad_right, 11.5) if note else []
-    stamp_lines = _wrap(stamp, width - pad_left - pad_right, 11) if stamp else []
-    version_lines = _wrap(versions, width - pad_left - pad_right, 11) if versions else []
+    pad_left, pad_right, pad_bottom = 84, 16, 62
+    note_lines = _wrap(note, width - pad_left - pad_right, NOTE_SIZE) if note else []
+    stamp_lines = _wrap(stamp, width - pad_left - pad_right, STAMP_SIZE) if stamp else []
+    version_lines = _wrap(versions, width - pad_left - pad_right, STAMP_SIZE) if versions else []
     legend_items, legend_rows = _layout_legend(series, colors, labels, pad_left,
                                                width - pad_right)
-    pad_top = (LEGEND_TOP + (legend_rows - 1) * LEGEND_ROW_H + 18
-               + len(note_lines) * 18 + len(stamp_lines) * 15
-               + len(version_lines) * 15)
+    # The header is measured from the placements above rather than from a
+    # running total, so the plot starts under the last line actually drawn and
+    # no further: a gap here is a gap in every card, and the bars pay for it.
+    legend_bottom = LEGEND_TOP + (legend_rows - 1) * LEGEND_ROW_H
+    note_top = legend_bottom + 24
+    pad_top = (note_top + len(note_lines) * 20
+               + (len(stamp_lines) + len(version_lines)) * 17 + 16)
     plot_width = width - pad_left - pad_right
     plot_height = height - pad_top - pad_bottom
-    if plot_height < 40:
-        plot_height = 40
+    # ``height`` is a request, not a promise: when the header block and the
+    # legend have grown, the plot is what gives way, and a plot squeezed into a
+    # fixed card draws bars too short to compare. So the card grows instead,
+    # and the caller's height stays a minimum.
+    if plot_height < MIN_PLOT_HEIGHT:
+        plot_height = MIN_PLOT_HEIGHT
         height = pad_top + plot_height + pad_bottom
 
     values = [v for row in series.values() for v in row if v is not None and math.isfinite(v)]
@@ -266,17 +305,17 @@ def grouped_bars(categories: Sequence[str],
     parts.append(_legend_svg(legend_items))
 
     # The provenance block, under the legend: what and how, never a datum.
-    note_y = LEGEND_TOP + (legend_rows - 1) * LEGEND_ROW_H + 26
+    note_y_cursor = note_top
     for line in note_lines:
-        parts.append(_text(pad_left, note_y, line, size=11.5, fill=INK_SOFT))
-        note_y += 15
+        parts.append(_text(pad_left, note_y_cursor, line, size=NOTE_SIZE, fill=INK_SOFT))
+        note_y_cursor += 20
     for line in stamp_lines:
-        parts.append(_text(pad_left, note_y, line, size=11, fill=INK_SOFT))
-        note_y += 15
+        parts.append(_text(pad_left, note_y_cursor, line, size=STAMP_SIZE, fill=INK_SOFT))
+        note_y_cursor += 17
     for line in version_lines:
-        parts.append(_text(pad_left, note_y, line, size=11, fill=INK_SOFT,
+        parts.append(_text(pad_left, note_y_cursor, line, size=STAMP_SIZE, fill=INK_SOFT,
                            italic=True))
-        note_y += 15
+        note_y_cursor += 17
 
     # Grid and the value axis.
     for tick in ticks:
@@ -287,7 +326,8 @@ def grouped_bars(categories: Sequence[str],
             f'<line x1="{pad_left}" y1="{y:.1f}" x2="{width - pad_right}" y2="{y:.1f}" '
             f'stroke="{GRID}" stroke-width="1"/>'
         )
-        parts.append(_text(pad_left - 8, y + 4, _fmt_tick(tick), size=11, fill=INK_SOFT, anchor="end"))
+        parts.append(_text(pad_left - 10, y + 4.5, _fmt_tick(tick), size=TICK_SIZE,
+                           fill=INK_SOFT, anchor="end"))
 
     parts.append(
         f'<line x1="{pad_left}" y1="{pad_top + plot_height}" x2="{width - pad_right}" '
@@ -295,8 +335,8 @@ def grouped_bars(categories: Sequence[str],
     )
 
     group_width = plot_width / max(len(categories), 1)
-    bar_gap = 4
-    bar_width = max((group_width * 0.78) / max(len(series), 1) - bar_gap, 3)
+    bar_gap = 5
+    bar_width = max((group_width * 0.9) / max(len(series), 1) - bar_gap, 4)
 
     for index, category in enumerate(categories):
         group_x = pad_left + group_width * index
@@ -307,22 +347,175 @@ def grouped_bars(categories: Sequence[str],
             if value is None or not math.isfinite(value):
                 # Not measured. Drawn as nothing, and the legend says so.
                 continue
-            x = group_x + group_width * 0.11 + series_index * (bar_width + bar_gap)
+            x = group_x + group_width * 0.05 + series_index * (bar_width + bar_gap)
             y = to_y(value)
             bar_height = max(pad_top + plot_height - y, 0.5)
             colour = colors.get(key, FACTOR_INK)
             parts.append(
                 f'<rect x="{x:.1f}" y="{y:.1f}" width="{bar_width:.1f}" '
-                f'height="{bar_height:.1f}" rx="2" fill="{colour}"/>'
+                f'height="{bar_height:.1f}" rx="3" fill="{colour}"/>'
             )
         parts.append(
-            _text(group_x + group_width / 2, pad_top + plot_height + 20, category,
-                  size=12, fill=INK, anchor="middle")
+            _text(group_x + group_width / 2, pad_top + plot_height + 24, category,
+                  size=CATEGORY_SIZE, fill=INK, anchor="middle")
         )
 
     if value_suffix:
-        parts.append(_text(width - 16, 34, value_suffix, size=11,
+        parts.append(_text(width - 16, 38, value_suffix, size=STAMP_SIZE,
                            fill=INK_SOFT, anchor="end"))
+
+    parts.append(_chart_close())
+    return "".join(parts)
+
+
+def _compact_theme(colours: Sequence[tuple[str, str]]) -> str:
+    """The ``<style>`` block that makes a compact chart follow the reader's theme.
+
+    The light and dark values mirror the product illustration's card, ink and
+    rule colours. Each bar has its own pair, so the brand colour can be lifted
+    on a dark card without changing the others' hue.
+
+    The dark card is half transparent. Both the illustration and this chart sit
+    on a page that turns dark with the reader's scheme, so an opaque card drew a
+    second, slightly different dark rectangle on top of the page's own — a seam
+    around every chart. Letting the page through keeps the card a subtle tint
+    instead of a competing surface, and the bars, which are opaque, read the
+    same either way. The light card stays opaque: white on a white page has
+    nothing to gain from transparency, and the page behind it is not always
+    plain white.
+    """
+    light = {
+        "card": "fill:#ffffff;stroke:#e2e8f0",
+        "ink": "fill:#1e293b",
+        "soft": "fill:#64748b",
+        "axis": "stroke:#cbd5e1",
+    }
+    dark = {
+        "card": "fill:#1b2231;fill-opacity:0.5;stroke:#2c3850",
+        "ink": "fill:#eef2fa",
+        "soft": "fill:#9aa6bd",
+        "axis": "stroke:#3a4760",
+    }
+    for index, (light_colour, dark_colour) in enumerate(colours):
+        light[f"bar-{index}"] = f"fill:{light_colour}"
+        dark[f"bar-{index}"] = f"fill:{dark_colour}"
+
+    def rules(table: Mapping[str, str]) -> str:
+        return "".join(f".{name}{{{body}}}" for name, body in table.items())
+
+    return (f"<style>{rules(light)}"
+            f"@media (prefers-color-scheme: dark){{{rules(dark)}}}</style>")
+
+
+def compact_bars(categories: Sequence[str],
+                 values: Sequence[float],
+                 colours: Sequence[tuple[str, str]],
+                 title: str = "",
+                 value_format=None,
+                 caption: str = "",
+                 aria_label: str = "",
+                 sublabels: Sequence[str] | None = None,
+                 width: int = 480,
+                 height: int = 230) -> str:
+    """A small bar chart: one bar per category, its value printed above it.
+
+    This is the product-page shape rather than the report shape. A report chart
+    carries a legend, a factor label behind every bar, a range on each one and
+    an axis to read them against, because it is the argument. A landing page
+    needs the answer and nothing else: four bars, their names, their numbers.
+
+    So there is no legend - each bar is named under it - no axis ticks, because
+    every bar is labelled with its own value, and no annotation, because the
+    page's caption says what was compared and links to the report for the rest.
+
+    Every bar starts at zero and they share one scale, so their lengths compare.
+    A truncated axis would make two similar bars look far apart, which is the
+    one thing a reader must not be told by a chart that exists to compare them.
+
+    ``colours`` is one ``(light, dark)`` pair per category, and the chart
+    follows the reader's theme through its own ``<style>`` block. ``caption``
+    is a single small line under the bars for the minimum a copied image needs
+    to still mean something: what the measurement is. ``aria_label`` is the
+    alternative text, and it has to carry the numbers, because a reader who
+    cannot see the bars cannot read them off an axis that is not drawn.
+
+    ``sublabels`` is one short line per bar, drawn under the bar's name. It
+    exists for the condition a bar was measured in when those conditions are
+    not shared: a chart whose bars each ran in the shape that suited them best
+    has to say so on the bar, or the reader is comparing four different
+    experiments and does not know it.
+    """
+    if not categories or len(categories) != len(values) or len(colours) < len(categories):
+        return ""
+
+    format_value = value_format or _fmt
+    if sublabels is not None and len(sublabels) != len(categories):
+        return ""
+
+    pad_left, pad_right = 16.0, 16.0
+    title_y = 24.0
+    pad_top = title_y + 26.0
+    pad_bottom = 40.0
+    if sublabels is not None:
+        pad_bottom += 13.0
+    if caption:
+        pad_bottom += 16.0
+
+    plot_width = width - pad_right - pad_left
+    plot_bottom = height - pad_bottom
+    plot_height = plot_bottom - pad_top
+    if plot_height < 40:
+        plot_height = 40
+        plot_bottom = pad_top + plot_height
+        height = int(round(plot_bottom + pad_bottom))
+
+    measured = [v for v in values if v is not None and math.isfinite(v) and v > 0]
+    if not measured:
+        return ""
+    axis_max = max(measured)
+
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
+        f'viewBox="0 0 {width} {height}" role="img" '
+        f'aria-label="{_escape(aria_label or title)}">',
+        _compact_theme(colours),
+        f'<rect x="0.5" y="0.5" width="{width - 1}" height="{height - 1}" rx="8" '
+        f'class="card"/>',
+    ]
+    if title:
+        parts.append(_text(pad_left, title_y, title, size=13, css_class="ink",
+                           weight="600"))
+
+    group_width = plot_width / max(len(categories), 1)
+    bar_width = max(group_width * 0.52, 6.0)
+
+    for index, category in enumerate(categories):
+        value = values[index]
+        if value is None or not math.isfinite(value):
+            continue
+        centre = pad_left + group_width * index + group_width / 2
+        bar_y = plot_bottom - plot_height * (value / axis_max)
+        parts.append(
+            f'<rect x="{centre - bar_width / 2:.1f}" y="{bar_y:.1f}" '
+            f'width="{bar_width:.1f}" height="{max(plot_bottom - bar_y, 0.5):.1f}" '
+            f'rx="3" class="bar-{index}"/>'
+        )
+        parts.append(_text(centre, bar_y - 7, format_value(value), size=12,
+                           css_class="ink", weight="700", anchor="middle"))
+        parts.append(_text(centre, plot_bottom + 17, category, size=11,
+                           css_class="ink", weight="600", anchor="middle"))
+        if sublabels is not None:
+            parts.append(_text(centre, plot_bottom + 30, sublabels[index], size=9.5,
+                               css_class="soft", anchor="middle"))
+
+    parts.append(
+        f'<line x1="{pad_left}" y1="{plot_bottom:.1f}" x2="{width - pad_right}" '
+        f'y2="{plot_bottom:.1f}" class="axis" stroke-width="1"/>'
+    )
+    if caption:
+        caption_y = plot_bottom + 36 + (13.0 if sublabels is not None else 0.0)
+        parts.append(_text(pad_left, caption_y, caption, size=9.5,
+                           css_class="soft", italic=True))
 
     parts.append(_chart_close())
     return "".join(parts)
@@ -397,15 +590,15 @@ def range_bars(categories: Sequence[str], low: Sequence[float], high: Sequence[f
             parts.append(_fmt(value) if value is not None else "-")
         value_strings.append(" \u00b7 ".join(parts))
 
-    name_width = max((_approx_text_width(name, 12.5) for name in categories), default=0.0)
+    name_width = max((_approx_text_width(name, NAME_SIZE) for name in categories), default=0.0)
     value_width = max(
-        [_approx_text_width(value_header, 11)] +
-        [_approx_text_width(text, 12.5) for text in value_strings]
+        [_approx_text_width(value_header, TICK_SIZE)] +
+        [_approx_text_width(text, VALUE_SIZE) for text in value_strings]
     )
 
     name_right = 16.0 + name_width
-    value_right = name_right + 18.0 + value_width
-    pad_left = value_right + 16.0
+    value_right = name_right + 20.0 + value_width
+    pad_left = value_right + 18.0
 
     # The factor column, when asked for: a row's centre against the lightest
     # centre. Its gutter is sized from the widest label it will print, and it
@@ -425,26 +618,27 @@ def range_bars(categories: Sequence[str], low: Sequence[float], high: Sequence[f
         if not any(factors):
             show_factor = False
     if show_factor and factors:
-        widest = max((_approx_text_width("x" + f, 12.5) for f in factors if f), default=0.0)
-        pad_right = 12.0 + widest + 16.0
+        widest = max((_approx_text_width("x" + f, FACTOR_SIZE) for f in factors if f),
+                     default=0.0)
+        pad_right = 14.0 + widest + 16.0
 
     # Header block: title, then the note line, wrapped to the card.
     notes = [line for line in (note, factor_note) if line]
     note_lines: list[str] = []
     note_width = width - pad_left - 12.0
     for line in notes:
-        note_lines.extend(_wrap(line, note_width, 11.5))
+        note_lines.extend(_wrap(line, note_width, NOTE_SIZE))
 
-    title_y = 34.0
-    pad_top = (title_y + 24.0) if title else 18.0
+    title_y = 38.0
+    pad_top = (title_y + 26.0) if title else 20.0
     for _line in note_lines:
         pad_top += 20.0
-    pad_top += 14.0
+    pad_top += 16.0
 
-    row_height = 34.0
-    grid_bottom = pad_top + rows * row_height + 12.0
+    row_height = 40.0
+    grid_bottom = pad_top + rows * row_height + 14.0
     if height is None:
-        height = int(round(grid_bottom + 62.0))
+        height = int(round(grid_bottom + 66.0))
 
     values = [v for row in (low, high, centre, ) for v in row
               if v is not None and math.isfinite(v)]
@@ -459,12 +653,12 @@ def range_bars(categories: Sequence[str], low: Sequence[float], high: Sequence[f
 
     parts = [_chart_open(width, height, title)]
 
-    y = title_y + 22.0
+    y = title_y + 24.0
     for line in note_lines:
-        parts.append(_text(64.0, y, line, size=11.5, fill=INK_SOFT))
+        parts.append(_text(64.0, y, line, size=NOTE_SIZE, fill=INK_SOFT))
         y += 20.0
 
-    parts.append(_text(value_right, pad_top - 12, value_header, size=11,
+    parts.append(_text(value_right, pad_top - 14, value_header, size=TICK_SIZE,
                        fill=INK_SOFT, weight="600", anchor="end"))
 
     for tick in ticks:
@@ -475,11 +669,11 @@ def range_bars(categories: Sequence[str], low: Sequence[float], high: Sequence[f
             f'<line x1="{x:.1f}" y1="{pad_top - 6:.1f}" x2="{x:.1f}" '
             f'y2="{grid_bottom:.1f}" stroke="{GRID}" stroke-width="1"/>'
         )
-        parts.append(_text(x, grid_bottom + 18, _fmt_tick(tick), size=11,
+        parts.append(_text(x, grid_bottom + 22, _fmt_tick(tick), size=TICK_SIZE,
                             fill=INK_SOFT, anchor="middle"))
 
     if value_suffix:
-        parts.append(_text(width - 16, 34, value_suffix, size=11,
+        parts.append(_text(width - 16, 38, value_suffix, size=STAMP_SIZE,
                            fill=INK_SOFT, anchor="end"))
 
     parts.append(
@@ -488,7 +682,7 @@ def range_bars(categories: Sequence[str], low: Sequence[float], high: Sequence[f
         f'stroke="{AXIS}" stroke-width="1"/>'
     )
 
-    cap_height = 7.0
+    cap_height = 9.0
     for index, name in enumerate(categories):
         centre_y = pad_top + row_height * index + row_height / 2
         low_value = low[index] if index < len(low) else None
@@ -507,32 +701,32 @@ def range_bars(categories: Sequence[str], low: Sequence[float], high: Sequence[f
             parts.append(
                 f'<line x1="{min(x_low, x_high):.1f}" y1="{centre_y:.1f}" '
                 f'x2="{max(x_low, x_high):.1f}" y2="{centre_y:.1f}" '
-                f'stroke="{colour}" stroke-width="2.5" stroke-linecap="round" '
+                f'stroke="{colour}" stroke-width="3" stroke-linecap="round" '
                 f'opacity="0.45"/>'
             )
             for x_cap in (x_low, x_high):
                 parts.append(
                     f'<line x1="{x_cap:.1f}" y1="{centre_y - cap_height:.1f}" '
                     f'x2="{x_cap:.1f}" y2="{centre_y + cap_height:.1f}" '
-                    f'stroke="{colour}" stroke-width="2.5" stroke-linecap="round"/>'
+                    f'stroke="{colour}" stroke-width="3" stroke-linecap="round"/>'
                 )
 
         if mid_value is not None:
             parts.append(
-                f'<circle cx="{to_x(mid_value):.1f}" cy="{centre_y:.1f}" r="5.2" '
+                f'<circle cx="{to_x(mid_value):.1f}" cy="{centre_y:.1f}" r="6.5" '
                 f'fill="{colour}" stroke="{CARD_BG}" stroke-width="2"/>'
             )
 
-        parts.append(_text(name_right, centre_y + 4.5, name, size=12.5,
+        parts.append(_text(name_right, centre_y + 5.0, name, size=NAME_SIZE,
                            fill=colour, weight="700", anchor="end"))
-        parts.append(_text(value_right, centre_y + 4.5, value_strings[index],
-                           size=12.5, fill=INK, weight="700", anchor="end"))
+        parts.append(_text(value_right, centre_y + 5.0, value_strings[index],
+                           size=VALUE_SIZE, fill=INK, weight="700", anchor="end"))
 
         if show_factor and factors[index]:
             anchor = max(to_x(low_value) if low_value is not None else pad_left,
                          to_x(high_value) if high_value is not None else pad_left)
-            parts.append(_text(anchor + 9, centre_y + 4.5, f"x{factors[index]}",
-                               size=12.5, fill=FACTOR_INK))
+            parts.append(_text(anchor + 11, centre_y + 5.0, f"x{factors[index]}",
+                               size=FACTOR_SIZE, fill=FACTOR_INK))
 
     parts.append(_chart_close())
     return "".join(parts)
@@ -569,7 +763,7 @@ def _fmt_factor(value: float | None) -> str:
 
 def throughput_dots(rows: Sequence[Mapping], title: str = "", note: str = "",
                      unit: str = "requests per second", width: int = 960,
-                     height: int | None = None, reference_label: str = "",
+                     height: int | None = None,
                      stamp: str = "", versions: str = "") -> str:
     """A bar chart of throughput, every bar labelled with how much slower it is.
 
@@ -588,10 +782,17 @@ def throughput_dots(rows: Sequence[Mapping], title: str = "", note: str = "",
     rates, so it reads the same way whichever way the axis happens to run.
 
     The **reference** is the row marked ``reference`` - the one every other
-    bar is measured against. A vertical line marks where it sits, and it
-    carries no factor of its own: a reference that said "x 1.0" would be a
+    bar is measured against. A vertical dashed line marks where it sits, and
+    it carries no factor of its own: a reference that said "x 1.0" would be a
     yardstick measuring itself. The same rule skips any other bar whose
     factor rounds to x 1.0, because a label that says nothing is noise.
+
+    The line is drawn bare, with no caption beside it. The note under the
+    title already says the factor is relative to the fastest server "marked by
+    the dashed line", and a caption repeating that next to the line spent the
+    reader's attention on the one row that is not a comparison - while
+    colliding with the factor labels on the charts whose reference sits at the
+    right-hand edge.
 
     The bars start at zero. A bar that starts anywhere else is a bar that
     exaggerates, and the near-ties at the top of the chart are the ones a
@@ -634,15 +835,15 @@ def throughput_dots(rows: Sequence[Mapping], title: str = "", note: str = "",
     label_width = 0.0
     for row in ordered:
         label_width = max(label_width,
-                          _approx_text_width(row.get("name", ""), 12.5),
-                          _approx_text_width(row.get("model", ""), 11))
+                          _approx_text_width(row.get("name", ""), NAME_SIZE),
+                          _approx_text_width(row.get("model", ""), MODEL_SIZE))
     rps_texts = [_fmt_rps(row.get("rps")) for row in ordered]
-    rps_width = max((_approx_text_width(text, 12.5) for text in rps_texts),
+    rps_width = max((_approx_text_width(text, VALUE_SIZE) for text in rps_texts),
                     default=0.0)
 
     label_x = 16.0
-    rps_right = label_x + label_width + 22.0 + rps_width
-    pad_left = rps_right + 22.0
+    rps_right = label_x + label_width + 24.0 + rps_width
+    pad_left = rps_right + 24.0
 
     # The gutter on the right holds the floating labels. It is reserved
     # rather than improvised per row, so a label never lands on the axis, and
@@ -653,10 +854,10 @@ def throughput_dots(rows: Sequence[Mapping], title: str = "", note: str = "",
         for row in ordered
     ]
     widest_factor = max(
-        (_approx_text_width("x" + text, 12.5) for text in factor_texts if text),
+        (_approx_text_width("x" + text, FACTOR_SIZE) for text in factor_texts if text),
         default=0.0,
     )
-    gutter = max(56.0, widest_factor + 22.0)
+    gutter = max(60.0, widest_factor + 24.0)
     plot_width = max(width - 16.0 - gutter - pad_left, 80.0)
 
     # The axis. The bars start at zero, and the top tick is the first nice
@@ -685,24 +886,24 @@ def throughput_dots(rows: Sequence[Mapping], title: str = "", note: str = "",
     # builds it is a fact about.
     note_lines: list[str] = []
     if note:
-        note_lines = _wrap(note, width - 64.0 - 12.0, 11.5)
+        note_lines = _wrap(note, width - 64.0 - 12.0, NOTE_SIZE)
     stamp_lines: list[str] = []
     if stamp:
-        stamp_lines = _wrap(stamp, width - 64.0 - 12.0, 11)
+        stamp_lines = _wrap(stamp, width - 64.0 - 12.0, STAMP_SIZE)
     version_lines: list[str] = []
     if versions:
-        version_lines = _wrap(versions, width - 64.0 - 12.0, 11)
+        version_lines = _wrap(versions, width - 64.0 - 12.0, STAMP_SIZE)
 
-    title_y = 34.0
-    pad_top = (title_y + 24.0) if title else 18.0
+    title_y = 38.0
+    pad_top = (title_y + 26.0) if title else 20.0
     pad_top += 20.0 * len(note_lines)
-    pad_top += 16.0 * (len(stamp_lines) + len(version_lines))
-    pad_top += 14.0
+    pad_top += 18.0 * (len(stamp_lines) + len(version_lines))
+    pad_top += 16.0
 
-    row_height = 40.0
-    grid_bottom = pad_top + len(ordered) * row_height + 8.0
+    row_height = 48.0
+    grid_bottom = pad_top + len(ordered) * row_height + 10.0
     if height is None:
-        height = int(round(grid_bottom + 58.0))
+        height = int(round(grid_bottom + 62.0))
 
     # The baseline: the fastest arm in the chart.
     reference_row = None
@@ -715,22 +916,22 @@ def throughput_dots(rows: Sequence[Mapping], title: str = "", note: str = "",
 
     parts = [_chart_open(width, height, title)]
 
-    y = title_y + 22.0
+    y = title_y + 24.0
     for line in note_lines:
-        parts.append(_text(64.0, y, line, size=11.5, fill=INK_SOFT))
+        parts.append(_text(64.0, y, line, size=NOTE_SIZE, fill=INK_SOFT))
         y += 20.0
     for line in stamp_lines:
-        parts.append(_text(64.0, y - 2.0, line, size=11, fill=INK_SOFT))
-        y += 16.0
+        parts.append(_text(64.0, y - 2.0, line, size=STAMP_SIZE, fill=INK_SOFT))
+        y += 18.0
     # The builds, in italic: provenance rather than an instruction, and the
     # style is what tells a reader which of the two the line is.
     for line in version_lines:
-        parts.append(_text(64.0, y - 2.0, line, size=11, fill=INK_SOFT,
+        parts.append(_text(64.0, y - 2.0, line, size=STAMP_SIZE, fill=INK_SOFT,
                            italic=True))
-        y += 16.0
+        y += 18.0
 
     if unit:
-        parts.append(_text(width - 16, 34, unit, size=11, fill=INK_SOFT,
+        parts.append(_text(width - 16, 38, unit, size=STAMP_SIZE, fill=INK_SOFT,
                            anchor="end"))
 
     # The grid and its ticks.
@@ -742,7 +943,7 @@ def throughput_dots(rows: Sequence[Mapping], title: str = "", note: str = "",
             f'<line x1="{x:.1f}" y1="{pad_top - 6:.1f}" x2="{x:.1f}" '
             f'y2="{grid_bottom:.1f}" stroke="{GRID}" stroke-width="1"/>'
         )
-        parts.append(_text(x, grid_bottom + 18, _fmt(tick), size=11,
+        parts.append(_text(x, grid_bottom + 22, _fmt(tick), size=TICK_SIZE,
                             fill=INK_SOFT, anchor="middle"))
 
     # The baseline line, drawn under the bars: it is a ruler, not a
@@ -750,21 +951,15 @@ def throughput_dots(rows: Sequence[Mapping], title: str = "", note: str = "",
     # wrong place.
     x_reference = to_x(reference_row.get("rps") or 0.0)
     parts.append(
-        f'<line x1="{x_reference:.1f}" y1="{pad_top - 14:.1f}" '
+        f'<line x1="{x_reference:.1f}" y1="{pad_top - 6:.1f}" '
         f'x2="{x_reference:.1f}" y2="{grid_bottom:.1f}" '
-        f'stroke="{AXIS}" stroke-width="1.5" stroke-dasharray="4 3"/>'
+        f'stroke="{AXIS}" stroke-width="1.5" stroke-dasharray="5 4"/>'
     )
-    # The baseline is named just to the left of the line it marks, so the
-    # caption and the line it names are a reader's eye apart rather than a
-    # screen apart. It is right-aligned against the line and never centred
-    # on it, because the line sits at the fastest bar - near the right-hand
-    # end of the plot - and a caption centred there would run off the card.
-    if reference_label:
-        caption = f"\u25c4 {reference_label}"
-        caption_width = _approx_text_width(caption, 11)
-        x_caption = max(x_reference - 8.0, caption_width + 16.0)
-        parts.append(_text(x_caption, pad_top - 20, caption, size=11,
-                            fill=INK_SOFT, anchor="end"))
+    # The baseline is named by the note under the title, which says the factor
+    # is relative to the fastest server "marked by the dashed line". No caption
+    # is drawn against the line itself: it would repeat that, and on a chart
+    # whose reference sits at the right-hand edge it would sit on top of the
+    # factor labels of the rows below it.
 
     parts.append(
         f'<line x1="{pad_left:.1f}" y1="{grid_bottom:.1f}" '
@@ -772,8 +967,8 @@ def throughput_dots(rows: Sequence[Mapping], title: str = "", note: str = "",
         f'stroke="{AXIS}" stroke-width="1"/>'
     )
 
-    cap_height = 6.0
-    bar_height = 9.0
+    cap_height = 9.0
+    bar_height = 16.0
     for position, row in enumerate(ordered):
         name = row.get("name", "")
         model = row.get("model", "")
@@ -783,12 +978,12 @@ def throughput_dots(rows: Sequence[Mapping], title: str = "", note: str = "",
         high = row.get("high")
         factor = row.get("factor")
 
-        row_y = pad_top + row_height * position + row_height * 0.40
+        row_y = pad_top + row_height * position + row_height * 0.38
 
         if rps is None:
-            parts.append(_text(label_x, row_y + 4.5, name, size=12.5,
+            parts.append(_text(label_x, row_y + 5.0, name, size=NAME_SIZE,
                                fill=INK_SOFT, weight="700"))
-            parts.append(_text(rps_right, row_y + 4.5, "-", size=12.5,
+            parts.append(_text(rps_right, row_y + 5.0, "-", size=VALUE_SIZE,
                                fill=INK_SOFT, weight="700", anchor="end"))
             continue
 
@@ -798,7 +993,7 @@ def throughput_dots(rows: Sequence[Mapping], title: str = "", note: str = "",
         parts.append(
             f'<rect x="{pad_left:.1f}" y="{row_y - bar_height / 2:.1f}" '
             f'width="{max(x_end - pad_left, 1.0):.1f}" height="{bar_height:.1f}" '
-            f'rx="3" fill="{colour}" fill-opacity="0.16"/>'
+            f'rx="4" fill="{colour}" fill-opacity="0.16"/>'
         )
 
         # The range, in requests per second. It is the range of the
@@ -811,28 +1006,28 @@ def throughput_dots(rows: Sequence[Mapping], title: str = "", note: str = "",
             x_low, x_high = to_x(whisker_lo), to_x(whisker_hi)
             parts.append(
                 f'<line x1="{x_low:.1f}" y1="{row_y:.1f}" x2="{x_high:.1f}" '
-                f'y2="{row_y:.1f}" stroke="{colour}" stroke-width="2.5" '
+                f'y2="{row_y:.1f}" stroke="{colour}" stroke-width="3" '
                 f'stroke-linecap="round" opacity="0.6"/>'
             )
             for x_cap in (x_low, x_high):
                 parts.append(
                     f'<line x1="{x_cap:.1f}" y1="{row_y - cap_height:.1f}" '
                     f'x2="{x_cap:.1f}" y2="{row_y + cap_height:.1f}" '
-                    f'stroke="{colour}" stroke-width="2.5" stroke-linecap="round"/>'
+                    f'stroke="{colour}" stroke-width="3" stroke-linecap="round"/>'
                 )
 
         parts.append(
-            f'<circle cx="{x_end:.1f}" cy="{row_y:.1f}" r="5.2" '
+            f'<circle cx="{x_end:.1f}" cy="{row_y:.1f}" r="6.5" '
             f'fill="{colour}" stroke="{CARD_BG}" stroke-width="2"/>'
         )
 
-        parts.append(_text(label_x, row_y + 4.5, name, size=12.5,
+        parts.append(_text(label_x, row_y + 5.0, name, size=NAME_SIZE,
                            fill=colour, weight="700"))
         if model:
-            parts.append(_text(label_x, row_y + 17.5, model, size=11,
+            parts.append(_text(label_x, row_y + 21.0, model, size=MODEL_SIZE,
                                fill=INK_SOFT))
-        parts.append(_text(rps_right, row_y + 4.5, rps_texts[position],
-                           size=12.5, fill=INK, weight="700", anchor="end"))
+        parts.append(_text(rps_right, row_y + 5.0, rps_texts[position],
+                           size=VALUE_SIZE, fill=INK, weight="700", anchor="end"))
 
         # The floating label behind the bar: how many times slower this
         # server is than the reference in the same chart.
@@ -851,12 +1046,12 @@ def throughput_dots(rows: Sequence[Mapping], title: str = "", note: str = "",
                 mark_x = x_end
                 if high is not None:
                     mark_x = max(mark_x, to_x(high))
-                factor_x = mark_x + 9.0
+                factor_x = mark_x + 11.0
                 # The factor is an annotation rather than a datum, so it is
                 # drawn in the faded slate of the scale. The bar carries the
                 # claim; the factor annotates it.
-                parts.append(_text(factor_x, row_y + 4.5, f"x{factor_text}",
-                                   size=12.5, fill=FACTOR_INK))
+                parts.append(_text(factor_x, row_y + 5.0, f"x{factor_text}",
+                                   size=FACTOR_SIZE, fill=FACTOR_INK))
 
     parts.append(_chart_close())
     return "".join(parts)

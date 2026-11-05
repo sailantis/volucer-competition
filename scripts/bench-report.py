@@ -7,6 +7,7 @@ Usage:
     python3 scripts/bench-report.py --list               # list the views
     python3 scripts/bench-report.py --out=<dir>          # somewhere else
     python3 scripts/bench-report.py --publish=volucer    # write into volucer/docs
+    python3 scripts/bench-report.py --homepage=<dir>     # product-page charts
 
 Output (default ``results/bench-report/``):
     <view>.md              the Markdown fragment, ready to publish
@@ -31,7 +32,13 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from svgchart import grouped_bars, range_bars, throughput_dots, write  # noqa: E402
+from svgchart import (  # noqa: E402
+    compact_bars,
+    grouped_bars,
+    range_bars,
+    throughput_dots,
+    write,
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 RESULTS = ROOT / "results"
@@ -1211,7 +1218,6 @@ def view_benchmarks(out_dir: Path) -> dict:
                      "converted to requests per second.",
                 stamp=stamp,
                 versions=versions_line(meta, [entry["arm"] for entry in entries]),
-                reference_label="fastest here",
             ))
             files.append(chart)
 
@@ -1645,6 +1651,212 @@ def view_memory(rows: list[dict], meta: dict, stamp: str, arms: list[str],
     return {"lines": lines, "files": charts}
 
 
+# The largest process count the product page draws.
+#
+# The run measured 64 as well, and the published report leaves that tier out of
+# its throughput comparison: it is the tier where volucer's cold path stops
+# gaining, so it says nothing about a volucer deployment. The landing page
+# follows the same ceiling, which also keeps a bar from being drawn at a size
+# the page's own report does not compare. Above it, only php-fpm still improves,
+# and a fact about another server's ceiling is not a reason to draw four bars.
+HOMEPAGE_MAX_PROCESSES = 32
+
+# The product page's bar colours as (light theme, dark theme). The volucer blue is
+# the brand's; the other three keep the report's hues, lifted on a dark card.
+HOMEPAGE_COLOURS = {
+    "volucer-attach": ("#2F87F9", "#43BDFA"),
+    "rr": ("#0d9488", "#2dd4bf"),
+    "frankenphp": ("#a855f7", "#c084fc"),
+    "fpm": ("#64748b", "#94a3b8"),
+}
+
+
+def view_homepage(out_dir: Path) -> list[str]:
+    """The two compact charts the product page embeds, and nothing else.
+
+    The documentation page argues; a landing page shows. So this view draws
+    two charts of four bars each — one for request rate, one for proportional
+    memory — and no page, no table, no factor labels and no per-bar ranges.
+    The reader who wants the reasoning follows the link to the report, which
+    is where every one of these numbers is defended.
+
+    The four bars are the four *programs*, each in the configuration the run
+    measured it in. Volucer appears once, in `attach`, because a page with four
+    bars cannot also show one server in five shapes — the shapes are the
+    report's subject, not the landing page's.
+
+    Every number is read from the committed run at build time, so a
+    re-measurement updates the page by regenerating it rather than by editing
+    it.
+
+    Each bar is that program's *best measured cell*: the process count and the
+    load at which it served the most requests in this run. That rule is the
+    same for all four, so no program is drawn at a size or a load that
+    flattered somebody else's peak. The cost of it is that the bars no longer
+    share their conditions — FrankenPHP peaks at concurrency 16, the others at
+    64 — so every bar carries its own load under its name, and the alternative
+    text repeats it. A reader who compares bar heights without noticing that
+    is comparing four different experiments, which is why the label is on the
+    bar and not in a footnote.
+
+    The memory chart uses each program's peak *process count* rather than its
+    peak load, because memory was sampled only after the concurrency-64 pass.
+    That is a property of the harness, not a choice, and the caption says so:
+    the figure is what that deployment held while serving, at the size that
+    made it fastest.
+
+    No bar exceeds `HOMEPAGE_MAX_PROCESSES`, the ceiling the published report
+    compares at. The run measured further, but only php-fpm is still faster up
+    there, so a bar drawn at 64 would be a fact about another server's ceiling
+    rather than about the comparison this page is making.
+    """
+    directory = MATRIX_DIRS["servers"]
+    rows = matrix_rows(directory)
+    mem_rows = [r for r in matrix_memory(directory) if r.get("phase") == "post"]
+    if not rows or not mem_rows:
+        return []
+
+    # The four programs, in the order the page reads them: the one the page is
+    # about, then the three it is measured against.
+    arms = ["volucer-attach", "rr", "frankenphp", "fpm"]
+
+    throughput: dict[str, float] = {}
+    memory: dict[str, float] = {}
+    shapes: dict[str, dict] = {}
+    for arm in arms:
+        peak = homepage_peak(rows, arm)
+        if peak["rps"] is None:
+            continue
+        throughput[arm] = peak["rps"]
+        shapes[arm] = peak
+
+        key = {"arm": arm, "phase": "post", "workers": str(peak["workers"])}
+        pss = cell_median(mem_rows, key, "pss_mb")
+        if pss is not None:
+            memory[arm] = pss
+
+    present = [arm for arm in arms if arm in throughput and arm in memory]
+    if len(present) < 2:
+        return []
+
+    categories = [SERVER_ARMS[arm][0] for arm in present]
+    colours = [HOMEPAGE_COLOURS[arm] for arm in present]
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    charts: list[str] = []
+
+    rate = "benchmarks-homepage-throughput.svg"
+    write(out_dir / rate, compact_bars(
+        categories=categories,
+        values=[throughput[arm] for arm in present],
+        colours=colours,
+        title="Requests per second",
+        value_format=lambda value: f"{value:,.0f}",
+        caption="higher is better",
+        sublabels=[f"{shapes[arm]['workers']} procs at c={shapes[arm]['conc']}"
+                   for arm in present],
+        aria_label=rate_label(categories, [throughput[arm] for arm in present],
+                              [shapes[arm] for arm in present]),
+    ))
+    charts.append(rate)
+
+    cost = "benchmarks-homepage-memory.svg"
+    write(out_dir / cost, compact_bars(
+        categories=categories,
+        values=[memory[arm] for arm in present],
+        colours=colours,
+        title="Proportional memory, MiB",
+        value_format=lambda value: f"{value:,.1f}",
+        caption="lower is better",
+        sublabels=[f"{shapes[arm]['workers']} procs" for arm in present],
+        aria_label=memory_label(categories, [memory[arm] for arm in present],
+                                [shapes[arm] for arm in present]),
+    ))
+    charts.append(cost)
+
+    return charts
+
+
+def homepage_peak(rows: list[dict], arm: str, mode: str = "on") -> dict:
+    """The cell in which one program served the most requests.
+
+    "Cell" is one process count at one concurrency, and the value compared is
+    the median of that cell's repeats — not the best single round, which would
+    report whichever run caught the host in a good moment.
+
+    The page draws each program at its own best cell rather than at one shared
+    set of conditions, so that a program cannot be shown at a size or a load
+    that undersold it. The price is paid openly: the load is printed on the bar.
+
+    Cells above `HOMEPAGE_MAX_PROCESSES` are not considered, so the page never
+    draws a deployment larger than the one the report compares.
+    """
+    cells: set[tuple[int, int]] = set()
+    for row in rows:
+        if row.get("arm") != arm or row.get("opcache") != mode:
+            continue
+        workers, conc = row.get("workers", ""), row.get("conc", "")
+        if not workers.isdigit() or not conc.isdigit():
+            continue
+        if int(workers) > HOMEPAGE_MAX_PROCESSES:
+            continue
+        cells.add((int(workers), int(conc)))
+
+    best: dict = {"rps": None, "workers": None, "conc": None}
+    for workers, conc in cells:
+        rps = cell_median(
+            rows,
+            {"arm": arm, "workers": str(workers), "conc": str(conc), "opcache": mode},
+            "rps",
+        )
+        if rps is None:
+            continue
+        if best["rps"] is None or rps > best["rps"]:
+            best = {"rps": rps, "workers": workers, "conc": conc}
+    return best
+
+
+def rate_label(names: list[str], values: list[float], shapes: list[dict]) -> str:
+    """The alternative text for the throughput chart: every bar, as a sentence.
+
+    A reader who cannot see the bars has to be told the numbers they carry,
+    because the numbers are the entire content of the figure. The load and the
+    process count are printed per bar, because no two bars were measured under
+    the same conditions.
+    """
+    parts = ", ".join(
+        f"{name} {value:,.0f} with {shape['workers']} PHP processes at "
+        f"concurrency {shape['conc']}"
+        for name, value, shape in zip(names, values, shapes)
+    )
+    return (f"Each server at its best measured load and process count. "
+            f"Requests per second: {parts}.")
+
+
+def memory_label(names: list[str], values: list[float], shapes: list[dict]) -> str:
+    """The alternative text for the memory chart.
+
+    Memory is sampled only after the concurrency-64 pass, so the figure is the
+    same process count as the bar above it but not necessarily the same load.
+    Saying "at concurrency 64" here is what keeps that honest.
+    """
+    parts = ", ".join(
+        f"{name} {value:,.1f} with {shape['workers']} PHP processes"
+        for name, value, shape in zip(names, values, shapes)
+    )
+    return (f"Proportional memory in MiB, sampled after the concurrency 64 run, "
+            f"for each server's fastest process count: {parts}.")
+
+
+def build_homepage(target: str) -> list[str]:
+    """Write the product page's charts into the homepage's asset tree."""
+    directory = Path(target)
+    charts = view_homepage(directory)
+    if not charts:
+        return [f"no chart written: no result files under {MATRIX_DIRS['servers']}"]
+    return [f"wrote {directory / chart}" for chart in charts]
+
+
 # --------------------------------------------------------------------------
 # The manifest
 # --------------------------------------------------------------------------
@@ -1795,6 +2007,8 @@ def main() -> int:
     parser.add_argument("--out", default=str(RESULTS / "bench-report"))
     parser.add_argument("--view", default=None)
     parser.add_argument("--publish", default=None)
+    parser.add_argument("--homepage", default=None,
+                        help="Write the product page's two compact charts here.")
     parser.add_argument("--list", action="store_true")
     args = parser.parse_args()
 
@@ -1802,6 +2016,11 @@ def main() -> int:
         print("Views:")
         for key, view in VIEWS.items():
             print(f"  {key:<12} {view['description']}")
+        return 0
+
+    if args.homepage:
+        for line in build_homepage(args.homepage):
+            print(line)
         return 0
 
     out_dir = Path(args.out).resolve()

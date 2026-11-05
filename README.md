@@ -2251,3 +2251,60 @@ halves of that.
 The generator is `scripts/bench-report.py`, the tests are `tests/test_bench_report.py`,
 and the four retired views are listed in `RETIRED_VIEWS` so that publishing removes
 their pages and their charts rather than leaving them behind.
+
+### The product page's charts
+
+The Sailantis homepage embeds two charts from the same results, and they are drawn by
+the same generator:
+
+```sh
+python3 scripts/bench-report.py --homepage=../sailantis-homepage/public/assets/images/volucer/benchmarks
+```
+
+They are deliberately not the report's charts. A report chart argues: it names every
+arm, labels each bar with a factor against the fastest one, and draws the round-paired
+range on every bar. A landing page shows: four bars, four names, four numbers, and a
+link to the page that argues. So `view_homepage` draws one bar per *program*
+(volucer in `attach`, RoadRunner, FrankenPHP, nginx with php-fpm), each labelled with
+its own value, on one shared zero-based scale. The numbers still come from the
+committed run — regenerating is what updates them — and `HomepageChartTest` pins that,
+along with the things a compact chart can get wrong: independently scaled bars, a
+missing value label, and no accessible name for a reader who cannot see the bars.
+
+The process count and the load are chosen per program, not fixed for the page. The
+programs do not peak together: FrankenPHP served 16,084 req/s with 16 workers at
+concurrency 16, while the other three peak at 32 workers and concurrency 64. Drawing
+everything at one setting would show a program at a configuration it measured worse
+than it can do, and a chart that handicaps a competitor is worth nothing to the reader
+deciding whether to trust it. So `homepage_peak` takes each program's best measured
+cell — its peak median, not its best single round.
+
+The price of that freedom is paid on the chart: the bars no longer share their
+conditions, so every bar prints the process count and the load it was measured at under
+its name, and both accessible names repeat them. A reader comparing bar heights without
+that label would be comparing four different experiments.
+
+`HOMEPAGE_MAX_PROCESSES` caps every bar at 32 processes, the ceiling the published
+report compares at. The run measured 64, but only php-fpm is still improving up there,
+so a bar drawn at 64 would be a fact about another server's ceiling rather than about
+this comparison — and it would pair a 64-process throughput with memory sampled after a
+different pass. The memory chart uses each program's peak process count, because memory
+is only sampled after the concurrency-64 pass; the caption says so.
+`test_each_program_is_shown_at_its_best_measured_cell`,
+`test_every_bar_says_the_load_it_was_measured_at`,
+`test_no_bar_exceeds_the_published_ceiling` and
+`test_frankenphp_is_drawn_at_the_size_it_served_best` pin the rule and its sharpest case.
+
+They also follow the reader's colour scheme, the way the product illustration does: the
+SVG carries a `<style>` block with a `prefers-color-scheme: dark` rule. This is safe here
+because the charts are loaded through `<img>`, not through a Markdown renderer, which is
+the only place a `<style>` block is stripped. The volucer bar is the brand blue, `#2F87F9`
+on a light card and `#43BDFA` on a dark one.
+
+The dark card is half transparent (`fill-opacity:0.5`). The page turns dark with the
+same `prefers-color-scheme` the chart does, so an opaque `#1b2231` card was drawing a
+second, slightly different dark rectangle inside the page's own `#151630` — a visible
+seam around every chart. At half opacity the card becomes a tint that follows whatever
+surface it is placed on, and the bars, which stay opaque, read the same either way. The
+light card remains opaque on purpose: white on a white page gains nothing, and the
+surface behind it is not guaranteed to be plain white.

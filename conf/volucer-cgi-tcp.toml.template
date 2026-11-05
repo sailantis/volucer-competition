@@ -17,9 +17,8 @@
 # cheaper, but the resident worker spends far less time booting — and which wins
 # on a real page is the question this repository exists to answer.
 
-default_backend = "cgi"
-
 [server]
+default_backend = "cgi"
 http = "127.0.0.1:{{PORT}}"
 document_root = "{{ROOT}}/public"
 

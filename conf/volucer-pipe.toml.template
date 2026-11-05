@@ -19,9 +19,8 @@
 #                  operator arriving from one will look for it. Absent means the
 #                  same thing; see hazard 29 for why the explicit zero matters.
 
-default_backend = "app"
-
 [server]
+default_backend = "app"
 http = "127.0.0.1:{{PORT}}"
 document_root = "{{ROOT}}/public"
 

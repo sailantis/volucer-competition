@@ -363,11 +363,19 @@ sanity() {
 run_client() {
     local port="$1" label="$2" arm="$3"
     local url="http://127.0.0.1:$port"
+    # **The generator's thread count is the core count, not the connection count.**
+    # `-t"$c"` puts one load-generator thread per connection, which at `c=400` is 400
+    # threads on a 12-core host: oversubscribed by 138%, and the churn lands hardest on
+    # whichever server schedules more threads of its own. Measured on a 12-core VM, one
+    # arm went 44,031 rps at `-t400` to 107,510 at `-t12`. Clamped to `c` so a cell
+    # below the core count can still be measured at all.
+    local threads="${WRK_THREADS:-$(nproc)}"
     IFS=',' read -ra CS <<< "$CONC"
     for ep in ${ENDPOINTS//,/ }; do
         for c in "${CS[@]}"; do
             for rep in $(seq 1 "$REPEAT"); do
-                out=$(wrk -t"$c" -c"$c" -d"$DUR" --latency "$url$ep" 2>/dev/null)
+                local t="$threads"; [ "$t" -gt "$c" ] && t="$c"
+                out=$(wrk -t"$t" -c"$c" -d"$DUR" --latency "$url$ep" 2>/dev/null)
                 # `exit` after the first match, and the percentile patterns are
                 # anchored to a leading percentage: without both, a second matching
                 # line is concatenated into the field, and that field is written

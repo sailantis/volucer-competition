@@ -483,7 +483,12 @@ start_variant() {
 run_cell() {
     local variant="$1" port="$2" ep="$3" conc="$4" round="$5" label="$6"
     local out rps p50 p99
-    out="$(wrk -t"$conc" -c"$conc" -d"$DUR" --latency "http://127.0.0.1:$port$ep" 2>/dev/null)"
+    # Threads are the core count, clamped to the connection count: `-t"$conc"` puts one
+    # generator thread per connection and oversubscribes a 12-core host by 138% at
+    # `c=400`, which biases every CPU figure against the busier server.
+    local threads="${WRK_THREADS:-$(nproc)}"
+    [ "$threads" -gt "$conc" ] && threads="$conc"
+    out="$(wrk -t"$threads" -c"$conc" -d"$DUR" --latency "http://127.0.0.1:$port$ep" 2>/dev/null)"
     rps="$(awk '/^Requests\/sec:/{print $2; exit}' <<<"$out")"
     p50="$(awk '/^[[:space:]]+50%/{print $2; exit}' <<<"$out")"
     p99="$(awk '/^[[:space:]]+99%/{print $2; exit}' <<<"$out")"
@@ -598,7 +603,7 @@ for round in $(seq 1 "$ROUNDS"); do
         # One warm-up per variant-round, not per cell: the pool reaches steady
         # state once, and paying for it twelve times would triple the run for
         # nothing. `max_requests = 0` means nothing recycles underneath it.
-        wrk -t"$WORKERS" -c"$WORKERS" -d"$WARMUP" "http://127.0.0.1:$port/items" >/dev/null 2>&1
+        wrk -t"${WRK_THREADS:-$(nproc)}" -c"$WORKERS" -d"$WARMUP" "http://127.0.0.1:$port/items" >/dev/null 2>&1
         for ep in "${EPS[@]}"; do
             for conc in "${CS[@]}"; do
                 run_cell "$variant" "$port" "$ep" "$conc" "$round" "$(label_of "$variant")"
