@@ -51,7 +51,8 @@
 # Guards, each because it has already produced a believable wrong number here:
 #   - every arm's body is fetched and checked before anything is timed. A 502 is answered
 #     *faster* than a real request, so a dead backend wins a race it never ran (Phase 11).
-#   - `wrk -t` is the core count, never the connection count (Phase 5's oversubscription).
+#   - `wrk -t` is the core count, never the connection count (Phase 5's oversubscription),
+#     but never more than the connection count either -- `wrk` rejects `-c < -t` outright.
 #   - `worker` gets the same PHP flags as `attach`. `attach` inherits them from the
 #     supervisor's command line; `worker` starts `php` itself, so without the wrapper it
 #     would silently run with the host's CLI defaults (xdebug). That is hazard 28, and it is
@@ -107,6 +108,13 @@ WORKERS=${WORKERS:-96}
 FLOOR_WORKERS=${FLOOR_WORKERS:-4}
 NODE_BIN=$HOME/hello-bench/bin/node-v24.11.1-linux-x64/bin
 CORES=$(nproc)
+# `wrk` refuses `-c < -t`, so a fixed `-t$CORES` makes every low-concurrency cell -- the ones
+# that price a *fixed* per-request cost rather than queueing -- impossible to measure at all.
+# It silently produced `0 rps` with wrk's usage text in the result file, which reads like a
+# dead arm. Capped at the connection count: below the core count the generator is not
+# oversubscribed and does not need one thread per core.
+WRK_T=${WRK_T:-$CORES}
+[ "$WRK_T" -gt "$CONC" ] && WRK_T=$CONC
 PROBE="$ROOT/.probe/fa"
 rm -rf "$PROBE"; mkdir -p "$PROBE"
 PROBE_INITIALISED=1
@@ -545,7 +553,7 @@ measure() {
     local sample="$PROBE/pss-$tag"
 
     b0=$(ns_of_pattern "$arm"); f0=$(ns_of "$vol")
-    wrk -t"$CORES" -c"$CONC" -d"${SECS}s" --latency "http://127.0.0.1:${PORT[$arm]}/" \
+    wrk -t"$WRK_T" -c"$CONC" -d"${SECS}s" --latency "http://127.0.0.1:${PORT[$arm]}/" \
         >"$PROBE/wrk-$tag.txt" 2>&1 &
     local wrk_pid=$!
     # Sample PSS while the load runs: the figure that matters is the backend's steady-state
@@ -575,7 +583,7 @@ measure() {
 # so the first measurement of a process is biased down and is not the one to quote.
 echo "=== warm-up pass (${SECS}s each, discarded)"
 for arm in $ARMS; do
-    wrk -t"$CORES" -c"$CONC" -d"${SECS}s" "http://127.0.0.1:${PORT[$arm]}/" >/dev/null 2>&1
+    wrk -t"$WRK_T" -c"$CONC" -d"${SECS}s" "http://127.0.0.1:${PORT[$arm]}/" >/dev/null 2>&1
 done
 
 for round in $(seq 1 "$ROUNDS"); do
