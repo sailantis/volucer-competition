@@ -20,8 +20,9 @@
 # unlinks its sockets on shutdown, so a leftover file means a server that was
 # killed rather than stopped; `php-cgi` unlinks a stale path itself before binding.
 
-[server]
 default_backend = "cgi"
+
+[server]
 http = "127.0.0.1:{{PORT}}"
 document_root = "{{ROOT}}/public"
 

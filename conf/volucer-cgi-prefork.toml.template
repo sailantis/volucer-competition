@@ -30,8 +30,9 @@
 # placeholders. It is the runnable shape behind hazard 86, kept so the claim in
 # `README.md` can be reproduced by hand.
 
-[server]
 default_backend = "cgi"
+
+[server]
 http = "127.0.0.1:{{PORT}}"
 document_root = "{{ROOT}}/public"
 
