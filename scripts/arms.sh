@@ -337,21 +337,19 @@ sed -e "s|{{PORT}}|$PORT_WORKER_SOCKET|g" -e "s|{{ROOT}}|$ROOT|g" \
 VOL_WS=$!
 fi
 
-# ---- spawn_cgi (cold: a full CGI SAPI reset per request) -------------------------------
-# `php-cgi` is a different binary from `php`, and the arm is the *cold model* -- the
-# framework boots inside the timed request -- so it gets its own entry point
-# (`apps/hello/public/index.php`) and its own `document_root`, not the repository's
-# `public/`, which is the Azera + SQLite page.
+# ---- the `php-cgi` wrapper, shared by both `spawn_cgi` arms ------------------------------
+# This host's `php-cgi` SAPI defaults to `opcache.enable_cli=Off` and
+# `opcache.validate_timestamps=On`, so an unwrapped `php-cgi` re-checks and may re-compile the
+# front controller on every request. That is hazard 28, and it would look like a verdict on
+# the cold model or on php-cgi rather than on a php.ini.
 #
-# The same flags as every other arm, through a wrapper, for the same reason as the
-# `worker` arm: this host's `php-cgi` defaults to `opcache.enable_cli=Off` and
-# `opcache.validate_timestamps=On`, so an unwrapped `php-cgi` would re-check and
-# re-compile the front controller on every request. That is hazard 28 again, and it
-# would look like a verdict on the cold model.
-CG="$PROBE/cgi"; mkdir -p "$CG"
-VOL_C=""
+# **One wrapper, built before either arm**, because `cgi_prefork` used to take bare
+# `php-cgi` while `cgi` took the wrapper -- so a `cgi`-vs-`cgi_prefork` comparison differed in
+# its opcache flags as well as in the fork, and a `cgi_prefork`-only run (which is how the
+# prefork-vs-fpm question is asked) got the unwrapped binary.
 PHP_CGI_BIN=$(command -v php-cgi || true)
-if [ -n "$PHP_CGI_BIN" ] && want cgi; then
+PHP_CGI_WRAPPER=""
+if [ -n "$PHP_CGI_BIN" ]; then
     PHP_CGI_WRAPPER="$PROBE/php-cgi-bench"
     cat > "$PHP_CGI_WRAPPER" <<WRAPPER
 #!/bin/sh
@@ -359,6 +357,16 @@ exec $PHP_CGI_BIN -d opcache.enable_cli=1 -d opcache.validate_timestamps=0 \\
     -d opcache.jit=off -d xdebug.mode=off -d memory_limit=512M "\$@"
 WRAPPER
     chmod +x "$PHP_CGI_WRAPPER"
+fi
+
+# ---- spawn_cgi (cold: a full CGI SAPI reset per request) -------------------------------
+# `php-cgi` is a different binary from `php`, and the arm is the *cold model* -- the
+# framework boots inside the timed request -- so it gets its own entry point
+# (`apps/hello/public/index.php`) and its own `document_root`, not the repository's
+# `public/`, which is the Azera + SQLite page.
+CG="$PROBE/cgi"; mkdir -p "$CG"
+VOL_C=""
+if [ -n "$PHP_CGI_WRAPPER" ] && want cgi; then
     sed -e "s|{{PORT}}|$PORT_CGI|g" -e "s|{{ROOT}}|$ROOT|g" \
         -e "s|{{WORKERS}}|$WORKERS|g" -e "s|{{SOCKET_DIR}}|$CG|g" \
         -e "s|{{PHP_CGI}}|$PHP_CGI_WRAPPER|g" \
@@ -431,7 +439,7 @@ CP="$PROBE/cgi-prefork"; mkdir -p "$CP"
 VOL_P=""
 if want cgi_prefork; then
 sed -e "s|{{PORT}}|$PORT_CGI_PREFORK|g" -e "s|{{ROOT}}|$ROOT|g" \
-    -e "s|{{PHP_CGI}}|$(command -v php-cgi)|g" \
+    -e "s|{{PHP_CGI}}|$PHP_CGI_WRAPPER|g" \
     -e "s|{{SOCKET_DIR}}|$CP|g" -e "s|{{CHILDREN}}|$WORKERS|g" \
     "$ROOT/conf/hello-cgi-prefork.toml.template" > "$CP/cfg.toml"
 "$BIN" serve -c "$CP/cfg.toml" >"$CP/volucer.log" 2>&1 &
