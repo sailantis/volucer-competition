@@ -192,9 +192,13 @@ backend_pids() {   # $1 = arm
         # "bench-ext" matched nothing while the run looked complete (measured `ext_fpm 0`, a
         # memory column of 0 MB, and a back-end of 0.0 cores for an arm that was serving).
         # The `$` keeps it from also matching `pool bench-something`.
-        # One master plus its forked children, all named `php-cgi`. Matched by the child count
-        # rather than by pattern alone because `cgi` also runs `php-cgi`: the two arms are told
-        # apart by the listening socket each slot bound, which is in the master's argv.
+        # `cgi` and `cgi_prefork` both run `php-cgi`, so a bare `php-cgi` matches both and
+        # reported `cgi 193 php-cgi processes` for a 96-slot arm — the other arm's population
+        # counted as this one's, in the process count, the CPU column and the memory column at
+        # once. The probe's own socket prefix is what separates them.
+        cgi)           pgrep -f "php-cgi.*$PROBE/cgi/" 2>/dev/null ;;
+        # One master plus its forked children, all named `php-cgi`, told apart from `cgi` by
+        # the socket prefix this arm was given.
         cgi_prefork)   pgrep -f "php-cgi.*$PROBE/cgi-prefork/" 2>/dev/null ;;
         fpm)           pgrep -f "php-fpm: pool bench$" 2>/dev/null ;;
         *)             pgrep -f "${BACKEND[$1]}" 2>/dev/null ;;
@@ -462,7 +466,7 @@ PORT[upstream]=$PORT_UPSTREAM; PID[upstream]=$VOL_U; BACKEND[upstream]="fastify-
 PORT[node]=$PORT_ORIGIN;     PID[node]=$ORIGIN;   BACKEND[node]="fastify-hello.js --port $PORT_ORIGIN"
 ARMS="attach worker worker_socket upstream node"
 if [ -n "$VOL_C" ]; then
-    PORT[cgi]=$PORT_CGI; PID[cgi]=$VOL_C; BACKEND[cgi]="php-cgi"
+    PORT[cgi]=$PORT_CGI; PID[cgi]=$VOL_C; BACKEND[cgi]="php-cgi.*$PROBE/cgi/"
     ARMS="attach worker worker_socket cgi upstream node"
 fi
 if [ -n "$VOL_P" ]; then
@@ -526,7 +530,7 @@ echo "=== backend processes"
 printf "  attach    %s php children\n" "$(pgrep -fc "supervisor.php unix:$AT/relay" 2>/dev/null || echo 0)"
 printf "  worker    %s php processes (pipe)\n" "$(worker_pids pipe | wc -l)"
 printf "  wk-socket %s php processes (socket)\n" "$(worker_pids socket | wc -l)"
-printf "  cgi       %s php-cgi processes\n" "$(pgrep -c -x php-cgi 2>/dev/null || echo 0)"
+printf "  cgi       %s php-cgi processes (%s slots)\n" "$(pgrep -fc "php-cgi.*$PROBE/cgi/" 2>/dev/null || echo 0)" "$WORKERS"
 printf "  cgi_pre   %s php-cgi processes (1 master)\n" "$(pgrep -fc "php-cgi.*$PROBE/cgi-prefork/" 2>/dev/null || echo 0)"
 printf "  cgi_dummy %s dummy processes\n" "$(pgrep -fc "apps/hello/fcgi-dummy.py" 2>/dev/null || echo 0)"
 printf "  ext_fpm   %s php-fpm children\n" "$(pgrep -fc "php-fpm: pool bench$" 2>/dev/null || echo 0)"
