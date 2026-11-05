@@ -2,8 +2,8 @@
 #
 # This is the arm that separates the two halves of the `fpm` arm. `fpm` is nginx + php-fpm,
 # and neither half is independently visible in any table here: a difference between it and
-# `spawn_cgi` mixes "nginx or volucer" with "php-fpm or one php-cgi per slot". This arm holds
-# the pool, the socket, the `pm.max_children`, the php.ini and the front controller fixed and
+# `cgi` mixes "nginx or volucer" with "php-fpm or one php-cgi per slot". This arm holds the
+# pool, the socket, the `pm.max_children`, the php.ini and the front controller fixed and
 # changes only the thing in front of them:
 #
 #     fpm             nginx   -> php-fpm
@@ -15,18 +15,18 @@
 # without the other is quoting half of it.
 #
 #   socket   The full path, not a prefix. An `external` backend dials exactly what is written
-#            here, where `spawn_cgi` derives `{prefix}.{index}.sock` per slot. php-fpm binds one
-#            listener per pool, so the pool is the unit of address here and the harness starts
-#            the two sides on the same path rather than letting them disagree.
+#            here, where `spawn_cgi` derives `{prefix}.{index}.sock` per slot. php-fpm binds
+#            one listener per pool, so the pool is the unit of address here and the harness
+#            starts the two sides on the same path rather than letting them disagree.
 #
 #   Why this arm needed its own pool: the harness starts `fpm` with `unix:$SOCK/fpm.sock` and a
 #   private nginx on it. Two arms cannot share one `pm.max_children` and one listener without
 #   one of them measuring the other's configuration, so this arm gets `fpm-ext.sock` and an
-#   identical pool file with only `listen` and `error_log` changed. The comparison is therefore
-#   between two pools that differ in nothing that reaches a request.
-default_backend = "app"
+#   identical pool file with only `listen` and the log paths changed. The comparison is
+#   therefore between two pools that differ in nothing that reaches a request.
 
 [server]
+default_backend = "app"
 http = "127.0.0.1:{{PORT}}"
 document_root = "{{ROOT}}/apps/hello/public"
 
