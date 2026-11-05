@@ -1,0 +1,39 @@
+# HELLO ARM — volucer + `spawn_cgi` with ONE master that forks N children.
+#
+# This is the shape the other `cgi` arm cannot express, and it is the one php-fpm uses: a
+# single listening socket with a pool of forked children behind it, all sharing one copy of
+# the compiled scripts and one OPcache segment.
+#
+#     cgi          workers = 96, children = 0   -> 96 masters, 96 addresses, 96 processes
+#     cgi_prefork  workers = 1,  children = 96  -> ONE master, one address, 96 children
+#     external_fpm workers = 96 (php-fpm)       -> one address, pm.max_children = 96
+#
+# So `cgi_prefork` against `external_fpm` is "php-cgi's own prefork against php-fpm's" with
+# the process count, the socket count and the application model held equal. `cgi` against
+# `cgi_prefork` is the fork itself: one address and one OPcache segment instead of 96.
+#
+# `children` is `PHP_FCGI_CHILDREN`, and volucer exports it on the slot's own environment so
+# a slot's declared concurrency and the master's real child count cannot disagree.
+#
+# `workers = 1` is the whole point and is not a concurrency setting. One entry in `workers`
+# is one slot, one socket and one master; the 96 concurrent requests are served by 96 forked
+# children on that master's shared listening socket. Writing `workers = 96` here would start
+# 96 masters of 96 children each and measure 9,216 processes on a 12-core box.
+[server]
+http = "127.0.0.1:{{PORT}}"
+default_backend = "cgi"
+document_root = "{{ROOT}}/apps/hello/public"
+
+# Off for the same reason as every arm here; see `hello-attach.toml.template`. It is
+# default-on and sits ahead of dispatch, so leaving it on would charge this arm for a
+# lookup no other arm does.
+[server.static_files]
+enabled = false
+
+[backends.cgi]
+kind = "spawn_cgi"
+binary = "{{PHP_CGI}}"
+workers = 1
+children = {{CHILDREN}}
+socket = "unix:{{SOCKET_DIR}}/cgi-prefork"
+max_requests = 0

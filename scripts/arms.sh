@@ -7,11 +7,24 @@
 #   worker     volucer `worker` -> PHP, N spawned processes over pipes (own interpreter + OPcache each)
 #   worker_socket  the same, over unix sockets: the spawned worker a runtime can await
 #   cgi        volucer `spawn_cgi` -> `php-cgi`, cold: a full CGI SAPI reset per request
+#   cgi_prefork  the same, one master forking N children: php-fpm's shape without php-fpm
 #   cgi_dummy  volucer `spawn_cgi` -> a FastCGI dummy: the cold arm's own pool, no PHP
 #   external_fpm  volucer `external` -> a REAL php-fpm pool (warm, no nginx in front)
 #   upstream   volucer `upstream` -> Node/Fastify cluster
 #   floor      volucer `external` -> a Node FastCGI responder: the transport's floor, no PHP
 #   node       bare Node/Fastify, no front-end (a labelled ceiling, never the headline)
+#
+# `worker_socket` is deliberately not an arm here any more. It was added to price the awaited
+# exchange on a socket transport, and the answer is in: the await is worth -10 us of front-end
+# CPU and a unix socket costs +4.5 us, so the arm is 3-5% behind `worker` and 1.6x its memory
+# for a transport nobody should pick on this host. Keeping it in every grid charges a full
+# round of measurements to re-derive the same conclusion. It is still reachable with
+# `ARMS_FILTER=worker_socket` for anyone who wants to re-take it.
+#
+# `cgi_prefork` is the shape `cgi` cannot express: ONE master forking N children on one
+# shared listening socket, which is php-fpm's own model. Against `external_fpm` it compares
+# the two preforking implementations with the process count and the socket count held equal;
+# against `cgi` it prices the fork itself.
 #
 # `external_fpm` is the arm that separates the two halves of `fpm` (nginx + php-fpm), which no
 # other row can do: it holds the pool, socket, pm.max_children and front controller fixed and
@@ -59,7 +72,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # bottom of the happy path. Nothing else in this script relies on the exit path being tidy.
 PROBE_INITIALISED=""
 cleanup() {
-    local pids="$VOL_A $VOL_W ${VOL_WS:-} $VOL_U $ORIGIN $SUP_A ${VOL_C:-} ${VOL_D:-} ${VOL_F:-} ${VOL_X:-} ${FPM_EXT:-} ${FLOOR_NODE:-}"
+    local pids="$VOL_A $VOL_W ${VOL_WS:-} $VOL_U $ORIGIN $SUP_A ${VOL_C:-} ${VOL_P:-} ${VOL_D:-} ${VOL_F:-} ${VOL_X:-} ${FPM_EXT:-} ${FLOOR_NODE:-}"
     kill -TERM $pids 2>/dev/null
     sleep 1.5
     kill -9 $pids 2>/dev/null
@@ -102,6 +115,7 @@ PORT_ATTACH=22950
 PORT_WORKER=22951
 PORT_WORKER_SOCKET=22955
 PORT_CGI=22952
+PORT_CGI_PREFORK=22957
 PORT_CGI_DUMMY=22954
 PORT_EXTERNAL_FPM=22956
 PORT_FLOOR=22953
@@ -178,6 +192,10 @@ backend_pids() {   # $1 = arm
         # "bench-ext" matched nothing while the run looked complete (measured `ext_fpm 0`, a
         # memory column of 0 MB, and a back-end of 0.0 cores for an arm that was serving).
         # The `$` keeps it from also matching `pool bench-something`.
+        # One master plus its forked children, all named `php-cgi`. Matched by the child count
+        # rather than by pattern alone because `cgi` also runs `php-cgi`: the two arms are told
+        # apart by the listening socket each slot bound, which is in the master's argv.
+        cgi_prefork)   pgrep -f "php-cgi.*$PROBE/cgi-prefork/" 2>/dev/null ;;
         fpm)           pgrep -f "php-fpm: pool bench$" 2>/dev/null ;;
         *)             pgrep -f "${BACKEND[$1]}" 2>/dev/null ;;
     esac
@@ -338,6 +356,18 @@ else
     VOL_F=""
 fi
 
+# One master forking `$WORKERS` children on one shared listening socket: php-fpm's shape.
+# `workers = 1` is the pool's slot count, and `children` is `PHP_FCGI_CHILDREN`, so the PHP
+# process count is exactly `$WORKERS` — the same number every other arm is given. Writing
+# `workers = $WORKERS` here would start 96 masters of 96 children and measure 9,216 processes.
+CP="$PROBE/cgi-prefork"; mkdir -p "$CP"
+sed -e "s|{{PORT}}|$PORT_CGI_PREFORK|g" -e "s|{{ROOT}}|$ROOT|g" \
+    -e "s|{{PHP_CGI}}|$(command -v php-cgi)|g" \
+    -e "s|{{SOCKET_DIR}}|$CP|g" -e "s|{{CHILDREN}}|$WORKERS|g" \
+    "$ROOT/conf/hello-cgi-prefork.toml.template" > "$CP/cfg.toml"
+"$BIN" serve -c "$CP/cfg.toml" >"$CP/volucer.log" 2>&1 &
+VOL_P=$!
+
 # ---- php-fpm pool for `external_fpm`, and the volucer in front of it -------------------
 #
 # The pool is a *real* php-fpm with a real `pm = static`, not a responder standing in for one,
@@ -416,6 +446,9 @@ if [ -n "$VOL_X" ]; then
     # loads the interpreter before the first request can be answered.
     for _ in $(seq 1 900); do curl -sf -o /dev/null "http://127.0.0.1:$PORT_EXTERNAL_FPM/" && break; sleep 0.05; done
 fi
+# The prefork master has to fork its children before it can answer; like a cold arm it needs
+# longer than a warm one.
+for _ in $(seq 1 900); do curl -sf -o /dev/null "http://127.0.0.1:$PORT_CGI_PREFORK/" && break; sleep 0.05; done
 for _ in $(seq 1 400); do curl -sf -o /dev/null "http://127.0.0.1:$PORT_UPSTREAM/" && break; sleep 0.05; done
 sleep 2
 
@@ -432,12 +465,20 @@ if [ -n "$VOL_C" ]; then
     PORT[cgi]=$PORT_CGI; PID[cgi]=$VOL_C; BACKEND[cgi]="php-cgi"
     ARMS="attach worker worker_socket cgi upstream node"
 fi
+if [ -n "$VOL_P" ]; then
+    PORT[cgi_prefork]=$PORT_CGI_PREFORK; PID[cgi_prefork]=$VOL_P
+    # ONE master plus its children, and the master's argv carries the socket path this arm
+    # was given — which is what tells it apart from `cgi`'s 96 masters, since both are
+    # `php-cgi`. Matched on the probe's own directory so it cannot reach another run's pool.
+    BACKEND[cgi_prefork]="php-cgi.*$PROBE/cgi-prefork/"
+    ARMS="$ARMS cgi_prefork"
+fi
 if [ -n "$VOL_D" ]; then
     PORT[cgi_dummy]=$PORT_CGI_DUMMY; PID[cgi_dummy]=$VOL_D
     # Matched by the program's own path: `spawn_cgi` starts it once per slot, so this
     # is the population that costs CPU, not the volucer process that supervises it.
     BACKEND[cgi_dummy]="apps/hello/fcgi-dummy.py"
-    ARMS="attach worker worker_socket cgi cgi_dummy upstream node"
+    ARMS="$ARMS cgi_dummy"
 fi
 if [ -n "$VOL_F" ]; then
     PORT[floor]=$PORT_FLOOR; PID[floor]=$VOL_F; BACKEND[floor]="apps/hello/cgi-echo.js"
@@ -486,6 +527,7 @@ printf "  attach    %s php children\n" "$(pgrep -fc "supervisor.php unix:$AT/rel
 printf "  worker    %s php processes (pipe)\n" "$(worker_pids pipe | wc -l)"
 printf "  wk-socket %s php processes (socket)\n" "$(worker_pids socket | wc -l)"
 printf "  cgi       %s php-cgi processes\n" "$(pgrep -c -x php-cgi 2>/dev/null || echo 0)"
+printf "  cgi_pre   %s php-cgi processes (1 master)\n" "$(pgrep -fc "php-cgi.*$PROBE/cgi-prefork/" 2>/dev/null || echo 0)"
 printf "  cgi_dummy %s dummy processes\n" "$(pgrep -fc "apps/hello/fcgi-dummy.py" 2>/dev/null || echo 0)"
 printf "  ext_fpm   %s php-fpm children\n" "$(pgrep -fc "php-fpm: pool bench$" 2>/dev/null || echo 0)"
 printf "  floor     %s cgi-echo processes\n" "$(pgrep -fc "apps/hello/cgi-echo.js" 2>/dev/null || echo 0)"
