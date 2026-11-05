@@ -121,7 +121,7 @@ echo "=== warm-up"
 wrk -t"$CORES" -c"$CONC" -d"${SECS}s" "http://127.0.0.1:$PORT_CGI_ONLY/" >/dev/null 2>&1
 wrk -t"$CORES" -c"$CONC" -d"${SECS}s" "http://127.0.0.1:$PORT_FPM_ONLY/" >/dev/null 2>&1
 
-for round in 1 2; do
+for round in 1 2 3; do
     echo "--- round $round"
     if [ $(( round % 2 )) -eq 1 ]; then
         run cgi "$PORT_CGI_ONLY"; run fpm "$PORT_FPM_ONLY"
