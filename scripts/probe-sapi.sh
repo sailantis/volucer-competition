@@ -38,8 +38,13 @@ CORES=$(nproc)
 rm -rf "$D"; mkdir -p "$D"
 
 cleanup() {
-    for p in $(pgrep -f "probe-sapi" 2>/dev/null || true); do kill -9 "$p" 2>/dev/null || true; done
+    # Anchored on the probe directory, not on the script name: `pgrep -f probe-sapi` matches
+    # the shell that is *running* this probe (its own argv contains the path), so the first
+    # version killed its own session and reported nothing. The directory can only ever be
+    # matched by processes this run started.
+    for p in $(pgrep -f "probe-sapi/" 2>/dev/null || true); do kill -9 "$p" 2>/dev/null || true; done
     for p in $(pgrep -f "php-cgi -b $D/" 2>/dev/null || true); do kill -9 "$p" 2>/dev/null || true; done
+    for p in $(pgrep -f "$D/pool.conf" 2>/dev/null || true); do kill -9 "$p" 2>/dev/null || true; done
     sleep 0.3
 }
 trap cleanup EXIT INT TERM
