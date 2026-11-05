@@ -348,8 +348,15 @@ EX="$PROBE/external"
 mkdir -p "$EX"
 FPM_BIN="${PHP_FPM:-}"
 if [ -z "$FPM_BIN" ]; then
-    for cand in php-fpm8.5 php-fpm8.3 php-fpm; do
+    # `php-fpm` lives in `/usr/sbin`, which a non-root PATH usually omits — so `command -v`
+    # alone reports "no php-fpm" on a host that has one, and this arm is skipped for a
+    # reason that has nothing to do with the host. Searched explicitly rather than by
+    # asking the caller to fix their PATH.
+    for cand in php-fpm8.5 php-fpm8.4 php-fpm8.3 php-fpm; do
         FPM_BIN=$(command -v "$cand" 2>/dev/null) && break
+        for dir in /usr/sbin /usr/local/sbin /sbin; do
+            if [ -x "$dir/$cand" ]; then FPM_BIN="$dir/$cand"; break 2; fi
+        done
     done
 fi
 if [ -n "$FPM_BIN" ] && [ -x "$FPM_BIN" ]; then
