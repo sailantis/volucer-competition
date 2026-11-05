@@ -375,8 +375,12 @@ if [ -n "$PHP_CGI_WRAPPER" ] && want cgi; then
         "$ROOT/conf/hello-cgi.toml.template" > "$CG/cfg.toml"
     "$BIN" serve -c "$CG/cfg.toml" >"$CG/volucer.log" 2>&1 &
     VOL_C=$!
-else
-    echo "=== NOTE: no php-cgi on PATH, the spawn_cgi arm is skipped"
+elif want cgi; then
+    # The message is guarded on `want` because this `else` used to fire for *any* falsy
+    # condition -- including an arm that was merely filtered out by `ARMS_FILTER`. A run that
+    # excluded `cgi` therefore printed "no php-cgi on PATH" while `/usr/bin/php-cgi` was
+    # present and working, which reads as a missing tool and hides a real skip.
+    echo "=== NOTE: no php-cgi on PATH, the spawn_cgi arm is skipped" >&2
     VOL_C=""
 fi
 
@@ -396,8 +400,8 @@ if [ -n "$PYTHON_BIN" ] && want cgi_dummy; then
         "$ROOT/conf/hello-cgi-dummy.toml.template" > "$CD/cfg.toml"
     "$BIN" serve -c "$CD/cfg.toml" >"$CD/volucer.log" 2>&1 &
     VOL_D=$!
-else
-    echo "=== NOTE: no python3 on PATH, the spawn_cgi-dummy arm is skipped"
+elif want cgi_dummy; then
+    echo "=== NOTE: no python3 on PATH, the spawn_cgi-dummy arm is skipped" >&2
     VOL_D=""
 fi
 
@@ -491,8 +495,12 @@ if [ -n "$FPM_BIN" ] && [ -x "$FPM_BIN" ] && want external_fpm; then
         tail -4 "$EX/fpm.log" 2>/dev/null | sed 's/^/    /'
         VOL_X=""
     fi
-else
-    echo "=== NOTE: no php-fpm on PATH, the external_fpm arm is skipped"
+elif want external_fpm; then
+    # Guarded on `want` for the same reason as the `cgi` arm: an unguarded `else` here printed
+    # "no php-fpm on PATH" for a run that had merely filtered the arm out -- and this host has
+    # two php-fpm builds in `/usr/sbin`, so the message was both wrong and misleading about
+    # what the table contained.
+    echo "=== NOTE: no php-fpm on PATH, the external_fpm arm is skipped" >&2
     VOL_X=""
 fi
 
