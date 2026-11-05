@@ -84,6 +84,20 @@ cleanup() {
         pkill -f "$PROBE/" 2>/dev/null
         pkill -f "supervisor.php unix:$PROBE/attach/relay" 2>/dev/null
         pkill -f "fastify-hello.js --port $PORT_ORIGIN" 2>/dev/null
+        # **php-fpm children are not in the master's process group for this purpose.** Killing
+        # `$FPM_EXT` leaves every `php-fpm: pool <name>` child alive, still holding the listening
+        # socket. Two consequences, both measured here:
+        #
+        #   - the next run's pool cannot bind, so its arm serves from the *previous* run's
+        #     children, which is a different configuration wearing this one's label;
+        #   - they accumulate. One session left 288 of them (three pools of 96) and a later run
+        #     then charged 211 MB of PSS and a contaminated host to a 96-child arm.
+        #
+        # Anchored on the pool name this harness writes, so it cannot reach the host's own pool.
+        for p in $(ps -eo pid,args --no-headers 2>/dev/null \
+                   | grep "[p]hp-fpm: pool bench" | awk '{print $1}'); do
+            kill -9 "$p" 2>/dev/null
+        done
     fi
 }
 trap cleanup EXIT INT TERM
@@ -244,6 +258,17 @@ ns_of_pattern() {   # $1 = arm
 }
 
 echo "=== binary: $BIN"
+# The version is printed, and compared against the release the table is meant to describe,
+# because `hello-bench/bin` holds a dozen builds and the default (`volucer-adopt`) reports
+# **0.4.0** -- the release with the request-path regression. Comparing a 0.4.0 arm against a
+# 0.5.0 arm across two scripts produced a 39k-vs-52k spread for the *same* configuration and
+# looked exactly like a backend difference.
+REPORTED_VERSION=$("$BIN" --version 2>/dev/null | awk '{print $2}' || true)
+echo "=== binary version: ${REPORTED_VERSION:-unknown}"
+if [ -n "${EXPECT_VERSION:-}" ] && [ "$REPORTED_VERSION" != "$EXPECT_VERSION" ]; then
+    echo "=== FATAL: this binary reports $REPORTED_VERSION, expected $EXPECT_VERSION" >&2
+    exit 2
+fi
 echo "=== $(sha256sum "$BIN" | cut -c1-16)  workers=$WORKERS  c=$CONC  ${SECS}s x $ROUNDS"
 echo "=== host load: $(awk '{print $1}' /proc/loadavg)"
 
