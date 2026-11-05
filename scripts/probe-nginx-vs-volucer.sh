@@ -22,7 +22,7 @@ set -eu
 SECS=${1:-16}
 CONC=${2:-100}
 CHILDREN=${3:-96}
-SETTLE=${SETTLE:-25}
+SETTLE=${SETTLE:-45}
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 D=/tmp/probe-nginx
 BIN=${BIN:-$HOME/hello-bench/bin/volucer-adopt}
@@ -173,6 +173,10 @@ wrk -t"$CORES" -c"$CONC" -d8s "http://127.0.0.1:$PORT_X/" >/dev/null 2>&1 || tru
 sleep 15
 
 for round in 1 2 3; do
+    # 45 s, not 15: a 96-child pool plus 12 wrk threads needs 200-300 s to decay, and the earlier
+    # grid showed a cell starting at load 22 and reporting a number that belonged to that heat.
+    echo "--- settling before round $round (load $(awk '{print $1}' /proc/loadavg))"
+    sleep "$SETTLE"
     echo "--- round $round (load $(awk '{print $1}' /proc/loadavg))"
     # Rotated, so a drift in the host over the run cannot favour one front-end.
     if [ $(( round % 2 )) -eq 1 ]; then
@@ -182,7 +186,6 @@ for round in 1 2 3; do
         run X "$PORT_X" "volucer"
         run N "$PORT_N" "nginx"
     fi
-    sleep 15
 done
 
 echo

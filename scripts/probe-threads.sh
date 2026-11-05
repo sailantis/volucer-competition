@@ -31,13 +31,30 @@ rm -rf "$D"; mkdir -p "$D" "$NGX/tmp/client" "$NGX/tmp/proxy" "$NGX/tmp/fastcgi"
     "$NGX/tmp/uwsgi" "$NGX/tmp/scgi"
 
 cleanup() {
-    for p in $(pgrep -f "probe-threads/" 2>/dev/null || true); do kill -9 "$p" 2>/dev/null || true; done
+    # Anchored on the *directory* rather than on the script name: `pgrep -f probe-threads` matches
+    # the shell running this script (its own argv contains the path), which killed the session in
+    # an earlier probe. A pid file is checked too, because an nginx from a killed run keeps
+    # listening and the next run then fails to bind *after* `rm -rf` deleted the file that would
+    # have found it.
+    # **Not** `pgrep -f "probe-threads/"`: that string is in nginx's own command line (`-p $NGX
+    # -c $D/nginx.conf`) and in this script's, so the first cleanup killed the run it belonged to.
+    # The pid file and the exact volucer config path are the two identifiers that only ever
+    # describe processes this run started.
+    [ -s "$NGX/nginx.pid" ] && kill -9 "$(cat "$NGX/nginx.pid")" 2>/dev/null || true
+    for p in $(pgrep -f "volucer.*$D/vol.toml" 2>/dev/null || true); do kill -9 "$p" 2>/dev/null || true; done
     for p in $(pgrep -f "$D/pool.conf" 2>/dev/null || true); do kill -9 "$p" 2>/dev/null || true; done
     for p in $(ps -eo pid,args --no-headers 2>/dev/null \
                | grep "[p]hp-fpm: pool bench$" | awk '{print $1}'); do
         kill -9 "$p" 2>/dev/null || true
     done
-    [ -f "$NGX/nginx.pid" ] && kill -9 "$(cat "$NGX/nginx.pid")" 2>/dev/null || true
+    # An nginx from a killed run keeps listening, and the next run then fails to bind with
+    # "Address already in use" *after* `rm -rf` has deleted the pid file that would have found it.
+    # Anchored on this probe's own prefix, so the host's nginx is never touched.
+    for p in $(ps -eo pid,args --no-headers 2>/dev/null \
+               | grep "[n]ginx: .*$D/nginx.conf" | awk '{print $1}'); do
+        kill -9 "$p" 2>/dev/null || true
+    done
+    [ -s "$NGX/nginx.pid" ] && kill -9 "$(cat "$NGX/nginx.pid")" 2>/dev/null || true
     sleep 0.3
 }
 trap cleanup EXIT INT TERM
@@ -92,7 +109,10 @@ sed -e "s|{{PORT}}|$PORT|g" -e "s|{{ROOT}}|$ROOT|g" -e "s|{{SOCKET}}|$D/fpm.sock
 "$BIN" serve -c "$D/vol.toml" >"$D/vol.log" 2>&1 &
 sleep 2
 
-VOL=$(pgrep -f "volucer.*$D/vol.toml" | head -1)
+# Found by the config path alone, not by ``volucer.*': the binary under test is often an
+# experiment copied to /tmp (``/tmp/vol-async-ext``), and requiring the product name in its argv
+# made this return nothing while the server was up and serving.
+VOL=$(pgrep -f "serve -c $D/vol.toml" | head -1)
 NGX_MASTER=$(cat "$NGX/nginx.pid")
 for pair in "$PORT:volucer" "$NGX_PORT:nginx"; do
     port=${pair%%:*}; tag=${pair##*:}
@@ -103,8 +123,9 @@ done
 threads() { awk '/^Threads:/{print $2}' /proc/"$1"/status; }
 
 echo "=== idle"
-printf "  volucer %s threads   nginx master %s threads (4 workers = %s total)\n" \
-    "$(threads "$VOL")" "$(threads "$NGX_MASTER")" "$(( $(threads "$NGX_MASTER") * 1 ))"
+n=0
+for p in $NGX_MASTER $(pgrep -P "$NGX_MASTER"); do n=$(( n + $(threads "$p") )); done
+printf "  volucer %s threads   nginx %s threads (all processes)\n" "$(threads "$VOL")" "$n"
 
 for c in 1 8 32 100; do
     wrk -t"$([ "$c" -gt 12 ] && echo 12 || echo "$c")" -c"$c" -d10s \
