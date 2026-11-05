@@ -94,7 +94,9 @@ for pair in "$PORT_CGI_ONLY:cgi" "$PORT_FPM_ONLY:fpm"; do
     case $body in *'"hello"'*) ;; *) echo "=== FATAL: $name is not serving"; exit 1 ;; esac
 done
 
-echo "=== children: php-cgi master=$(pgrep -cf "php-cgi -b $D/cgi.sock" || echo 0)  php-fpm=$(pgrep -cf 'php-fpm: pool bench$' || echo 0)"
+echo "=== children"
+echo "  php-cgi (master + forked): $(ps -eo args --no-headers | grep -c "[p]hp-cgi .*-b $D/cgi.sock")"
+echo "  php-fpm (pool bench):      $(ps -eo args --no-headers | grep -c "[p]hp-fpm: pool bench")"
 
 cpu_of() { awk '{print $14+$15}' "/proc/$1/stat" 2>/dev/null || echo 0; }
 
@@ -105,8 +107,13 @@ run() {
     rps=$(awk '/^Requests\/sec:/{print $2}' "$D/wrk-$name.txt")
     p50=$(awk '/^ +50%/{print $2}' "$D/wrk-$name.txt")
     bad=$(awk -F: '/Non-2xx/{gsub(/ /,"",$2); print $2+0}' "$D/wrk-$name.txt")
-    printf "  %-8s %7.0f rps  p50 %-9s %s\n" "$name" "${rps:-0}" "$p50" \
-        "$([ "${bad:-0}" -gt 0 ] && echo "<<< NON-2xx $bad")"
+    # `awk` emits a dot decimal, and a German locale's `printf %f` rejects it outright
+    # ("Ungültige Zahl") -- which under `set -e` aborts the whole run mid-round and looks like
+    # a crash rather than a formatting bug. Formatted by awk instead of by the shell.
+    awk -v n="$name" -v r="${rps:-0}" -v p="$p50" -v b="${bad:-0}" 'BEGIN {
+        printf "  %-8s %7d rps  p50 %-9s %s\n", n, r, (length(p) ? p : "-"),
+               (b > 0 ? "<<< NON-2xx " b : "")
+    }'
 }
 
 # A warm pass each, discarded: the first pass after a fresh start pays the pool building.
