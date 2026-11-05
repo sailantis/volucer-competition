@@ -8,9 +8,16 @@
 #   worker_socket  the same, over unix sockets: the spawned worker a runtime can await
 #   cgi        volucer `spawn_cgi` -> `php-cgi`, cold: a full CGI SAPI reset per request
 #   cgi_dummy  volucer `spawn_cgi` -> a FastCGI dummy: the cold arm's own pool, no PHP
+#   external_fpm  volucer `external` -> a REAL php-fpm pool (warm, no nginx in front)
 #   upstream   volucer `upstream` -> Node/Fastify cluster
 #   floor      volucer `external` -> a Node FastCGI responder: the transport's floor, no PHP
 #   node       bare Node/Fastify, no front-end (a labelled ceiling, never the headline)
+#
+# `external_fpm` is the arm that separates the two halves of `fpm` (nginx + php-fpm), which no
+# other row can do: it holds the pool, socket, pm.max_children and front controller fixed and
+# changes only what sits in front of them. Against `fpm` it measures the front-end; against
+# `cgi` it measures the application model (resident pool vs per-request SAPI reset). It needs
+# `php-fpm` and `nginx` is NOT required — that is the point.
 #
 # Two of these are references rather than competitors, and they are the reason the
 # table can be read at all:
@@ -52,7 +59,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # bottom of the happy path. Nothing else in this script relies on the exit path being tidy.
 PROBE_INITIALISED=""
 cleanup() {
-    local pids="$VOL_A $VOL_W ${VOL_WS:-} $VOL_U $ORIGIN $SUP_A ${VOL_C:-} ${VOL_D:-} ${VOL_F:-} ${FLOOR_NODE:-}"
+    local pids="$VOL_A $VOL_W ${VOL_WS:-} $VOL_U $ORIGIN $SUP_A ${VOL_C:-} ${VOL_D:-} ${VOL_F:-} ${VOL_X:-} ${FPM_EXT:-} ${FLOOR_NODE:-}"
     kill -TERM $pids 2>/dev/null
     sleep 1.5
     kill -9 $pids 2>/dev/null
@@ -96,6 +103,7 @@ PORT_WORKER=22951
 PORT_WORKER_SOCKET=22955
 PORT_CGI=22952
 PORT_CGI_DUMMY=22954
+PORT_EXTERNAL_FPM=22956
 PORT_FLOOR=22953
 PORT_UPSTREAM=22961
 PORT_ORIGIN=22960
@@ -164,6 +172,11 @@ backend_pids() {   # $1 = arm
     case $1 in
         worker)        worker_pids pipe ;;
         worker_socket) worker_pids socket ;;
+        # php-fpm names its children `php-fpm: pool <poolname>`, and the name is how this arm
+        # is told apart from any other fpm on the host. Matching the executable alone would
+        # count a pool somebody else is serving from, which is the hazard the `fpm` arm's own
+        # private instance exists to avoid.
+        fpm)           pgrep -f "php-fpm: pool bench-ext" 2>/dev/null ;;
         *)             pgrep -f "${BACKEND[$1]}" 2>/dev/null ;;
     esac
 }
@@ -323,6 +336,46 @@ else
     VOL_F=""
 fi
 
+# ---- php-fpm pool for `external_fpm`, and the volucer in front of it -------------------
+#
+# The pool is a *real* php-fpm with a real `pm = static`, not a responder standing in for one,
+# because the comparison this arm exists for is against the `fpm` arm — where the pool is
+# exactly this. `nginx` is deliberately absent: a difference against `fpm` must be the
+# front-end, and putting nginx in front of volucer would measure nothing nameable.
+#
+# The opcache mode goes to the master as `-d`, not into the pool file; see fpm-pool-ext.sh.
+EX="$PROBE/external"
+mkdir -p "$EX"
+FPM_BIN="${PHP_FPM:-}"
+if [ -z "$FPM_BIN" ]; then
+    for cand in php-fpm8.5 php-fpm8.3 php-fpm; do
+        FPM_BIN=$(command -v "$cand" 2>/dev/null) && break
+    done
+fi
+if [ -n "$FPM_BIN" ] && [ -x "$FPM_BIN" ]; then
+    sh "$ROOT/scripts/fpm-pool-ext.sh" "$EX/pool.conf" "$WORKERS" "$EX/fpm.sock" "$EX" on
+    "$FPM_BIN" -y "$EX/pool.conf" -F -d opcache.enable=1 -d opcache.validate_timestamps=0 \
+        >"$EX/fpm.log" 2>&1 &
+    FPM_EXT=$!
+    # The socket appears before the pool can serve, so a connect is the only proof. This is a
+    # probe against the pool, not against the arm, so it cannot disturb what is measured.
+    for _ in $(seq 1 400); do [ -S "$EX/fpm.sock" ] && break; sleep 0.05; done
+    if [ -S "$EX/fpm.sock" ]; then
+        sed -e "s|{{PORT}}|$PORT_EXTERNAL_FPM|g" -e "s|{{ROOT}}|$ROOT|g" \
+            -e "s|{{SOCKET}}|$EX/fpm.sock|g" \
+            "$ROOT/conf/hello-external-fpm.toml.template" > "$EX/cfg.toml"
+        "$BIN" serve -c "$EX/cfg.toml" >"$EX/volucer.log" 2>&1 &
+        VOL_X=$!
+    else
+        echo "=== NOTE: the php-fpm pool never bound $EX/fpm.sock, its arm is skipped"
+        tail -4 "$EX/fpm.log" 2>/dev/null | sed 's/^/    /'
+        VOL_X=""
+    fi
+else
+    echo "=== NOTE: no php-fpm on PATH, the external_fpm arm is skipped"
+    VOL_X=""
+fi
+
 # ---- node origin, shared by `upstream` (proxied) and `node` (bare) ---------------------
 UP="$PROBE/upstream"; mkdir -p "$UP"
 PATH="$NODE_BIN:$PATH" node "$ROOT/apps/hello/fastify-hello.js" \
@@ -348,6 +401,11 @@ if [ -n "$VOL_D" ]; then
 fi
 if [ -n "$VOL_F" ]; then
     for _ in $(seq 1 400); do curl -sf -o /dev/null "http://127.0.0.1:$PORT_FLOOR/" && break; sleep 0.05; done
+fi
+if [ -n "$VOL_X" ]; then
+    # Longer than the warm arms: php-fpm has to fork `pm.max_children` processes and each one
+    # loads the interpreter before the first request can be answered.
+    for _ in $(seq 1 900); do curl -sf -o /dev/null "http://127.0.0.1:$PORT_EXTERNAL_FPM/" && break; sleep 0.05; done
 fi
 for _ in $(seq 1 400); do curl -sf -o /dev/null "http://127.0.0.1:$PORT_UPSTREAM/" && break; sleep 0.05; done
 sleep 2
@@ -375,6 +433,14 @@ fi
 if [ -n "$VOL_F" ]; then
     PORT[floor]=$PORT_FLOOR; PID[floor]=$VOL_F; BACKEND[floor]="apps/hello/cgi-echo.js"
     ARMS="$ARMS floor"
+fi
+if [ -n "$VOL_X" ]; then
+    PORT[external_fpm]=$PORT_EXTERNAL_FPM; PID[external_fpm]=$VOL_X
+    # The pool, not the front-end: this column is the population that costs CPU, and php-fpm
+    # names each child `php-fpm: pool bench-ext`. Not `php-fpm` alone — that would count a pool
+    # this run did not start.
+    BACKEND[external_fpm]="php-fpm: pool bench-ext"
+    ARMS="$ARMS external_fpm"
 fi
 
 # `ARMS="cgi cgi_dummy" ./arms.sh ...` measures a subset. It exists because seven arms
@@ -412,6 +478,7 @@ printf "  worker    %s php processes (pipe)\n" "$(worker_pids pipe | wc -l)"
 printf "  wk-socket %s php processes (socket)\n" "$(worker_pids socket | wc -l)"
 printf "  cgi       %s php-cgi processes\n" "$(pgrep -c -x php-cgi 2>/dev/null || echo 0)"
 printf "  cgi_dummy %s dummy processes\n" "$(pgrep -fc "apps/hello/fcgi-dummy.py" 2>/dev/null || echo 0)"
+printf "  ext_fpm   %s php-fpm children\n" "$(pgrep -fc "php-fpm: pool bench-ext" 2>/dev/null || echo 0)"
 printf "  floor     %s cgi-echo processes\n" "$(pgrep -fc "apps/hello/cgi-echo.js" 2>/dev/null || echo 0)"
 printf "  node      %s node processes\n" "$(pgrep -fc "fastify-hello.js --port $PORT_ORIGIN" 2>/dev/null || echo 0)"
 
