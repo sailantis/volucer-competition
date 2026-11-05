@@ -115,6 +115,24 @@ CORES=$(nproc)
 # oversubscribed and does not need one thread per core.
 WRK_T=${WRK_T:-$CORES}
 [ "$WRK_T" -gt "$CONC" ] && WRK_T=$CONC
+
+# Should this arm be started at all?
+#
+# `ARMS_FILTER` used to be applied *after* every arm had been launched, so a two-arm
+# comparison ran with all nine resident -- ~600 processes and ~4 GB of pools on an 8 GB
+# host -- and the filter only stopped the extra arms from being *timed*. A focused pair is
+# the whole point of the filter (the comment below says so), so it has to be consulted
+# before each `serve` rather than after all of them.
+#
+# An unknown name is a hard error rather than a silent skip: a table missing a row looks
+# complete, which is the same reason a failed body check refuses to measure.
+want() {
+    [ -z "${ARMS_FILTER:-}" ] && return 0
+    case " ${ARMS_FILTER} " in
+        *" $1 "*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
 PROBE="$ROOT/.probe/fa"
 rm -rf "$PROBE"; mkdir -p "$PROBE"
 PROBE_INITIALISED=1
@@ -247,7 +265,9 @@ WRAPPER
 done
 
 # ---- attach ---------------------------------------------------------------------------
+VOL_A=""; SUP_A=""
 AT="$PROBE/attach"; mkdir -p "$AT"
+if want attach; then
 # The supervisor's own -d flags are what `attach`'s children inherit, so they must be the
 # wrapper's flags. Duplicating them here is deliberate: this is the reference arm.
 php -d opcache.enable_cli=1 -d opcache.validate_timestamps=0 -d opcache.jit=off \
@@ -260,14 +280,18 @@ sed -e "s|{{PORT}}|$PORT_ATTACH|g" -e "s|{{ROOT}}|$ROOT|g" \
     "$ROOT/conf/hello-attach.toml.template" > "$AT/cfg.toml"
 "$BIN" serve -c "$AT/cfg.toml" >"$AT/volucer.log" 2>&1 &
 VOL_A=$!
+fi
 
 # ---- worker ---------------------------------------------------------------------------
+VOL_W=""
 WK="$PROBE/worker"; mkdir -p "$WK"
+if want worker; then
 sed -e "s|{{PORT}}|$PORT_WORKER|g" -e "s|{{ROOT}}|$ROOT|g" \
     -e "s|{{WORKERS}}|$WORKERS|g" -e "s|{{PHP}}|$PHP_WRAPPER|g" \
     "$ROOT/conf/hello-worker-pipe.toml.template" > "$WK/cfg.toml"
 "$BIN" serve -c "$WK/cfg.toml" >"$WK/volucer.log" 2>&1 &
 VOL_W=$!
+fi
 
 # ---- worker over a socket, which a runtime can adopt: the awaited spawned worker ------
 # The same server, the same page, the same process model as the arm above. Only the transport
@@ -278,12 +302,15 @@ VOL_W=$!
 # `attach`'s, and there were two candidate causes: the pipe, or the exchange thread a spawned slot
 # still owns. This arm keeps the thread and removes the pipe.
 WKS="$PROBE/worker-socket"; mkdir -p "$WKS"
+VOL_WS=""
+if want worker_socket; then
 sed -e "s|{{PORT}}|$PORT_WORKER_SOCKET|g" -e "s|{{ROOT}}|$ROOT|g" \
     -e "s|{{WORKERS}}|$WORKERS|g" -e "s|{{PHP}}|$PHP_WRAPPER_SOCKET|g" \
     -e "s|{{SOCKET_DIR}}|$WKS|g" \
     "$ROOT/conf/hello-worker-socket.toml.template" > "$WKS/cfg.toml"
 "$BIN" serve -c "$WKS/cfg.toml" >"$WKS/volucer.log" 2>&1 &
 VOL_WS=$!
+fi
 
 # ---- spawn_cgi (cold: a full CGI SAPI reset per request) -------------------------------
 # `php-cgi` is a different binary from `php`, and the arm is the *cold model* -- the
@@ -297,8 +324,9 @@ VOL_WS=$!
 # re-compile the front controller on every request. That is hazard 28 again, and it
 # would look like a verdict on the cold model.
 CG="$PROBE/cgi"; mkdir -p "$CG"
+VOL_C=""
 PHP_CGI_BIN=$(command -v php-cgi || true)
-if [ -n "$PHP_CGI_BIN" ]; then
+if [ -n "$PHP_CGI_BIN" ] && want cgi; then
     PHP_CGI_WRAPPER="$PROBE/php-cgi-bench"
     cat > "$PHP_CGI_WRAPPER" <<WRAPPER
 #!/bin/sh
@@ -324,8 +352,9 @@ fi
 # else, which is the one decomposition `external` cannot give -- `external` starts
 # nothing, so it has no pool in it.
 CD="$PROBE/cgi-dummy"; mkdir -p "$CD"
+VOL_D=""
 PYTHON_BIN=$(command -v python3 || true)
-if [ -n "$PYTHON_BIN" ]; then
+if [ -n "$PYTHON_BIN" ] && want cgi_dummy; then
     sed -e "s|{{PORT}}|$PORT_CGI_DUMMY|g" -e "s|{{ROOT}}|$ROOT|g" \
         -e "s|{{WORKERS}}|$WORKERS|g" -e "s|{{SOCKET_DIR}}|$CD|g" \
         -e "s|{{PYTHON}}|$PYTHON_BIN|g" \
@@ -346,7 +375,8 @@ fi
 # Without it a `spawn_cgi` figure cannot say whether the socket or the framework is
 # expensive, which is exactly the question the cold arm exists to answer.
 FL="$PROBE/floor"; mkdir -p "$FL"
-if [ -n "${NODE_BIN:-}" ] && [ -x "$NODE_BIN/node" ]; then
+VOL_F=""
+if [ -n "${NODE_BIN:-}" ] && [ -x "$NODE_BIN/node" ] && want floor; then
     # `--workers` is the responder count, and 4 is measured rather than assumed: see the
     # sweep in the header. One process caps this arm at one core (~50k), 12 or more thrashes
     # on an 8 GB host, and the arm must sit above the client's cost to be a floor at all.
@@ -373,12 +403,15 @@ fi
 # process count is exactly `$WORKERS` — the same number every other arm is given. Writing
 # `workers = $WORKERS` here would start 96 masters of 96 children and measure 9,216 processes.
 CP="$PROBE/cgi-prefork"; mkdir -p "$CP"
+VOL_P=""
+if want cgi_prefork; then
 sed -e "s|{{PORT}}|$PORT_CGI_PREFORK|g" -e "s|{{ROOT}}|$ROOT|g" \
     -e "s|{{PHP_CGI}}|$(command -v php-cgi)|g" \
     -e "s|{{SOCKET_DIR}}|$CP|g" -e "s|{{CHILDREN}}|$WORKERS|g" \
     "$ROOT/conf/hello-cgi-prefork.toml.template" > "$CP/cfg.toml"
 "$BIN" serve -c "$CP/cfg.toml" >"$CP/volucer.log" 2>&1 &
 VOL_P=$!
+fi
 
 # ---- php-fpm pool for `external_fpm`, and the volucer in front of it -------------------
 #
@@ -390,6 +423,7 @@ VOL_P=$!
 # The opcache mode goes to the master as `-d`, not into the pool file; see fpm-pool-ext.sh.
 EX="$PROBE/external"
 mkdir -p "$EX"
+VOL_X=""; FPM_EXT=""
 FPM_BIN="${PHP_FPM:-}"
 if [ -z "$FPM_BIN" ]; then
     # `php-fpm` lives in `/usr/sbin`, which a non-root PATH usually omits — so `command -v`
@@ -403,7 +437,7 @@ if [ -z "$FPM_BIN" ]; then
         done
     done
 fi
-if [ -n "$FPM_BIN" ] && [ -x "$FPM_BIN" ]; then
+if [ -n "$FPM_BIN" ] && [ -x "$FPM_BIN" ] && want external_fpm; then
     sh "$ROOT/scripts/fpm-pool-ext.sh" "$EX/pool.conf" "$WORKERS" "$EX/fpm.sock" "$EX" on
     "$FPM_BIN" -y "$EX/pool.conf" -F -d opcache.enable=1 -d opcache.validate_timestamps=0 \
         >"$EX/fpm.log" 2>&1 &
@@ -429,19 +463,28 @@ fi
 
 # ---- node origin, shared by `upstream` (proxied) and `node` (bare) ---------------------
 UP="$PROBE/upstream"; mkdir -p "$UP"
+VOL_U=""; ORIGIN=""
+if want upstream || want node; then
 PATH="$NODE_BIN:$PATH" node "$ROOT/apps/hello/fastify-hello.js" \
     --port "$PORT_ORIGIN" --workers 12 --cluster reuseport >"$UP/origin.log" 2>&1 &
 ORIGIN=$!
 for _ in $(seq 1 400); do curl -sf -o /dev/null "http://127.0.0.1:$PORT_ORIGIN/" && break; sleep 0.05; done
+fi
+if want upstream; then
 sed -e "s|{{PORT}}|$PORT_UPSTREAM|g" -e "s|{{ROOT}}|$ROOT|g" \
     -e "s|{{ORIGIN_PORT}}|$PORT_ORIGIN|g" \
     "$ROOT/conf/hello-upstream.toml.template" > "$UP/cfg.toml"
 "$BIN" serve -c "$UP/cfg.toml" >"$UP/volucer.log" 2>&1 &
 VOL_U=$!
+fi
 
 for _ in $(seq 1 400); do curl -sf -o /dev/null "http://127.0.0.1:$PORT_ATTACH/" && break; sleep 0.05; done
-for _ in $(seq 1 400); do curl -sf -o /dev/null "http://127.0.0.1:$PORT_WORKER/" && break; sleep 0.05; done
-for _ in $(seq 1 400); do curl -sf -o /dev/null "http://127.0.0.1:$PORT_WORKER_SOCKET/" && break; sleep 0.05; done
+if [ -n "$VOL_W" ]; then
+    for _ in $(seq 1 400); do curl -sf -o /dev/null "http://127.0.0.1:$PORT_WORKER/" && break; sleep 0.05; done
+fi
+if [ -n "$VOL_WS" ]; then
+    for _ in $(seq 1 400); do curl -sf -o /dev/null "http://127.0.0.1:$PORT_WORKER_SOCKET/" && break; sleep 0.05; done
+fi
 if [ -n "$VOL_C" ]; then
     # A cold arm needs longer: every one of its workers is a fresh `php-cgi` that has to
     # bind before it can answer.
@@ -460,22 +503,49 @@ if [ -n "$VOL_X" ]; then
 fi
 # The prefork master has to fork its children before it can answer; like a cold arm it needs
 # longer than a warm one.
-for _ in $(seq 1 900); do curl -sf -o /dev/null "http://127.0.0.1:$PORT_CGI_PREFORK/" && break; sleep 0.05; done
-for _ in $(seq 1 400); do curl -sf -o /dev/null "http://127.0.0.1:$PORT_UPSTREAM/" && break; sleep 0.05; done
+if [ -n "$VOL_P" ]; then
+    for _ in $(seq 1 900); do curl -sf -o /dev/null "http://127.0.0.1:$PORT_CGI_PREFORK/" && break; sleep 0.05; done
+fi
+if [ -n "$VOL_U" ]; then
+    for _ in $(seq 1 400); do curl -sf -o /dev/null "http://127.0.0.1:$PORT_UPSTREAM/" && break; sleep 0.05; done
+fi
 sleep 2
 
 # ---- guards ---------------------------------------------------------------------------
 echo "=== bodies"
 declare -A BODY PORT PID BACKEND
-PORT[attach]=$PORT_ATTACH;   PID[attach]=$VOL_A;  BACKEND[attach]="supervisor.php unix:$AT/relay"
-PORT[worker]=$PORT_WORKER;   PID[worker]=$VOL_W;  BACKEND[worker]="php-bench-pipe"
-PORT[worker_socket]=$PORT_WORKER_SOCKET; PID[worker_socket]=$VOL_WS; BACKEND[worker_socket]="php-bench-socket"
-PORT[upstream]=$PORT_UPSTREAM; PID[upstream]=$VOL_U; BACKEND[upstream]="fastify-hello.js --port $PORT_ORIGIN"
-PORT[node]=$PORT_ORIGIN;     PID[node]=$ORIGIN;   BACKEND[node]="fastify-hello.js --port $PORT_ORIGIN"
-ARMS="attach worker worker_socket upstream node"
+if [ -n "$VOL_A" ]; then
+    PORT[attach]=$PORT_ATTACH; PID[attach]=$VOL_A
+    BACKEND[attach]="supervisor.php unix:$AT/relay"
+fi
+if [ -n "$VOL_W" ]; then
+    PORT[worker]=$PORT_WORKER; PID[worker]=$VOL_W; BACKEND[worker]="php-bench-pipe"
+fi
+if [ -n "$VOL_WS" ]; then
+    PORT[worker_socket]=$PORT_WORKER_SOCKET; PID[worker_socket]=$VOL_WS
+    BACKEND[worker_socket]="php-bench-socket"
+fi
+if [ -n "$VOL_U" ]; then
+    PORT[upstream]=$PORT_UPSTREAM; PID[upstream]=$VOL_U
+    BACKEND[upstream]="fastify-hello.js --port $PORT_ORIGIN"
+fi
+if [ -n "$ORIGIN" ]; then
+    PORT[node]=$PORT_ORIGIN; PID[node]=$ORIGIN
+    BACKEND[node]="fastify-hello.js --port $PORT_ORIGIN"
+fi
+ARMS=""
+[ -n "$VOL_A" ]  && ARMS="$ARMS attach"
+[ -n "$VOL_W" ]  && ARMS="$ARMS worker"
+[ -n "$VOL_WS" ] && ARMS="$ARMS worker_socket"
+[ -n "$VOL_C" ]  && ARMS="$ARMS cgi"
+[ -n "$VOL_P" ]  && ARMS="$ARMS cgi_prefork"
+[ -n "$VOL_D" ]  && ARMS="$ARMS cgi_dummy"
+[ -n "$VOL_F" ]  && ARMS="$ARMS floor"
+[ -n "$VOL_X" ]  && ARMS="$ARMS external_fpm"
+[ -n "$VOL_U" ]  && ARMS="$ARMS upstream"
+[ -n "$ORIGIN" ] && ARMS="$ARMS node"
 if [ -n "$VOL_C" ]; then
     PORT[cgi]=$PORT_CGI; PID[cgi]=$VOL_C; BACKEND[cgi]="php-cgi.*$PROBE/cgi/"
-    ARMS="attach worker worker_socket cgi upstream node"
 fi
 if [ -n "$VOL_P" ]; then
     PORT[cgi_prefork]=$PORT_CGI_PREFORK; PID[cgi_prefork]=$VOL_P
@@ -483,18 +553,16 @@ if [ -n "$VOL_P" ]; then
     # was given — which is what tells it apart from `cgi`'s 96 masters, since both are
     # `php-cgi`. Matched on the probe's own directory so it cannot reach another run's pool.
     BACKEND[cgi_prefork]="php-cgi.*$PROBE/cgi-prefork/"
-    ARMS="$ARMS cgi_prefork"
 fi
 if [ -n "$VOL_D" ]; then
     PORT[cgi_dummy]=$PORT_CGI_DUMMY; PID[cgi_dummy]=$VOL_D
     # Matched by the program's own path: `spawn_cgi` starts it once per slot, so this
     # is the population that costs CPU, not the volucer process that supervises it.
     BACKEND[cgi_dummy]="apps/hello/fcgi-dummy.py"
-    ARMS="$ARMS cgi_dummy"
+
 fi
 if [ -n "$VOL_F" ]; then
     PORT[floor]=$PORT_FLOOR; PID[floor]=$VOL_F; BACKEND[floor]="apps/hello/cgi-echo.js"
-    ARMS="$ARMS floor"
 fi
 if [ -n "$VOL_X" ]; then
     PORT[external_fpm]=$PORT_EXTERNAL_FPM; PID[external_fpm]=$VOL_X
@@ -502,7 +570,6 @@ if [ -n "$VOL_X" ]; then
     # names each child `php-fpm: pool bench-ext`. Not `php-fpm` alone — that would count a pool
     # this run did not start.
     BACKEND[external_fpm]="php-fpm: pool bench$"
-    ARMS="$ARMS external_fpm"
 fi
 
 # `ARMS="cgi cgi_dummy" ./arms.sh ...` measures a subset. It exists because seven arms
@@ -510,6 +577,12 @@ fi
 # faster and less likely to disturb the arm it is comparing against. Requesting an arm
 # that did not start is refused rather than skipped, for the same reason a failed body
 # check is: a table missing a row looks complete.
+#
+# The filter is now consulted by `want()` *before* each arm starts, so a filtered run really
+# does only start what it measures. It used to be applied here, after every arm had been
+# launched, which meant a two-arm comparison ran with all nine resident and the filter only
+# suppressed the extra *timings*. That is a measurement bug of the loudest kind: the reported
+# rows were correct while the host they were taken on was not the host the label described.
 if [ -n "${ARMS_FILTER:-}" ]; then
     keep=""
     for arm in $ARMS_FILTER; do
