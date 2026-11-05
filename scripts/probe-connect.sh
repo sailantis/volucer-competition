@@ -33,8 +33,11 @@ for arm in cgi-prefork external; do
     echo "=== $arm (volucer pid $pid): connect(2) per second"
     # `-f` follows the pool's worker threads; `-c` prints the summary this reads. A short
     # window inside the round is enough -- these are steady-state rates, not bursts.
-    timeout 5 strace -f -c -e trace=connect -p "$pid" 2>&1 \
-        | grep -E 'connect|total' || echo "   (strace produced nothing)"
+    # `sudo` is required: `ptrace_scope=1` refuses to attach to a non-descendant otherwise,
+    # which is silent -- it prints "ptrace: Operation not permitted" and the summary is empty,
+    # which reads exactly like "zero connects" and would have been a wrong answer.
+    sudo timeout 5 strace -f -c -e trace=connect -p "$pid" 2>&1 \
+        | grep -E 'connect|total|ptrace' || echo "   (no output)"
 done
 
 echo
