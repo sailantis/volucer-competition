@@ -172,11 +172,13 @@ backend_pids() {   # $1 = arm
     case $1 in
         worker)        worker_pids pipe ;;
         worker_socket) worker_pids socket ;;
-        # php-fpm names its children `php-fpm: pool <poolname>`, and the name is how this arm
-        # is told apart from any other fpm on the host. Matching the executable alone would
-        # count a pool somebody else is serving from, which is the hazard the `fpm` arm's own
-        # private instance exists to avoid.
-        fpm)           pgrep -f "php-fpm: pool bench-ext" 2>/dev/null ;;
+        # php-fpm names its children `php-fpm: pool <poolname>`, and the pool name is how this
+        # arm is told apart from any other fpm on the host. Matched as `pool bench$` rather
+        # than `bench-ext`: the section name in the pool file IS the pool name, and a guessed
+        # "bench-ext" matched nothing while the run looked complete (measured `ext_fpm 0`, a
+        # memory column of 0 MB, and a back-end of 0.0 cores for an arm that was serving).
+        # The `$` keeps it from also matching `pool bench-something`.
+        fpm)           pgrep -f "php-fpm: pool bench$" 2>/dev/null ;;
         *)             pgrep -f "${BACKEND[$1]}" 2>/dev/null ;;
     esac
 }
@@ -446,7 +448,7 @@ if [ -n "$VOL_X" ]; then
     # The pool, not the front-end: this column is the population that costs CPU, and php-fpm
     # names each child `php-fpm: pool bench-ext`. Not `php-fpm` alone — that would count a pool
     # this run did not start.
-    BACKEND[external_fpm]="php-fpm: pool bench-ext"
+    BACKEND[external_fpm]="php-fpm: pool bench$"
     ARMS="$ARMS external_fpm"
 fi
 
@@ -485,7 +487,7 @@ printf "  worker    %s php processes (pipe)\n" "$(worker_pids pipe | wc -l)"
 printf "  wk-socket %s php processes (socket)\n" "$(worker_pids socket | wc -l)"
 printf "  cgi       %s php-cgi processes\n" "$(pgrep -c -x php-cgi 2>/dev/null || echo 0)"
 printf "  cgi_dummy %s dummy processes\n" "$(pgrep -fc "apps/hello/fcgi-dummy.py" 2>/dev/null || echo 0)"
-printf "  ext_fpm   %s php-fpm children\n" "$(pgrep -fc "php-fpm: pool bench-ext" 2>/dev/null || echo 0)"
+printf "  ext_fpm   %s php-fpm children\n" "$(pgrep -fc "php-fpm: pool bench$" 2>/dev/null || echo 0)"
 printf "  floor     %s cgi-echo processes\n" "$(pgrep -fc "apps/hello/cgi-echo.js" 2>/dev/null || echo 0)"
 printf "  node      %s node processes\n" "$(pgrep -fc "fastify-hello.js --port $PORT_ORIGIN" 2>/dev/null || echo 0)"
 
