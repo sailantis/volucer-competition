@@ -259,10 +259,12 @@ ns_of_pattern() {   # $1 = arm
 
 echo "=== binary: $BIN"
 # The version is printed, and compared against the release the table is meant to describe,
-# because `hello-bench/bin` holds a dozen builds and the default (`volucer-adopt`) reports
-# **0.4.0** -- the release with the request-path regression. Comparing a 0.4.0 arm against a
-# 0.5.0 arm across two scripts produced a 39k-vs-52k spread for the *same* configuration and
-# looked exactly like a backend difference.
+# because `hello-bench/bin` holds a dozen builds and the default (`volucer-adopt`) once
+# reported **0.4.0** -- the release with the request-path regression. Comparing a 0.4.0 arm
+# against a 0.5.0 arm across two scripts produced a 39k-vs-52k spread for the *same*
+# configuration and looked exactly like a backend difference. The 0.4.0 build now lives in
+# `hello-bench/bin/archive/` and the default is 0.5.0, but the check stays: a stale binary in
+# that directory is invisible in the output and indistinguishable from a result.
 REPORTED_VERSION=$("$BIN" --version 2>/dev/null | awk '{print $2}' || true)
 echo "=== binary version: ${REPORTED_VERSION:-unknown}"
 if [ -n "${EXPECT_VERSION:-}" ] && [ "$REPORTED_VERSION" != "$EXPECT_VERSION" ]; then

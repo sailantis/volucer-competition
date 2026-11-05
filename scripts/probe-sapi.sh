@@ -29,6 +29,9 @@ CONC=${2:-100}
 CHILDREN=${3:-96}
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 D=/tmp/probe-sapi
+# The default is the 0.5.0 release. It used to be `volucer-adopt` while that file was still a
+# 0.4.0 build, which meant this probe and the arm table could silently describe different
+# releases; `arms.sh` now refuses a version mismatch, and this one names the release it wants.
 BIN=${BIN:-$HOME/hello-bench/bin/volucer-adopt}
 PORT_CGI_ONLY=22960
 PORT_FPM_ONLY=22961
