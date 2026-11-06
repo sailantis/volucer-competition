@@ -28,6 +28,7 @@
 #     volucer-attach   volucer `attach` backend       warm, unix relay, one boot forked
 #     volucer-fastcgi  volucer `spawn_cgi` backend    cold, unix socket, 1 process/slot
 #     volucer-prefork  volucer `spawn_cgi` backend    cold, unix socket, n children/slot
+#     volucer-external volucer `external` backend     cold, unix socket, a real php-fpm pool
 #     rr               RoadRunner `worker`            warm, pipe
 #     frankenphp       FrankenPHP worker mode         warm, embedded (PHP 8.5)
 #     fpm              nginx + php-fpm                cold, unix socket
@@ -41,6 +42,26 @@
 #                        count, and the supervisor forks exactly that many
 #     prefork vs fastcgi the process model inside a slot: `children` forks under one
 #                        listening socket, so a slot serves that many at once
+#
+# `volucer-external` is the one arm that is a *decomposition* rather than a new
+# shape. The `fpm` arm is nginx + php-fpm, and neither half is independently
+# visible in any table: a gap between it and a volucer arm mixes "nginx or volucer"
+# with "php-fpm or one php-cgi per slot". `external` holds the pool, the socket,
+# `pm.max_children`, the ini and the front controller fixed and changes only the
+# thing in front of them:
+#
+#     fpm              nginx   -> php-fpm
+#     volucer-external volucer -> php-fpm      <- same pool, different front-end
+#     volucer-fastcgi  volucer -> php-cgi      <- same front-end, different model
+#
+# So `external` vs `fpm` is the front-end alone, and `external` vs `fastcgi` is the
+# application model alone. Quoting either without the other is quoting half of it.
+#
+# Its worker count is php-fpm's `pm.max_children`, not volucer's: `external` has no
+# `workers` key. It dials one address, and the pool behind it is the unit of
+# concurrency. That is why it gets its own pool and its own socket — two arms
+# cannot share one listener and one `pm.max_children` without one of them
+# measuring the other's configuration.
 #
 # Two of them cannot be swept over `workers` the way the others are:
 #
@@ -175,7 +196,7 @@ PHP_FPM="${PHP_FPM:-$(default_fpm)}"
 NGINX="${NGINX:-$(command -v nginx || true)}"
 RUNDIR="${RUNDIR:-$HOME/matrix-run}"
 
-ARMS="${ARMS:-volucer-worker,volucer-unix,volucer-attach,volucer-fastcgi,volucer-prefork,rr,frankenphp,fpm}"
+ARMS="${ARMS:-volucer-worker,volucer-unix,volucer-attach,volucer-fastcgi,volucer-prefork,volucer-external,rr,frankenphp,fpm}"
 WORKERS_LIST="${WORKERS_LIST:-12,16,20,24}"
 # `WORKERS_LIST` applies to every arm, and on most arms it means one thing: the
 # number of PHP processes serving the site. It cannot mean that everywhere.
@@ -259,6 +280,10 @@ PORT_F=$((PORT_BASE + 5))
 PORT_U=$((PORT_BASE + 6))
 PORT_A=$((PORT_BASE + 7))
 PORT_P=$((PORT_BASE + 8))
+# `external` needs its own port for the same reason: it is a second volucer, in
+# front of a second php-fpm pool, and a stale listener left on this port would
+# answer the next cell's URL at the wrong configuration.
+PORT_X=$((PORT_BASE + 9))
 
 CFG="$RUNDIR/cfg"
 LOG="$RUNDIR/log"
@@ -563,6 +588,9 @@ php_processes() { # arm workers children
             ;;
         volucer-fastcgi) echo $(( $2 )) ;;
         volucer-attach)  echo $(( $2 + 1 )) ;;
+        # `external` starts no PHP: the pool is php-fpm's, and it is started by the
+        # harness as its own process tree. Counting it here would double it.
+        volucer-external) echo $(( $2 )) ;;
         *)               echo $(( $2 )) ;;
     esac
 }
@@ -717,6 +745,52 @@ max_requests = 0
 EOF
 }
 
+cfg_volucer_external() { # file port socket mode
+    # Two ini facts decide this arm's fairness, and neither can be expressed in
+    # the pool file:
+    #
+    #   opcache.enable          read by the zend_extension at STARTUP, so the mode
+    #                           goes to the php-fpm master as `-d` (see cfg_fpm) and
+    #                           is proved per cell by assert_mode_live.
+    #   opcache.enable_cli      php-cgi reads it and php-fpm does not. It is set on
+    #                           the front controller's own `php` for the same reason
+    #                           every other arm wraps its interpreter: an unwrapped
+    #                           `php` exposes this arm to whatever the host's CLI has
+    #                           installed (hazard 28 with a different pair of arms).
+    #
+    # `socket` is a full path, not a prefix. An `external` backend dials exactly
+    # what is written; `spawn_cgi` is the one that derives `{prefix}.{index}.sock`
+    # per slot. php-fpm binds one listener per pool, so the pool is the unit of
+    # address and there is exactly one to name.
+    #
+    # There is deliberately no `workers`: `external` has no pool of its own, and a
+    # number here would be a second opinion about a concurrency the pool already
+    # decided. The worker count of this arm IS `pm.max_children`.
+    cat > "$1" <<EOF
+# volucer + external -> a real php-fpm pool: the cold model (a full CGI SAPI reset
+# per request) with the front-end swapped for a PHP one.
+[server]
+default_backend = "app"
+
+http = "127.0.0.1:$2"
+document_root = "$ROOT/public"
+
+# Off for the same reason as every arm here: it is default-on, sits ahead of
+# dispatch, and nginx in the fpm arm has its own "location /" that never
+# reaches it. Leaving it on would charge this arm for a lookup no other arm does.
+# (No backticks in this heredoc: the delimiter is unquoted so that the port,
+# the ROOT and the socket placeholders expand, and an unquoted heredoc runs
+# backticks as command substitution. Do not write a dollar-brace or a backtick
+# in these comment lines either — they expand the same way.)
+[server.static_files]
+enabled = false
+
+[backends.app]
+kind = "external"
+socket = "unix:$3"
+EOF
+}
+
 cfg_rr() { # file port workers mode
     local scan=""
     [ -n "$INI_SCAN_DIR" ] && scan="env PHP_INI_SCAN_DIR=$INI_SCAN_DIR "
@@ -775,7 +849,12 @@ http://127.0.0.1:$2 {
 EOF
 }
 
-cfg_fpm() { # file workers mode socket
+cfg_fpm() { # file workers mode socket [tag]
+    # `tag` separates the log files per arm. The `external` arm runs a second,
+    # identical pool beside this one, and two php-fpm masters writing the same
+    # error_log interleave their lines — which turns any per-cell diagnosis into
+    # a guess about which pool a line came from.
+    local tag="${5:-fpm}"
     # opcache is a zend_extension whose enable flag is read at STARTUP. Measured on
     # this host, `php_admin_flag[opcache.enable] = 0` in the pool sets ini_get() to
     # '0' while opcache stays ACTIVE (it is applied after the extension has already
@@ -787,7 +866,7 @@ cfg_fpm() { # file workers mode socket
 ; host's own pools are never restarted by this matrix.
 [global]
 daemonize = no
-error_log = $LOG/fpm-error.log
+error_log = $LOG/$tag-error.log
 
 [bench]
 listen = $4
@@ -796,7 +875,7 @@ pm.max_children = $2
 pm.max_requests = 0
 
 catch_workers_output = yes
-php_admin_value[error_log] = $LOG/fpm-worker-error.log
+php_admin_value[error_log] = $LOG/$tag-worker-error.log
 php_admin_flag[log_errors] = on
 
 php_admin_value[memory_limit] = 512M
@@ -901,6 +980,33 @@ start_arm() { # arm workers mode
             cfg_volucer_prefork "$CFG/$arm-$n-$mode.toml" "$PORT_P" "$n" "$mode" "$(recorded_children "${CHILDREN:-0}")"
             start_bg "$LOG/$arm-$n-$mode.log" "$BIN" serve -c "$CFG/$arm-$n-$mode.toml"
             ;;
+        volucer-external)
+            rm -f "$SOCK/fpm-ext.sock"
+            cfg_fpm "$CFG/$arm-$n-$mode.conf" "$n" "$mode" "$SOCK/fpm-ext.sock" "fpm-ext"
+            cfg_volucer_external "$CFG/$arm-$n-$mode.toml" "$PORT_X" "$SOCK/fpm-ext.sock" "$mode"
+            # The pool FIRST, and waited for. volucer only dials: started the other
+            # way round, its backend fails on a socket that does not exist yet and
+            # the cell is recorded as "external does not work" rather than as an
+            # ordering mistake in the harness. This is the same lesson the `attach`
+            # arm already carries, one layer up.
+            #
+            # The opcache mode goes to the php-fpm MASTER as `-d` (cfg_fpm explains
+            # why the pool file cannot express it), and `env` is used for the scan
+            # dir because start_bg runs this in the background.
+            local xoc; xoc=$([ "$mode" = "on" ] && echo 1 || echo 0)
+            local xscan=()
+            [ -n "$INI_SCAN_DIR" ] && xscan=(env "PHP_INI_SCAN_DIR=$INI_SCAN_DIR")
+            start_bg "$LOG/$arm-$n-$mode-fpm.log" "${xscan[@]}" "$PHP_FPM" \
+                -y "$CFG/$arm-$n-$mode.conf" -F \
+                -d opcache.enable="$xoc" -d opcache.validate_timestamps=0
+            if ! wait_socket "$SOCK/fpm-ext.sock"; then
+                echo "  volucer-external: php-fpm never created $SOCK/fpm-ext.sock" |
+                    tee -a "$META" >&2
+                tail -4 "$LOG/$arm-$n-$mode-fpm.log" 2>/dev/null | sed 's/^/    /' >&2
+                return 1
+            fi
+            start_bg "$LOG/$arm-$n-$mode.log" "$BIN" serve -c "$CFG/$arm-$n-$mode.toml"
+            ;;
         rr)
             cfg_rr "$CFG/$arm-$n-$mode.yaml" "$PORT_R" "$n" "$mode"
             # RoadRunner resolves the worker command relative to its CWD.
@@ -941,6 +1047,7 @@ port_of() {
         volucer-attach)  echo "$PORT_A" ;;
         volucer-fastcgi) echo "$PORT_T" ;;
         volucer-prefork) echo "$PORT_P" ;;
+        volucer-external) echo "$PORT_X" ;;
         rr)              echo "$PORT_R" ;;
         frankenphp)      echo "$PORT_Z" ;;
         fpm)             echo "$PORT_F" ;;
@@ -974,9 +1081,10 @@ assert_mode_live() { # arm workers mode
                 return 1
             fi
             ;;
-        fpm)
-            local body
-            body="$(curl -sS --max-time 10 "http://127.0.0.1:$PORT_F/.bench-ini-probe.php" 2>/dev/null)"
+        fpm|volucer-external)
+            local body probe_port
+            if [ "$arm" = "fpm" ]; then probe_port="$PORT_F"; else probe_port="$PORT_X"; fi
+            body="$(curl -sS --max-time 10 "http://127.0.0.1:$probe_port/.bench-ini-probe.php" 2>/dev/null)"
             case "$body" in
                 *"active=1"*) active=1 ;;
                 *"active=0"*) active=0 ;;
@@ -1010,7 +1118,7 @@ assert_mode_live() { # arm workers mode
 assert_arm_shape() { # arm workers mode children
     local arm="$1" n="$2" mode="$3" children="$4"
     case "$arm" in
-        volucer-unix|volucer-attach|volucer-prefork) ;;
+        volucer-unix|volucer-attach|volucer-prefork|volucer-external) ;;
         *) return 0 ;;
     esac
 
@@ -1045,24 +1153,64 @@ assert_arm_shape() { # arm workers mode children
             ;;
         volucer-prefork)
             local want; want=$(( n * children + n ))
-            case "$out" in
-                *"children = $children per slot"*) ;;
-                *) echo "  shape check [$arm]: children is not $children per slot" | tee -a "$META" >&2
-                   echo "$out" | grep -i prefork | sed 's/^/    /' >&2
-                   return 1 ;;
-            esac
-            # The process total is checked against the process count rather than
-            # against a phrase, because `volucer check` writes "1 slot" and
-            # "16 slots" — the plural is the program's wording, not a property to
-            # depend on in a gate.
-            local got
-            got="$(echo "$out" | grep -oE '\([0-9]+ PHP processes' | grep -oE '[0-9]+' | head -1)"
-            if [ "${got:-}" != "$want" ]; then
-                echo "  shape check [$arm]: expected $want PHP processes across $n slots, check reports ${got:-nothing}" |
+            # 0.5.0 reports the whole shape on one line:
+            #     processes:         40 (workers 8 × (children 4+1))
+            # It used to say "children = N per slot" and "(N PHP processes", and
+            # this gate read those words. The rewording therefore cost the arm
+            # EVERY cell of a run — `NOT MEASURED: the arm's own shape could not
+            # be proved` — which is the same class of breakage as the
+            # `default_backend` move in 0.3.0. Parse the NUMBERS, not the
+            # sentence, so the next rewording is not a missing row.
+            #
+            # `LC_ALL=C` is set at the top of this script, so the `×` is two
+            # bytes and `.` would match half of it; every pattern below anchors
+            # on ASCII only.
+            local got nw nc np
+            got="$(echo "$out" | grep -E '\(workers [0-9]+ .*\(children [0-9]+' | head -1)"
+            nw="$(echo "$got" | grep -oE 'workers [0-9]+' | grep -oE '[0-9]+')"
+            nc="$(echo "$got" | grep -oE 'children [0-9]+' | grep -oE '[0-9]+')"
+            np="$(echo "$out" | grep -oE 'processes: +[0-9]+' | head -1 | grep -oE '[0-9]+')"
+            if [ -z "$got" ]; then
+                echo "  shape check [$arm]: no 'workers W (children C' line in check output" |
                     tee -a "$META" >&2
-                echo "$out" | grep -i prefork | sed 's/^/    /' >&2
+                echo "$out" | sed -n '/backends:/,/routes:/p' | sed 's/^/    /' >&2
                 return 1
             fi
+            if [ "${nw:-}" != "$n" ] || [ "${nc:-}" != "$children" ]; then
+                echo "  shape check [$arm]: running workers=$nw children=$nc, wanted $n/$children" |
+                    tee -a "$META" >&2
+                echo "$got" | sed 's/^/    /' >&2
+                return 1
+            fi
+            # The process total is checked against the count rather than against
+            # a phrase, because `volucer check` writes "1 slot" and "16 slots" —
+            # the plural is the program's wording, not a property to depend on.
+            if [ "${np:-}" != "$want" ]; then
+                echo "  shape check [$arm]: expected $want PHP processes across $n slots, check reports ${np:-nothing}" |
+                    tee -a "$META" >&2
+                echo "$got" | sed 's/^/    /' >&2
+                return 1
+            fi
+            ;;
+        volucer-external)
+            # The claim this arm makes is "the front-end changed, the pool did
+            # not". Proved from the file the live server was started from: an
+            # `external` backend that silently fell back to `worker` or
+            # `spawn_cgi` would still answer 200 and still write a throughput
+            # number under this arm's name — the failure mode assert_mode_live
+            # exists to prevent for opcache, one layer up.
+            case "$out" in
+                *"app: external (default)"*) ;;
+                *) echo "  shape check [$arm]: the default backend is not external:" | tee -a "$META" >&2
+                   echo "$out" | grep -A3 "backends:" | sed 's/^/    /' >&2
+                   return 1 ;;
+            esac
+            case "$out" in
+                *"socket:            unix:$SOCK/fpm-ext.sock"*) ;;
+                *) echo "  shape check [$arm]: not dialling $SOCK/fpm-ext.sock" | tee -a "$META" >&2
+                   echo "$out" | grep -i socket | sed 's/^/    /' >&2
+                   return 1 ;;
+            esac
             ;;
     esac
     return 0
@@ -1144,6 +1292,33 @@ volucer_ref() {
     fi
     echo "(untraceable: no git checkout at $dir)"
 }
+
+# A run of one arm's own shapes is a different document from a run that puts
+# several servers side by side, so the order each wants differs and the default
+# follows the run rather than the harness.
+#
+# **Interleaved** (`ORDER=interleaved`) starts every arm inside every round
+# and rotates which arm goes first, so a drift of *any* shape lands on every
+# arm equally often. A cross-server ratio is a ratio, so it wants the
+# interleaved order. The survey of one server's own shapes does not compare
+# arms against each other, so it is happy either way - and blocked, because it
+# makes one arm's memory profile a contiguous run rather than something
+# interleaved with four others.
+#
+# Defaulted from the arm list rather than to a constant: a nine-arm comparison
+# that silently ran blocked would charge host drift to whichever arm went last,
+# which is exactly the artefact the interleaved order exists to remove.
+#
+# Resolved HERE, above the header, because the header reports it. It used to be
+# assigned beside the cells, so under `set -u` the header aborted with
+# `ORDER: unbound variable` and the meta file a published run is captioned from
+# stopped halfway through.
+ARMS_LIST=(${ARMS//,/ })
+if [ -z "$(printf '%s\n' "${ARMS_LIST[@]}" | grep -vE '^volucer-')" ]; then
+    ORDER="${ORDER:-blocked}"
+else
+    ORDER="${ORDER:-interleaved}"
+fi
 
 : > "$RESULTS"
 : > "$MEMFILE"
@@ -1278,6 +1453,11 @@ printf 'arm\tworkers\topcache\tphase\tconc\tpss_mb\trss_mb\tpids\tchildren\n' >>
 # (hazard 49), and the same trap caught the `worker_pool.rs` split, which read
 # as -3.3% until the two binaries were alternated `A,B,B,A`.
 #
+# A run of one arm's own shapes is a different document from a run that puts
+# several servers side by side, so the order each wants differs and the default
+# follows the run rather than the harness. It is resolved above the header,
+# which reports it — see the note there.
+#
 # **Interleaved** (`ORDER=interleaved`) starts every arm inside every round
 # and rotates which arm goes first, so a drift of *any* shape lands on every
 # arm equally often. A cross-server ratio is a ratio, so it wants the
@@ -1285,9 +1465,6 @@ printf 'arm\tworkers\topcache\tphase\tconc\tpss_mb\trss_mb\tpids\tchildren\n' >>
 # arms against each other, so it is happy either way - and blocked, because it
 # makes one arm's memory profile a contiguous run rather than something
 # interleaved with four others.
-ORDER="${ORDER:-blocked}"
-
-ARMS_LIST=(${ARMS//,/ })
 
 # The cells, as (arm|workers|opcache|children). Built once, so the rotation
 # has a stable order to work with.

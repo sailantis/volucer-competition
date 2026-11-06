@@ -111,6 +111,7 @@ ARM_ORDER = [
     "volucer-attach",
     "volucer-fastcgi",
     "volucer-prefork",
+    "volucer-external",
     "rr",
     "frankenphp",
     "fpm",
@@ -121,6 +122,7 @@ ARM_NAME = {
     "volucer-attach": "volucer attach (warm, unix relay)",
     "volucer-fastcgi": "volucer spawn_cgi (cold, unix, 1/slot)",
     "volucer-prefork": "volucer spawn_cgi children (cold, unix)",
+    "volucer-external": "volucer external -> php-fpm (cold, unix)",
     "rr": "RoadRunner worker (warm, pipe)",
     "frankenphp": "FrankenPHP worker (warm, embedded)",
     "fpm": "nginx + php-fpm (cold, unix)",
@@ -560,7 +562,8 @@ def main():
         out.append("# Worker / opcache / concurrency matrix")
     out.append("")
     if modes_run:
-        out.append("Five volucer shapes, one server, one page, one host. The point of the run is")
+        n_shapes = len(arms)
+        out.append(f"{n_shapes} volucer shapes, one server, one page, one host. The point of the run is")
         out.append("that every row is the *same* server with one thing changed, so a difference")
         out.append("between two rows is that thing:")
         out.append("")
@@ -571,6 +574,7 @@ def main():
         out.append("| `volucer-attach` | unix relay | one boot, `fork()` per connection | the memory model |")
         out.append("| `volucer-fastcgi` | unix socket | one `php-cgi` per slot | the SAPI reset per request |")
         out.append("| `volucer-prefork` | unix socket | `php-cgi` + `children` per slot | fork inside a cold slot |")
+        out.append("| `volucer-external` | unix socket | a real php-fpm pool | the front-end, at the cold model |")
         out.append("")
     else:
         out.append("Every arm on one host, through one harness, so a difference between two")
