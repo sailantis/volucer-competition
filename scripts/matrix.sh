@@ -456,13 +456,19 @@ sanity_page() { # port
     local body marker
     body="$(curl -sS --max-time 20 "http://127.0.0.1:$1$ENDPOINT" 2>/dev/null)"
     # The marker is a property of the page, not of the harness. `/items` renders
-    # a list of items and `/` renders the landing page, so the check follows the
-    # endpoint rather than insisting on one page's marker - otherwise a run
-    # against a different endpoint is refused for rendering the wrong page
-    # correctly.
+    # a list of items, `/` renders the landing page and `/api/items` renders a JSON
+    # array, so the check follows the endpoint rather than insisting on one page's
+    # marker - otherwise a run against a different endpoint is refused for
+    # rendering the wrong page correctly.
+    #
+    # `/api/items` used to fall through to the `/items` marker and pass only
+    # because the seeded titles contain the same words. That is luck, not
+    # validation: a JSON endpoint that answered with the list's *template* would
+    # satisfy it too. It is matched on the JSON shape instead.
     case "$ENDPOINT" in
-        /)  marker="<title>" ;;
-        *)  marker="Benchmark Item" ;;
+        /)              marker="<title>" ;;
+        /api/*)         marker='[{"' ;;
+        *)              marker="Benchmark Item" ;;
     esac
     case "$body" in
         *"$marker"*) return 0 ;;
