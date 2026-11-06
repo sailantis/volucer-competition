@@ -464,6 +464,83 @@ def fmt_pct(value):
     return "—" if value is None else f"{value:+.1f}%"
 
 
+def table_by_total_processes(rows, mem_rows, concs):
+    """The only cross-arm view that is honest about what `workers` means.
+
+    Comparing arms down a `workers` column compares different quantities: threads
+    against spawned processes against php-fpm children against prefork's sockets,
+    where a socket carries a master as well as its children. The quantity an
+    operator sizes a host from is the number of PHP processes actually running, so
+    that is the axis here — read from the measured `pids` of each arm's process
+    tree rather than computed from the configuration, because the configuration is
+    exactly what disagrees.
+
+    Rows that share a process count are the comparable ones. An em dash is an arm
+    that was not measured at that count, not a zero.
+    """
+    if not mem_rows:
+        return []
+
+    # Measured process count per configuration, and the throughput samples per
+    # (configuration, concurrency).
+    procs: dict[tuple[str, str, str], int] = {}
+    for m in mem_rows:
+        child = m.get("children", "") or ""
+        try:
+            procs[(m["arm"], m["workers"], child)] = int(m["pids"])
+        except (KeyError, TypeError, ValueError):
+            continue
+
+    samples: dict[tuple[str, str, str, str], list[float]] = {}
+    for r in rows:
+        if r["rps"] == "FAIL":
+            continue
+        child = r.get("children", "") or ""
+        key = (r["arm"], r["workers"], child)
+        if key not in procs:
+            continue
+        v = num(r["rps"])
+        if v is None:
+            continue
+        samples.setdefault(key + (r["conc"],), []).append(v)
+
+    # process count -> arm -> (config label, {conc: samples key}). Concurrency keys
+    # stay the strings the TSV carries, which is what `concs` below iterates.
+    table: dict[int, dict[str, tuple[str, dict[str, tuple]]]] = {}
+    for key in samples:
+        arm, workers, child, conc = key
+        n = procs[(arm, workers, child)]
+        label = f"w={workers}" + (f" ch={child}" if child else "")
+        entry = table.setdefault(n, {}).setdefault(arm, (label, {}))
+        entry[1][conc] = key
+
+    shared = {n: v for n, v in table.items() if len(v) >= 2}
+    if not shared:
+        return []
+
+    out = ["## At equal PHP process counts", ""]
+    out.append("`workers` is not one quantity across arms (see the note above), so this is")
+    out.append("the axis on which the arms can be read against each other. The count is the")
+    out.append("measured `pids` of each arm's process tree, not the configured value, and the")
+    out.append("parenthesised config is what produced it.")
+    out.append("")
+    for n in sorted(shared):
+        arms = shared[n]
+        out.append(f"**{n} PHP processes**")
+        out.append("")
+        out.append("| arm (config) | " + " | ".join(f"c={c}" for c in concs) + " |")
+        out.append("|---|" + "---|" * len(concs))
+        for arm in arm_sort(arms):
+            label, by_conc = arms[arm]
+            row = []
+            for c in concs:
+                key = by_conc.get(c)
+                row.append(f"{med(samples[key]):,.0f}" if key in samples else "—")
+            out.append(f"| {ARM_NAME.get(arm, arm)} ({label}) | " + " | ".join(row) + " |")
+        out.append("")
+    return out
+
+
 def table_shape_pairs(rows, mem_rows, concurrency):
     """The questions the run exists to answer, as ratios between matched rows.
 
@@ -598,6 +675,17 @@ def main():
         out.append("behind each, so `w=16 ch=4` is one master, four children, per socket. Every")
         out.append("other arm leaves it empty because it has no such setting.")
         out.append("")
+        out.append("**A `workers` column is not one quantity across arms, so do not read it")
+        out.append("down as if it were.** It is spawned processes for `rr` and the `spawn_cgi`")
+        out.append("arms, connections into somebody else's supervisor for `attach`, php-fpm's")
+        out.append("`pm.max_children` for `fpm` and `external`, and **threads** — not")
+        out.append("processes — for `frankenphp`, which is a single OS process at every")
+        out.append("setting. `proc_kind` in `matrix.tsv` records which. The rows that are")
+        out.append("actually comparable are the ones whose *total PHP process count* matches:")
+        out.append("`prefork` costs `workers x (children + 1)` because every socket carries a")
+        out.append("master as well as its children, so `w=1 ch=15` is 16 PHP processes and")
+        out.append("equals `w=16` on any one-process-per-slot arm.")
+        out.append("")
 
     out.append("## Throughput (requests/sec)")
     out.append("")
@@ -652,6 +740,8 @@ def main():
     out.append("")
     for c in concs:
         out += table_shape_pairs(rows, mem_rows, c)
+
+    out += table_by_total_processes(rows, mem_rows, concs)
 
     out.append("## Memory")
     out.append("")
