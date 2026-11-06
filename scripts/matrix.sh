@@ -260,6 +260,14 @@ THREADS_LIST="${THREADS_LIST:-}"
 # THREADS_LIST unset - i.e. the ordinary case.
 TLIST="${THREADS_LIST//,/ }"
 [ -n "$TLIST" ] || TLIST="$THREADS"
+# How many nginx worker processes the `fpm` arm runs.
+#
+# Deliberately separate from `workers`: in that arm `workers` is php-fpm's
+# `pm.max_children` and says nothing about the front end. Fixed at 4 like every
+# published run, `auto` for one per logical CPU, or an explicit count.
+NGINX_WORKERS="${NGINX_WORKERS:-4}"
+[ "$NGINX_WORKERS" = "auto" ] && NGINX_WORKERS="$(nproc)"
+
 ENDPOINT="${ENDPOINT:-/items}"
 WARMUP="${WARMUP:-2s}"
 # Passed straight through to every PHP process this script starts. Unset means
@@ -913,7 +921,18 @@ cfg_nginx() { # file port socket
 # A private nginx instance (-p/-c), not the host's: this matrix restarts the FPM
 # arm eight times and must not reload a server that is serving something else.
 daemon off;
-worker_processes 4;
+# The front end's own parallelism, and it is NOT a detail when this arm is
+# compared with a volucer one. nginx serving FastCGI is an event loop per worker;
+# volucer is one thread group. Leaving nginx at 4 while volucer runs 12 compares
+# 4 event loops against 12 and calls the result "nginx vs volucer", which is what
+# probe-nginx-vs-volucer.sh's own NGINX_WORKERS knob exists to prevent.
+#
+# Default kept at 4 because that is what every published table was measured with,
+# and changing it silently would make those incomparable. Override it to match the
+# front-end under test:
+#   NGINX_WORKERS=12   matched against volucer's thread count
+#   NGINX_WORKERS=auto one per logical CPU
+worker_processes $NGINX_WORKERS;
 error_log $NGX/error.log warn;
 pid $NGX/nginx.pid;
 
@@ -1358,7 +1377,7 @@ fi
     echo "  php:         $($PHP -v | head -1)"
     echo "  php-cgi:     $($PHP_CGI -v | head -1)"
     echo "  php-fpm:     $($PHP_FPM -v | head -1)"
-    echo "  nginx:       $($NGINX -v 2>&1 | head -1)"
+    echo "  nginx:       $($NGINX -v 2>&1 | head -1) (worker_processes $NGINX_WORKERS)"
     echo "  volucer:     $($BIN version 2>/dev/null | head -1)"
     # The commit the server under test was built from. `volucer version` prints
     # the version, not the commit, so the commit is read from the checkout the
