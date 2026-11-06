@@ -574,6 +574,31 @@ recorded_children() { # children
 # something: volucer starts no PHP there at all, and the supervisor forks one child
 # per connection volucer dials, so the count is `workers` — plus the master, which
 # is one more, and the same for the preforked `spawn_cgi` slots.
+# What this arm's `workers` column COUNTS, written into every row.
+#
+# The column is not the same quantity across arms, and that ambiguity cost a real
+# misreading: a prefork row at `workers = 32, children = 4` is 161 PHP processes,
+# not 32, because every slot carries a master as well as its children
+# (`workers * (children + 1)`); an `attach` row counts dialled connections against
+# a supervisor someone else forked; a `worker` row counts spawned processes each
+# with its own interpreter and its own OPcache segment; and an `external` row
+# counts nothing at all, because `external` has no `workers` key and the number
+# written there is php-fpm's `pm.max_children`.
+#
+# Recording the kind beside the number is what stops a reader — or a report — from
+# putting two different quantities in one column and calling the difference a
+# finding.
+proc_kind() { # arm
+    case "$1" in
+        volucer-prefork)  echo "slots+children" ;;
+        volucer-attach)   echo "connections" ;;
+        volucer-external) echo "fpm-children" ;;
+        fpm)              echo "fpm-children" ;;
+        frankenphp)       echo "threads" ;;
+        *)                echo "processes" ;;
+    esac
+}
+
 php_processes() { # arm workers children
     case "$1" in
         volucer-prefork)
@@ -1248,15 +1273,17 @@ run_cell() { # arm workers mode conc round [threads] [children]
     errs="$(grep -cE 'Non-2xx or 3xx responses|Socket errors' "$out" 2>/dev/null)"
 
     if [ -z "$rps" ] || [ -z "$p50" ] || [ -z "$p99" ]; then
-        printf '%s\t%s\t%s\t%s\t%s\t%s\tFAIL\t?\t?\t%s\t%s\n' \
-            "$arm" "$n" "$mode" "$conc" "$round" "$threads" "$errs" "$children" >> "$RESULTS"
+        printf '%s\t%s\t%s\t%s\t%s\t%s\tFAIL\t?\t?\t%s\t%s\t%s\n' \
+            "$arm" "$n" "$mode" "$conc" "$round" "$threads" "$errs" "$children" \
+            "$(proc_kind "$arm")" >> "$RESULTS"
         printf '    %-15s w=%-2s %-3s ch=%-2s t=%-3s c=%-3s r=%s  FAILED (incomplete wrk output)\n' \
             "$arm" "$n" "$mode" "${children:--}" "$threads" "$conc" "$round"
         return 1
     fi
 
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-        "$arm" "$n" "$mode" "$conc" "$round" "$threads" "$rps" "$p50" "$p99" "$errs" "$children" >> "$RESULTS"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        "$arm" "$n" "$mode" "$conc" "$round" "$threads" "$rps" "$p50" "$p99" "$errs" "$children" \
+        "$(proc_kind "$arm")" >> "$RESULTS"
     printf '    %-15s w=%-2s %-3s ch=%-2s t=%-3s c=%-3s r=%s  %9s rps  p50 %8s  p99 %8s\n' \
         "$arm" "$n" "$mode" "${children:--}" "$threads" "$conc" "$round" "$rps" "$p50" "$p99"
 }
@@ -1435,7 +1462,7 @@ PROBE
 cleanup_probe() { rm -f "$ROOT/public/.bench-ini-probe.php"; }
 trap 'stop_arm; cleanup_probe' EXIT
 
-printf 'arm\tworkers\topcache\tconc\tround\tthreads\trps\tp50\tp99\terrors\tchildren\n' >> "$RESULTS"
+printf 'arm\tworkers\topcache\tconc\tround\tthreads\trps\tp50\tp99\terrors\tchildren\tproc_kind\n' >> "$RESULTS"
 printf 'arm\tworkers\topcache\tphase\tconc\tpss_mb\trss_mb\tpids\tchildren\n' >> "$MEMFILE"
 
 # ---------------------------------------------------------------------------
@@ -1540,6 +1567,16 @@ run_cell_blocked() { # arm n mode children
     wrk -t"$THREADS" -c"$THREADS" -d"$WARMUP" \
         "http://127.0.0.1:$(port_of "$arm")$ENDPOINT" >/dev/null 2>&1
 
+    measure_arm_round "$arm" "$n" "$mode" "$children"
+    finish_arm "$arm" "$n" "$mode" "$children"
+}
+
+# One round of one already-started cell: every concurrency level, then the memory
+# sample. Split out of run_cell_blocked so the interleaved order can revisit a
+# cell for its second round WITHOUT restarting the server.
+measure_arm_round() { # arm n mode children
+    local arm="$1" n="$2" mode="$3" children="$4"
+    local conc tl threads
     for conc in ${CONC//,/ }; do
         for tl in $TLIST; do
             # `tc` means "one client thread per concurrent request",
@@ -1557,6 +1594,10 @@ run_cell_blocked() { # arm n mode children
             run_cell "$arm" "$n" "$mode" "$conc" "$ROUND_NOW" "$threads" "$CHILDREN"
         done
     done
+}
+
+finish_arm() { # arm n mode children
+    local arm="$1" n="$2" mode="$3" children="$4"
     # After the hardest cell of the round, not between cells: a sample
     # taken mid-round would describe a pool that is still warming.
     record_mem "$arm" "$n" "$mode" post \
@@ -1569,6 +1610,24 @@ run_cell_blocked() { # arm n mode children
 if [ "$ORDER" = "interleaved" ]; then
     # The rotation: round r starts at cell (r-1) mod N, so no cell is always
     # first and no cell is always last.
+    #
+    # Each round STARTS every cell again, and that is not incidental — it is the
+    # mechanism. Interleaving means round 1 measures one round of every cell before
+    # round 2 measures the next round of any of them, and the only way to do that
+    # without keeping every arm resident at once (which would cost the memory of
+    # all of them and change what each one has to itself) is to start a cell, take
+    # one round, and stop it.
+    #
+    # The cost is real and worth stating: a `static` php-fpm pool and a `children`
+    # pool spawn their processes at start, so each cell pays a spawn burst per
+    # round. That burst is what `WARMUP` exists to absorb, and it is why a run
+    # that is going to be published wants ROUNDS >= 3 — the first round of a cell
+    # is the one most likely to be carrying it.
+    #
+    # Blocked order does the opposite: one cell, all of its rounds, then the next.
+    # Use blocked for a survey of one server's own shapes (it keeps a shape's
+    # memory profile contiguous) and interleaved when a number will be compared
+    # across servers.
     for round in $(seq 1 "$ROUNDS"); do
         echo
         echo "=============================================================="
