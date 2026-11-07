@@ -69,8 +69,10 @@ def main():
                 for rnd in (1, 2, 3):
                     mtx_rows.append([p, arm, 32, "on", conc, rnd, 12,
                                      RPS[(p, arm)], "1.0ms", "2.0ms", 0, "", "process"])
-            mem_rows.append([p, arm, 32, "on", "boot", 0, 100.0, 120.0, 32, ""])
-            mem_rows.append([p, arm, 32, "on", "post", 96, 300.0, 340.0, 32, ""])
+            # `*` and written once, exactly as matrix.sh does it: a footprint is a
+            # property of the configuration, not of the page.
+            mem_rows.append(["*", arm, 32, "on", "boot", 0, 100.0, 120.0, 32, ""])
+            mem_rows.append(["*", arm, 32, "on", "post", 96, 300.0, 340.0, 32, ""])
 
     mpath = os.path.join(tmp, "matrix.tsv")
     mempath = os.path.join(tmp, "memory.tsv")
@@ -115,10 +117,30 @@ def main():
                     print(f"FAIL {p} section leaked {q}'s {arm} rps {other}")
                     fails += 1
 
-    # `*` memory rows must not create a phantom endpoint.
+    # `*` memory rows must not create a phantom endpoint, AND must still appear in
+    # every real section. Getting only the first half right is the failure this
+    # caught: the rows were grouped correctly and then filtered away, so all four
+    # sections said "no memory samples recorded" while the TSV had them.
     if "<unrecorded>" in out:
         print("FAIL memory '*' produced a phantom endpoint section")
         fails += 1
+    for p in PATHS:
+        start = out.index(f"## `{p}`")
+        nxt = [out.index(f"## `{q}`") for q in PATHS if q != p and f"## `{q}`" in out]
+        end = min([x for x in nxt if x > start], default=len(out))
+        block = out[start:end]
+        mem_i = block.find("## Memory")
+        if mem_i < 0:
+            print(f"FAIL {p} section has no Memory heading")
+            fails += 1
+            continue
+        mem_block = block[mem_i:]
+        if "_no memory samples recorded_" in mem_block:
+            print(f"FAIL {p} section lost its memory rows to the '*' path")
+            fails += 1
+        if "PSS" not in mem_block:
+            print(f"FAIL {p} section's memory tables have no PSS column")
+            fails += 1
 
     # --- 2. legacy TSV with no path column ---------------------------------
     old_mtx = [r[1:] for r in mtx_rows if r[0] == "/items"]

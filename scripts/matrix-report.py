@@ -707,7 +707,11 @@ def main():
 def path_section(all_rows, all_mem_rows, path, multi, matrix_path, mem_path):
     """The full set of tables for one measured path."""
     rows = [r for r in all_rows if path_of(r) == path]
-    mem_rows = [r for r in all_mem_rows if path_of(r) == path]
+    # A memory row records `*`: a worker's footprint is a property of the
+    # configuration, not of the page, so one sample describes every endpoint.
+    # An unrecorded path (a TSV from before the column) does too, because that run
+    # measured exactly one page.
+    mem_rows = [r for r in all_mem_rows if path_of(r) in (path, "*", "<unrecorded>")]
     concs = ordered({r["conc"] for r in rows if r["rps"] != "FAIL"})
 
     arms = sorted({r["arm"] for r in rows})
