@@ -337,6 +337,35 @@ fail() { echo "FATAL: $*" >&2; exit 1; }
 [ -n "$NGINX" ] || fail "no nginx on PATH"
 command -v wrk >/dev/null 2>&1 || fail "no wrk on PATH"
 
+# A stray listener from an earlier run occupies the port an arm is about to bind,
+# and the failure it produces is a whole cell of FAIL rows rather than an error
+# anyone attributes to the stray: measured, after an aborted run left a volucer on
+# 18510, the next run's cell failed with `Address already in use` and recorded
+# eight FAIL rows.
+#
+# Checked before the run starts, so a stale process is a message and not a lost
+# cell. It cannot be checked per cell by `stop_arm` alone: that only knows about
+# processes this run started.
+check_ports_free() {
+    local bound
+    bound="$(ss -ltn 2>/dev/null | awk -v base="$PORT_BASE" '
+        NR > 1 {
+            port = $4
+            sub(/.*:/, "", port)
+            if (port >= base && port < base + 20) print $4
+        }')"
+    [ -z "$bound" ] && return 0
+    echo "FATAL: a listener is already bound on the benchmark port range (base $PORT_BASE):" >&2
+    echo "$bound" | sed 's/^/  /' >&2
+    echo "Start the run once nothing is holding those ports (a killed run can leave a" >&2
+    echo "volucer behind: check with \`ss -ltnp | grep -E ':185[0-9][0-9]'\`)." >&2
+    return 1
+}
+# `|| true`: a host without `ss` must still run, and the per-cell wait in
+# `stop_arm` covers the same ground once the run is going.
+if command -v ss >/dev/null 2>&1; then
+    check_ports_free || fail "ports are occupied (see above)"
+fi
 mkdir -p "$CFG" "$LOG" "$SOCK" "$NGX"
 mkdir -p "$NGX/tmp/client" "$NGX/tmp/proxy" "$NGX/tmp/fastcgi" "$NGX/tmp/uwsgi" "$NGX/tmp/scgi"
 chmod 0755 "$SOCK"
@@ -552,6 +581,48 @@ stop_arm() {
         echo "  LEAK: $(echo $ids | wc -w) process(es) survived SIGKILL: $ids" | tee -a "$META" >&2
     fi
     ROOTS=()
+    # The PROCESS being gone is not the same as its LISTENER being gone, and the gap
+    # between them costs a whole cell rather than a request.
+    #
+    # Measured: an aborted run left a volucer holding 18510; the next run's cell
+    # found it, failed with `cannot bind 127.0.0.1:18510: Address already in use`,
+    # and recorded eight FAIL rows -- correctly, since serving behind another
+    # run's listener would have been worse. `kill -0` had already said the process
+    # was gone by then; it was the socket that lingered.
+    #
+    # Bounded, and it only waits when the port is actually still bound, so the
+    # ordinary path pays one `ss` per cell.
+    wait_port_free
+}
+
+# Block until no benchmark listener is still bound, for at most ~15 s.
+#
+# A port here is an arm's HTTP listener. Anything still bound after its owner has
+# exited is either a TIME_WAIT (harmless, and bindable again because volucer sets
+# SO_REUSEADDR) or a live process this harness failed to reap -- and the second is
+# what must not reach the next cell.
+wait_port_free() {
+    local i bound
+    for i in $(seq 1 60); do
+        bound="$(ss -ltn 2>/dev/null | awk -v base="$PORT_BASE" '
+            NR > 1 {
+                port = $4
+                sub(/.*:/, "", port)
+                if (port >= base && port < base + 20) n++
+            }
+            END { print n + 0 }')"
+        [ "$bound" = "0" ] && return 0
+        sleep 0.25
+    done
+    echo "  LISTENERS: $bound benchmark port(s) still bound after teardown (base $PORT_BASE)" \
+        | tee -a "$META" >&2
+    ss -ltn 2>/dev/null | awk -v base="$PORT_BASE" '
+        NR > 1 {
+            port = $4
+            sub(/.*:/, "", port)
+            if (port >= base && port < base + 20) print "    " $4
+        }' >&2
+    return 1
 }
 
 # The `children` values to sweep for an arm.
