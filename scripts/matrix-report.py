@@ -142,6 +142,7 @@ def ordered(values):
 ARM_ORDER = [
     "volucer-worker",
     "volucer-unix",
+    "volucer-tcp",
     "volucer-attach",
     "volucer-fastcgi",
     "volucer-prefork",
@@ -153,6 +154,7 @@ ARM_ORDER = [
 ARM_NAME = {
     "volucer-worker": "volucer worker (warm, pipe)",
     "volucer-unix": "volucer worker (warm, unix socket)",
+    "volucer-tcp": "volucer worker (warm, loopback TCP port)",
     "volucer-attach": "volucer attach (warm, unix relay)",
     "volucer-fastcgi": "volucer spawn_cgi (cold, unix, 1/slot)",
     "volucer-prefork": "volucer spawn_cgi children (cold, unix)",

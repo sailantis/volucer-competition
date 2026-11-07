@@ -25,6 +25,7 @@
 #
 #     volucer-worker   volucer `worker` backend       warm, pipe
 #     volucer-unix     volucer `worker` backend       warm, unix socket
+#     volucer-tcp      volucer `worker` backend       warm, loopback TCP port
 #     volucer-attach   volucer `attach` backend       warm, unix relay, one boot forked
 #     volucer-fastcgi  volucer `spawn_cgi` backend    cold, unix socket, 1 process/slot
 #     volucer-prefork  volucer `spawn_cgi` backend    cold, unix socket, n children/slot
@@ -201,7 +202,7 @@ PHP_FPM="${PHP_FPM:-$(default_fpm)}"
 NGINX="${NGINX:-$(command -v nginx || true)}"
 RUNDIR="${RUNDIR:-$HOME/matrix-run}"
 
-ARMS="${ARMS:-volucer-worker,volucer-unix,volucer-attach,volucer-fastcgi,volucer-prefork,volucer-external,rr,frankenphp,fpm}"
+ARMS="${ARMS:-volucer-worker,volucer-unix,volucer-tcp,volucer-attach,volucer-fastcgi,volucer-prefork,volucer-external,rr,frankenphp,fpm}"
 WORKERS_LIST="${WORKERS_LIST:-12,16,20,24}"
 # `WORKERS_LIST` applies to every arm, and on most arms it means one thing: the
 # number of PHP processes serving the site. It cannot mean that everywhere.
@@ -305,6 +306,10 @@ PORT_F=$((PORT_BASE + 5))
 # URL, because every request would then be served by a stale pool at the wrong
 # configuration and recorded as the new one.
 PORT_U=$((PORT_BASE + 6))
+# The loopback-transport arm is a second volucer with its own pool and its own
+# listener, so it needs its own HTTP port for the same reason: a stale listener
+# left on a shared port would answer the next cell's URL at the wrong shape.
+PORT_Q=$((PORT_BASE + 10))
 PORT_A=$((PORT_BASE + 7))
 PORT_P=$((PORT_BASE + 8))
 # `external` needs its own port for the same reason: it is a second volucer, in
@@ -769,6 +774,41 @@ max_requests = 0
 EOF
 }
 
+cfg_volucer_tcp() { # file port workers mode
+    cat > "$1" <<EOF
+# volucer + resident worker over a LOOPBACK TCP PORT: the portable warm arm.
+#
+# This is the only warm volucer arm that does not need unix sockets, so it is the
+# one that also runs on Windows. \`transport = "socket"\` selects the socket
+# transport and the ABSENCE of a \`socket\` key is what makes it a loopback port:
+# the key takes a unix socket path prefix, so writing an address there is a
+# startup error ("the loopback transport picks its own ephemeral port"). The
+# server binds an ephemeral port per slot and hands the worker the address, so
+# nothing here names a port and two slots can never collide.
+#
+# It is deliberately NOT \`transport = "pipe"\`, which is the faster default on
+# Linux: this arm exists to measure the transport a Windows deployment gets, and
+# on Windows the default is already \`socket\` for a measured reason (~8 ms vs
+# ~0.09 ms median for a blocking read on a pipe, PHP's stream layer).
+[server]
+default_backend = "app"
+
+http = "127.0.0.1:$2"
+document_root = "$ROOT/public"
+
+[server.static_files]
+enabled = false
+
+[backends.app]
+kind = "worker"
+command = "$CFG/php-worker-$4 $ROOT/worker.php"
+workers = $3
+transport = "socket"
+working_dir = "$ROOT"
+max_requests = 0
+EOF
+}
+
 cfg_volucer_attach() { # file port workers mode
     cat > "$1" <<EOF
 # volucer + attach: volucer starts no PHP and dials a relay that a prefork
@@ -1047,6 +1087,10 @@ start_arm() { # arm workers mode
             cfg_volucer_unix "$CFG/$arm-$n-$mode.toml" "$PORT_U" "$n" "$mode"
             start_bg "$LOG/$arm-$n-$mode.log" "$BIN" serve -c "$CFG/$arm-$n-$mode.toml"
             ;;
+        volucer-tcp)
+            cfg_volucer_tcp "$CFG/$arm-$n-$mode.toml" "$PORT_Q" "$n" "$mode"
+            start_bg "$LOG/$arm-$n-$mode.log" "$BIN" serve -c "$CFG/$arm-$n-$mode.toml"
+            ;;
         volucer-attach)
             rm -f "$SOCK/relay"
             cfg_volucer_attach "$CFG/$arm-$n-$mode.toml" "$PORT_A" "$n" "$mode"
@@ -1136,6 +1180,7 @@ port_of() {
     case "$1" in
         volucer-worker)  echo "$PORT_W" ;;
         volucer-unix)    echo "$PORT_U" ;;
+        volucer-tcp)     echo "$PORT_Q" ;;
         volucer-attach)  echo "$PORT_A" ;;
         volucer-fastcgi) echo "$PORT_T" ;;
         volucer-prefork) echo "$PORT_P" ;;
@@ -1210,7 +1255,7 @@ assert_mode_live() { # arm workers mode
 assert_arm_shape() { # arm workers mode children
     local arm="$1" n="$2" mode="$3" children="$4"
     case "$arm" in
-        volucer-unix|volucer-attach|volucer-prefork|volucer-external) ;;
+        volucer-unix|volucer-tcp|volucer-attach|volucer-prefork|volucer-external) ;;
         *) return 0 ;;
     esac
 
@@ -1223,6 +1268,18 @@ assert_arm_shape() { # arm workers mode children
             case "$out" in
                 *"transport:         socket on unix:"*) ;;
                 *) echo "  shape check [$arm]: not a unix socket transport:" | tee -a "$META" >&2
+                   echo "$out" | grep -i transport | sed 's/^/    /' >&2
+                   return 1 ;;
+            esac
+            ;;
+        volucer-tcp)
+            # The point of the arm is that the transport is a loopback PORT and not
+            # a pipe and not a unix socket: a pipe here would be the faster Linux
+            # default and answer a different question, and a unix socket would
+            # duplicate the `unix` arm. Assert both halves.
+            case "$out" in
+                *"transport:         socket on a loopback port"*) ;;
+                *) echo "  shape check [$arm]: not a loopback-port transport:" | tee -a "$META" >&2
                    echo "$out" | grep -i transport | sed 's/^/    /' >&2
                    return 1 ;;
             esac
