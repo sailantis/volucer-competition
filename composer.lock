@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "4c05f0a467b53d11c734961775fff1ea",
+    "content-hash": "01bedc6850f466a07d4f5b8ef1c6f8ab",
     "packages": [
         {
             "name": "google/protobuf",
@@ -455,17 +455,166 @@
             "time": "2026-10-09T15:32:54+00:00"
         },
         {
-            "name": "sailantis/azera-framework",
-            "version": "dev-main",
+            "name": "roadrunner/goridge",
+            "version": "4.6.0",
             "source": {
                 "type": "git",
-                "url": "https://github.com/sailantis/azera-framework.git",
-                "reference": "429219837b4198141205bff539233a744eb1a115"
+                "url": "https://github.com/roadrunner-php/goridge.git",
+                "reference": "887bd3a6f89a0b95252db608856d33d7a1284406"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/sailantis/azera-framework/zipball/429219837b4198141205bff539233a744eb1a115",
-                "reference": "429219837b4198141205bff539233a744eb1a115",
+                "url": "https://api.github.com/repos/roadrunner-php/goridge/zipball/887bd3a6f89a0b95252db608856d33d7a1284406",
+                "reference": "887bd3a6f89a0b95252db608856d33d7a1284406",
+                "shasum": ""
+            },
+            "require": {
+                "ext-json": "*",
+                "ext-sockets": "*",
+                "php": ">=8.2",
+                "roadrunner/roadrunner": "^3.0"
+            },
+            "replace": {
+                "spiral/goridge": "self.version"
+            },
+            "require-dev": {
+                "google/protobuf": "^3.22 || ^4.0 || ^5.0",
+                "jetbrains/phpstorm-attributes": "^1.0",
+                "llm/skills": "^1.14",
+                "roxblnfk/unpoly": "^1.8",
+                "rybakit/msgpack": "^0.7",
+                "spiral/code-style": "^2.3.1",
+                "testo/testo": "^0.10.55",
+                "vimeo/psalm": "^6 || ^7"
+            },
+            "suggest": {
+                "ext-protobuf": "Protobuf codec support",
+                "google/protobuf": "(^3.22 || ^4.0 || ^5.0) Protobuf codec support"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Spiral\\Goridge\\": "src"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Anton Titov",
+                    "homepage": "https://github.com/wolfy-j"
+                },
+                {
+                    "name": "Valery Piashchynski",
+                    "homepage": "https://github.com/rustatian"
+                },
+                {
+                    "name": "Aleksei Gagarin",
+                    "homepage": "https://github.com/roxblnfk"
+                },
+                {
+                    "name": "Pavel Buchnev",
+                    "homepage": "https://github.com/butschster"
+                },
+                {
+                    "name": "Maksim Smakouz",
+                    "homepage": "https://github.com/msmakouz"
+                },
+                {
+                    "name": "RoadRunner Community",
+                    "homepage": "https://github.com/roadrunner-server/roadrunner/graphs/contributors"
+                }
+            ],
+            "description": "High-performance PHP-to-Go IPC bridge: the RPC transport between PHP workers and the RoadRunner application server",
+            "homepage": "https://roadrunner.dev/",
+            "keywords": [
+                "Relay",
+                "Socket",
+                "golang",
+                "goridge",
+                "ipc",
+                "pipes",
+                "protobuf",
+                "roadrunner",
+                "rpc"
+            ],
+            "support": {
+                "chat": "https://discord.gg/V6EK4he",
+                "docs": "https://docs.roadrunner.dev/docs/php-worker/rpc",
+                "issues": "https://github.com/roadrunner-server/roadrunner/issues",
+                "source": "https://github.com/roadrunner-php/goridge"
+            },
+            "funding": [
+                {
+                    "url": "https://github.com/sponsors/roadrunner-server",
+                    "type": "github"
+                }
+            ],
+            "time": "2026-10-19T08:41:25+00:00"
+        },
+        {
+            "name": "roadrunner/roadrunner",
+            "version": "v3.0.1",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/roadrunner-server/roadrunner.git",
+                "reference": "ed89c2ec991f64b072297fcbee5ad7f058779199"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/roadrunner-server/roadrunner/zipball/ed89c2ec991f64b072297fcbee5ad7f058779199",
+                "reference": "ed89c2ec991f64b072297fcbee5ad7f058779199",
+                "shasum": ""
+            },
+            "type": "metapackage",
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Anton Titov / Wolfy-J",
+                    "email": "wolfy.jd@gmail.com"
+                },
+                {
+                    "name": "Valery Piashchynski",
+                    "homepage": "https://github.com/rustatian"
+                },
+                {
+                    "name": "RoadRunner Community",
+                    "homepage": "https://github.com/roadrunner-server/roadrunner/graphs/contributors"
+                }
+            ],
+            "description": "RoadRunner: High-performance PHP application server and process manager written in Go and powered with plugins",
+            "homepage": "https://roadrunner.dev/",
+            "support": {
+                "chat": "https://discord.gg/V6EK4he",
+                "docs": "https://docs.roadrunner.dev/",
+                "issues": "https://github.com/roadrunner-server/roadrunner/issues",
+                "source": "https://github.com/roadrunner-server/roadrunner/tree/v3.0.1"
+            },
+            "funding": [
+                {
+                    "url": "https://github.com/sponsors/roadrunner-server",
+                    "type": "github"
+                }
+            ],
+            "time": "2026-10-21T19:33:12+00:00"
+        },
+        {
+            "name": "sailantis/azera-framework",
+            "version": "v0.3.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/sailantis/azera-framework.git",
+                "reference": "09b43d901d403106ef0cc32d54fa5b5eef9549af"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/sailantis/azera-framework/zipball/09b43d901d403106ef0cc32d54fa5b5eef9549af",
+                "reference": "09b43d901d403106ef0cc32d54fa5b5eef9549af",
                 "shasum": ""
             },
             "require": {
@@ -475,7 +624,7 @@
                 "psr/event-dispatcher": "^1.0",
                 "psr/log": "^3.0",
                 "psr/simple-cache": "^3.0",
-                "sailantis/clarity-engine": "dev-main"
+                "sailantis/clarity-engine": "dev-main || ^0.4"
             },
             "require-dev": {
                 "illuminate/view": "^10.49",
@@ -489,9 +638,8 @@
             },
             "suggest": {
                 "ext-mongodb": "PHP driver for MongoDB document persistence (Azera\\Orm\\Storage\\MongoStore)",
-                "mongodb/mongodb": "Required for MongoDB document persistence (Azera\\Orm\\Storage\\MongoStore) â€” install together with the ext-mongodb PHP extension. Optional: only tests/MongoLiveTest.php needs the real package; all other Mongo tests run against an in-memory fake"
+                "mongodb/mongodb": "Required for MongoDB document persistence (Azera\\Orm\\Storage\\MongoStore) — install together with the ext-mongodb PHP extension. Optional: only tests/MongoLiveTest.php needs the real package; all other Mongo tests run against an in-memory fake"
             },
-            "default-branch": true,
             "bin": [
                 "bin/azera"
             ],
@@ -538,20 +686,20 @@
                 "issues": "https://github.com/sailantis/azera-framework/issues",
                 "source": "https://github.com/sailantis/azera-framework"
             },
-            "time": "2026-10-11T14:39:36+00:00"
+            "time": "2026-11-07T20:28:22+00:00"
         },
         {
             "name": "sailantis/clarity-engine",
-            "version": "dev-main",
+            "version": "v0.4.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/sailantis/clarity-engine.git",
-                "reference": "ee0601086752da7ff1b4592f7fb2ee64f4e6e408"
+                "reference": "97e68ad95ca7b1b89101cc875cebc84a7bf354c8"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/sailantis/clarity-engine/zipball/ee0601086752da7ff1b4592f7fb2ee64f4e6e408",
-                "reference": "ee0601086752da7ff1b4592f7fb2ee64f4e6e408",
+                "url": "https://api.github.com/repos/sailantis/clarity-engine/zipball/97e68ad95ca7b1b89101cc875cebc84a7bf354c8",
+                "reference": "97e68ad95ca7b1b89101cc875cebc84a7bf354c8",
                 "shasum": ""
             },
             "require": {
@@ -566,7 +714,6 @@
                 "ext-intl": "Locale-aware formatting via IntlFormatModule (format_number, format_currency, format_date, ...)",
                 "ext-redis": "Caching translation lookups via RedisCachingLoader"
             },
-            "default-branch": true,
             "type": "library",
             "autoload": {
                 "psr-4": {
@@ -605,20 +752,20 @@
                 "issues": "https://github.com/sailantis/clarity-engine/issues",
                 "source": "https://github.com/sailantis/clarity-engine"
             },
-            "time": "2026-10-10T18:58:35+00:00"
+            "time": "2026-11-07T20:25:00+00:00"
         },
         {
             "name": "sailantis/volucer-worker",
-            "version": "dev-main",
+            "version": "v0.4.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/sailantis/volucer-php-sdk.git",
-                "reference": "4cae8517c60bb3bffd5dc1f33621ca3b417d4c09"
+                "reference": "a0c1578e226356805db0c1ef61201001861c0448"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/sailantis/volucer-php-sdk/zipball/4cae8517c60bb3bffd5dc1f33621ca3b417d4c09",
-                "reference": "4cae8517c60bb3bffd5dc1f33621ca3b417d4c09",
+                "url": "https://api.github.com/repos/sailantis/volucer-php-sdk/zipball/a0c1578e226356805db0c1ef61201001861c0448",
+                "reference": "a0c1578e226356805db0c1ef61201001861c0448",
                 "shasum": ""
             },
             "require": {
@@ -626,11 +773,10 @@
                 "ext-json": "*",
                 "php": ">=8.2"
             },
-            "default-branch": true,
             "type": "library",
             "extra": {
                 "branch-alias": {
-                    "dev-main": "0.1.x-dev"
+                    "dev-main": "0.4.x-dev"
                 }
             },
             "autoload": {
@@ -663,94 +809,7 @@
                 "issues": "https://github.com/sailantis/volucer-php-sdk/issues",
                 "source": "https://github.com/sailantis/volucer-php-sdk"
             },
-            "time": "2026-10-19T12:36:14+00:00"
-        },
-        {
-            "name": "spiral/goridge",
-            "version": "4.2.2",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/roadrunner-php/goridge.git",
-                "reference": "a14454ce6c9cfcec76bbd283292c25fb33fc5a43"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/roadrunner-php/goridge/zipball/a14454ce6c9cfcec76bbd283292c25fb33fc5a43",
-                "reference": "a14454ce6c9cfcec76bbd283292c25fb33fc5a43",
-                "shasum": ""
-            },
-            "require": {
-                "ext-json": "*",
-                "ext-sockets": "*",
-                "php": ">=8.1",
-                "spiral/roadrunner": "^2023 || ^2024.1 || ^2025.1"
-            },
-            "require-dev": {
-                "google/protobuf": "^3.22 || ^4.0",
-                "infection/infection": "^0.29.0",
-                "jetbrains/phpstorm-attributes": "^1.0",
-                "phpunit/phpunit": "^10.5.45",
-                "rybakit/msgpack": "^0.7",
-                "spiral/code-style": "*",
-                "vimeo/psalm": "^6.0"
-            },
-            "suggest": {
-                "ext-msgpack": "MessagePack codec support",
-                "ext-protobuf": "Protobuf codec support",
-                "google/protobuf": "(^3.0) Protobuf codec support",
-                "rybakit/msgpack": "(^0.7) MessagePack codec support"
-            },
-            "type": "goridge",
-            "autoload": {
-                "psr-4": {
-                    "Spiral\\Goridge\\": "src"
-                }
-            },
-            "notification-url": "https://packagist.org/downloads/",
-            "license": [
-                "MIT"
-            ],
-            "authors": [
-                {
-                    "name": "Anton Titov (wolfy-j)",
-                    "email": "wolfy-j@spiralscout.com"
-                },
-                {
-                    "name": "Valery Piashchynski",
-                    "homepage": "https://github.com/rustatian"
-                },
-                {
-                    "name": "Aleksei Gagarin (roxblnfk)",
-                    "homepage": "https://github.com/roxblnfk"
-                },
-                {
-                    "name": "Pavel Buchnev (butschster)",
-                    "email": "pavel.buchnev@spiralscout.com"
-                },
-                {
-                    "name": "Maksim Smakouz (msmakouz)",
-                    "email": "maksim.smakouz@spiralscout.com"
-                },
-                {
-                    "name": "RoadRunner Community",
-                    "homepage": "https://github.com/roadrunner-server/roadrunner/graphs/contributors"
-                }
-            ],
-            "description": "High-performance PHP-to-Golang RPC bridge",
-            "homepage": "https://spiral.dev/",
-            "support": {
-                "chat": "https://discord.gg/V6EK4he",
-                "docs": "https://docs.roadrunner.dev",
-                "issues": "https://github.com/roadrunner-server/roadrunner/issues",
-                "source": "https://github.com/roadrunner-php/goridge/tree/4.2.2"
-            },
-            "funding": [
-                {
-                    "url": "https://github.com/sponsors/roadrunner-server",
-                    "type": "github"
-                }
-            ],
-            "time": "2026-05-11T11:29:46+00:00"
+            "time": "2026-11-07T20:29:22+00:00"
         },
         {
             "name": "spiral/roadrunner",
@@ -893,36 +952,40 @@
         },
         {
             "name": "spiral/roadrunner-worker",
-            "version": "v3.6.2",
+            "version": "v3.8.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/roadrunner-php/worker.git",
-                "reference": "8d9905b1e6677f34ff8623893f35b5e2fa828e37"
+                "reference": "35fcf09b55de68954e03dc727b710b963db9517d"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/roadrunner-php/worker/zipball/8d9905b1e6677f34ff8623893f35b5e2fa828e37",
-                "reference": "8d9905b1e6677f34ff8623893f35b5e2fa828e37",
+                "url": "https://api.github.com/repos/roadrunner-php/worker/zipball/35fcf09b55de68954e03dc727b710b963db9517d",
+                "reference": "35fcf09b55de68954e03dc727b710b963db9517d",
                 "shasum": ""
             },
             "require": {
                 "composer-runtime-api": "^2.0",
                 "ext-json": "*",
                 "ext-sockets": "*",
-                "php": ">=8.1",
+                "php": ">=8.2",
                 "psr/log": "^2.0 || ^3.0",
-                "spiral/goridge": "^4.1.0",
-                "spiral/roadrunner": "^2023.1 || ^2024.1 || ^2025.1"
+                "roadrunner/goridge": "^4.5",
+                "roadrunner/roadrunner": "^3.0"
             },
             "require-dev": {
                 "buggregator/trap": "^1.13",
                 "jetbrains/phpstorm-attributes": "^1.0",
-                "phpunit/phpunit": "^10.5.45",
-                "spiral/code-style": "^2.2",
-                "vimeo/psalm": "^6.0"
+                "llm/skills": "^1.14",
+                "mockery/mockery": "^1.6.7",
+                "roxblnfk/unpoly": "^1.8",
+                "spiral/code-style": "^2.3.1",
+                "testo/bridge-mockery": "^0.1.2",
+                "testo/testo": "^0.10.55",
+                "vimeo/psalm": "^6 || ^7"
             },
             "suggest": {
-                "spiral/roadrunner-cli": "Provides RoadRunner installation and management CLI tools"
+                "roadrunner/cli": "Provides RoadRunner installation and management CLI tools"
             },
             "type": "library",
             "autoload": {
@@ -936,37 +999,44 @@
             ],
             "authors": [
                 {
-                    "name": "Anton Titov (wolfy-j)",
-                    "email": "wolfy-j@spiralscout.com"
+                    "name": "Anton Titov",
+                    "homepage": "https://github.com/wolfy-j"
                 },
                 {
                     "name": "Valery Piashchynski",
                     "homepage": "https://github.com/rustatian"
                 },
                 {
-                    "name": "Aleksei Gagarin (roxblnfk)",
+                    "name": "Aleksei Gagarin",
                     "homepage": "https://github.com/roxblnfk"
                 },
                 {
-                    "name": "Pavel Buchnev (butschster)",
-                    "email": "pavel.buchnev@spiralscout.com"
+                    "name": "Pavel Buchnev",
+                    "homepage": "https://github.com/butschster"
                 },
                 {
-                    "name": "Maksim Smakouz (msmakouz)",
-                    "email": "maksim.smakouz@spiralscout.com"
+                    "name": "Maksim Smakouz",
+                    "homepage": "https://github.com/msmakouz"
                 },
                 {
                     "name": "RoadRunner Community",
                     "homepage": "https://github.com/roadrunner-server/roadrunner/graphs/contributors"
                 }
             ],
-            "description": "RoadRunner: PHP worker",
-            "homepage": "https://spiral.dev/",
+            "description": "Base PHP worker for the RoadRunner application server: receives payloads over Goridge, sends responses and manages the worker pool",
+            "homepage": "https://roadrunner.dev/",
+            "keywords": [
+                "application-server",
+                "goridge",
+                "long-running",
+                "roadrunner",
+                "worker"
+            ],
             "support": {
                 "chat": "https://discord.gg/V6EK4he",
-                "docs": "https://docs.roadrunner.dev",
+                "docs": "https://docs.roadrunner.dev/docs/php-worker/worker",
                 "issues": "https://github.com/roadrunner-server/roadrunner/issues",
-                "source": "https://github.com/roadrunner-php/worker/tree/v3.6.2"
+                "source": "https://github.com/roadrunner-php/worker"
             },
             "funding": [
                 {
@@ -974,7 +1044,7 @@
                     "type": "github"
                 }
             ],
-            "time": "2025-05-05T12:34:50+00:00"
+            "time": "2026-10-19T08:47:25+00:00"
         },
         {
             "name": "symfony/polyfill-php83",
@@ -1060,11 +1130,7 @@
     "packages-dev": [],
     "aliases": [],
     "minimum-stability": "dev",
-    "stability-flags": {
-        "sailantis/azera-framework": 20,
-        "sailantis/clarity-engine": 20,
-        "sailantis/volucer-worker": 20
-    },
+    "stability-flags": {},
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {
