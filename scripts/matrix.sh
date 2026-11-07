@@ -1276,12 +1276,29 @@ assert_arm_shape() { # arm workers mode children
             # The point of the arm is that the transport is a loopback PORT and not
             # a pipe and not a unix socket: a pipe here would be the faster Linux
             # default and answer a different question, and a unix socket would
-            # duplicate the `unix` arm. Assert both halves.
-            case "$out" in
-                *"transport:         socket on a loopback port"*) ;;
+            # duplicate the `unix` arm.
+            #
+            # Matched on the WORDS rather than the whole line. An exact string held
+            # for one word ("ephemeral") that I had guessed wrong, and would break
+            # again on the next reword — which is exactly how a reworded prefork
+            # line once cost that arm every cell of a run.
+            local tline
+            tline="$(echo "$out" | grep -i 'transport:' | head -1)"
+            case "$tline" in
+                *socket*loopback*port*) ;;
                 *) echo "  shape check [$arm]: not a loopback-port transport:" | tee -a "$META" >&2
-                   echo "$out" | grep -i transport | sed 's/^/    /' >&2
+                   echo "    ${tline:-<no transport line>}" >&2
                    return 1 ;;
+            esac
+            case "$tline" in
+                *unix:*) echo "  shape check [$arm]: transport is a unix socket, not a port:" | tee -a "$META" >&2
+                         echo "    $tline" >&2
+                         return 1 ;;
+            esac
+            case "$tline" in
+                *pipe*) echo "  shape check [$arm]: transport is a pipe, not a port:" | tee -a "$META" >&2
+                        echo "    $tline" >&2
+                        return 1 ;;
             esac
             ;;
         volucer-attach)
