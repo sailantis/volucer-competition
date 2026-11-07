@@ -83,6 +83,14 @@ class Bootstrap
             // WAL mode + busy timeout so POST (write) iterations don't lock
             $db->query('PRAGMA journal_mode = WAL');
             $db->query('PRAGMA busy_timeout = 5000');
+            // Reuse prepared statements between requests. The benchmark runs the same
+            // handful of statements tens of thousands of times, so re-parsing the SQL
+            // (`sqlite3_prepare_v2`) on every call is pure overhead: measured at
+            // -17.7% dispatch CPU and +9.6% served throughput at c=96. Enabled here for
+            // every SQLite arm rather than only volucer's, because it is a property of
+            // the application, not of the server in front of it — leaving it off would
+            // charge all six arms for the same avoidable work.
+            $db->useStatementCache(true);
             return $db;
         });
 
@@ -118,6 +126,8 @@ class Bootstrap
         // is automatically restored afterwards.
         $router->controller(BenchController::class, function (\Azera\Core\Router $r) {
             $r->get('/', '::indexAction');
+            // The framework floor: routed, dispatched, both middlewares, no work after that.
+            $r->get('/echo', '::echoAction');
             // ORM endpoints (model hydration)
             $r->get('/items', '::listAction');
             $r->get('/items/{id:int}', '::showAction');

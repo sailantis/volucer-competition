@@ -468,8 +468,26 @@ sanity_page() { # port
     case "$ENDPOINT" in
         /)              marker="<title>" ;;
         /api/*)         marker='[{"' ;;
+        # `/echo` answers the fixed token `bench`. Matching the body exactly is what
+        # makes it useful: an arm that fell through to a front controller for a
+        # different page would answer something longer, and a marker that any page
+        # contains would accept that.
+        /echo)          marker="^bench$" ;;
         *)              marker="Benchmark Item" ;;
     esac
+    if [ "$marker" = "^bench$" ]; then
+        # An anchored match has to be exact rather than a substring, or `/echo`
+        # would also accept `/` (which contains no "bench" but would accept any body
+        # ending in it) and a 5-byte wrong page could pass.
+        if [ "$body" = "bench" ]; then return 0; fi
+        case "$body" in
+            "") echo "  sanity FAILED: empty body" >&2; return 1 ;;
+            *"<?php"*) echo "  sanity FAILED: got PHP SOURCE (a file server served the script)" >&2 ;;
+            *) echo "  sanity FAILED: 200 but body is not the echo token (${#body} bytes)" >&2 ;;
+        esac
+        echo "  body: $(echo "$body" | head -c 200)" >&2
+        return 1
+    fi
     case "$body" in
         *"$marker"*) return 0 ;;
         "") echo "  sanity FAILED: empty body" >&2; return 1 ;;

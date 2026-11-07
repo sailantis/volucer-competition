@@ -18,6 +18,25 @@ use Azera\Http\Response;
 class BenchController extends Controller
 {
     /**
+     * GET /echo — the floor this benchmark can measure through a full framework.
+     *
+     * No database, no template, no service resolution, no allocation beyond the body
+     * string and the `Response` itself. What is left is exactly what a routed request
+     * costs: the router walking its table, the dispatcher resolving the controller and
+     * building the middleware chain, both global middlewares, and the transport.
+     *
+     * Deliberately *not* an early return from the front controller. A route that
+     * bypassed the router would measure the transport and nothing else — which is what
+     * `/api/hello` in the `hello` app already does, without any framework at all. This
+     * one exists so the difference between "a routed request" and "no framework" can be
+     * read off two numbers instead of inferred.
+     */
+    public function echoAction(): Response
+    {
+        return Response::text('bench');
+    }
+
+    /**
      * GET / — welcome page via Clarity template (no DB, just routing + middleware + template render).
      */
     public function indexAction(): Response
