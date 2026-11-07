@@ -96,6 +96,40 @@ def fmt(value, digits=0):
     return f"{value:,.{digits}f}"
 
 
+def path_of(row):
+    """The page a row measured.
+
+    Absent from a single-endpoint run written before the column existed, and
+    absent is not the same as empty: an older `matrix.tsv` has one path, so its
+    rows belong to whichever endpoint the run used and grouping by them must
+    yield one group rather than several blanks.
+    """
+    return str(row.get("path", "") or "").strip() or "<unrecorded>"
+
+
+PATH_ORDER = ["/echo", "/", "/api/items", "/items"]
+
+
+def path_sort(paths):
+    """Measured paths in a stable order: the framework floor first, then pages.
+
+    A path nobody listed sorts last, so an endpoint added to the harness and not
+    here still appears in the report instead of being silently dropped.
+    """
+    def key(p):
+        return (PATH_ORDER.index(p) if p in PATH_ORDER else len(PATH_ORDER), p)
+    return sorted(paths, key=key)
+
+
+PATH_NOTE = {
+    "/echo": "a routed 5-byte reply: router, dispatcher, both middlewares, then nothing. "
+             "The framework's floor, and the closest this application gets to no work.",
+    "/": "the landing page, rendered through a template.",
+    "/api/items": "a JSON list from SQLite through the query builder.",
+    "/items": "the same list rendered as a template.",
+}
+
+
 def ordered(values):
     """Worker counts / concurrencies in numeric order, regardless of input order."""
     seen = []
@@ -627,12 +661,64 @@ def main():
 
     rows = [r for r in read_tsv(matrix_path)]
     mem_rows = read_tsv(mem_path) if os.path.isfile(mem_path) else []
+    if not rows:
+        sys.exit(f"no rows in {matrix_path}")
+
+    # A run over several endpoints measures several *pages*, and a page is not a
+    # round: medians over rows that differ only by path would average four
+    # different amounts of work into a number that describes none of them. So each
+    # path is reported on its own, and the pages are never pooled.
+    paths = path_sort({path_of(r) for r in rows})
+    multi = len(paths) > 1
+
+    sections = []
+    for path in paths:
+        sections.append(path_section(rows, mem_rows, path, multi, matrix_path, mem_path))
+
+    head = []
+    if multi:
+        head.append(f"# {len(paths)} endpoints, {len({r['arm'] for r in rows})} arms, PHP 8.5")
+        head.append("")
+        head.append("Every arm measured on the same four pages, one host, one harness. The pages are")
+        head.append("not comparable with each other — they are four different amounts of work — so")
+        head.append("each has its own tables below, and a number from one section says nothing")
+        head.append("about the same arm in another.")
+        head.append("")
+        head.append("| path | what it measures |")
+        head.append("|---|---|")
+        for path in paths:
+            head.append(f"| `{path}` | {PATH_NOTE.get(path, 'measured endpoint')} |")
+        head.append("")
+        head.append("Reading the sections together is the point of the run: a server whose")
+        head.append("`/echo` is level with another's but whose `/api/items` is behind is losing")
+        head.append("on the *work* rather than on the request, and a server that is behind on")
+        head.append("`/echo` is paying for the request itself.")
+        head.append("")
+
+    text = "\n".join(head) + "\n".join(sections)
+    if args.out:
+        with open(args.out, "w", encoding="utf-8") as fh:
+            fh.write(text + "\n")
+        print(f"wrote {args.out}")
+    else:
+        print(text)
+
+
+def path_section(all_rows, all_mem_rows, path, multi, matrix_path, mem_path):
+    """The full set of tables for one measured path."""
+    rows = [r for r in all_rows if path_of(r) == path]
+    mem_rows = [r for r in all_mem_rows if path_of(r) == path]
     concs = ordered({r["conc"] for r in rows if r["rps"] != "FAIL"})
 
     arms = sorted({r["arm"] for r in rows})
     modes_run = set(arms) <= MODES_ARMS
 
     out = []
+    if multi:
+        out.append(f"## `{path}`")
+        out.append("")
+        out.append(PATH_NOTE.get(path, "measured endpoint"))
+        out.append("")
     if modes_run:
         out.append("# Worker x children x concurrency matrix, PHP 8.5")
     else:
@@ -771,13 +857,7 @@ def main():
         out.append("No failed cells and no dropped responses in any measured cell.")
     out.append("")
 
-    text = "\n".join(out)
-    if args.out:
-        with open(args.out, "w", encoding="utf-8") as fh:
-            fh.write(text + "\n")
-        print(f"wrote {args.out}")
-    else:
-        print(text)
+    return "\n".join(out) + "\n"
 
 
 if __name__ == "__main__":

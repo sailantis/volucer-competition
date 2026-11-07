@@ -586,12 +586,40 @@ def meta_method(meta: dict) -> str:
 
 
 
+def _guard_single_path(path, rows: list[dict]) -> list[dict]:
+    """Refuse a run that measured several pages.
+
+    Every figure in this module is pooled over rows that share
+    ``arm/workers/opcache/conc`` and differ only by round. A multi-endpoint run
+    would satisfy that key for four *different* pages, so the median would be the
+    middle of four amounts of work — not an error, a number describing no page.
+
+    `matrix-report.py` is the report for a multi-endpoint run; it splits by path
+    instead of pooling. Failing here rather than guessing keeps a published chart
+    from being quietly wrong.
+
+    ``memory.tsv`` records ``*`` for its path, because a worker's footprint is a
+    property of the configuration rather than of the page, so ``*`` is not a
+    second endpoint.
+    """
+    paths = {str(r.get("path", "") or "").strip() for r in rows}
+    paths.discard("")
+    paths.discard("*")
+    if len(paths) > 1:
+        raise SystemExit(
+            f"{path} measured {len(paths)} endpoints ({', '.join(sorted(paths))}). "
+            "This report pools rows by configuration and cannot describe several "
+            "pages at once; use scripts/matrix-report.py, which splits by path."
+        )
+    return rows
+
+
 def matrix_rows(directory: str) -> list[dict]:
     """The matrix rows of one run, or an empty list."""
     path = RESULTS / directory / "matrix.tsv"
     if not path.exists():
         return []
-    return read_dict_tsv(path)
+    return _guard_single_path(path, read_dict_tsv(path))
 
 
 def matrix_memory(directory: str) -> list[dict]:
@@ -599,7 +627,7 @@ def matrix_memory(directory: str) -> list[dict]:
     path = RESULTS / directory / "memory.tsv"
     if not path.exists():
         return []
-    return read_dict_tsv(path)
+    return _guard_single_path(path, read_dict_tsv(path))
 
 
 def cell_median(rows: list[dict], key_fields: dict, field: str,

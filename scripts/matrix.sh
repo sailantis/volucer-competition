@@ -140,6 +140,11 @@
 #                 so one run can answer "is the tail the
 #                 server's or the load generator's?".
 #   ENDPOINT      the page measured                       [/items]
+#   ENDPOINTS     pages measured, comma-separated        [$ENDPOINT]
+#                 Overrides ENDPOINT. Each page is a
+#                 separate section in the report, because
+#                 four pages are four amounts of work and
+#                 pooling them would describe none of them.
 #   WARMUP        unmeasured load before each cell        [2s]
 #   BIN / RR / FP volucer, RoadRunner, FrankenPHP binaries
 #   PHP / PHP_CGI / PHP_FPM  the interpreter, per SAPI    [distro default]
@@ -269,6 +274,20 @@ NGINX_WORKERS="${NGINX_WORKERS:-4}"
 [ "$NGINX_WORKERS" = "auto" ] && NGINX_WORKERS="$(nproc)"
 
 ENDPOINT="${ENDPOINT:-/items}"
+# Endpoints to measure, comma-separated. A single `ENDPOINT` is still honoured and
+# is what a one-page run should pass, but a matrix that compares servers on one
+# page cannot tell "slower at the work" from "slower at the request". The four
+# endpoints below are measured in one run so those two can be told apart:
+#
+#     /echo        routed 5-byte reply: router, dispatcher, middles, nothing else
+#     /            the landing page through a template
+#     /api/items   the SQLite list as JSON
+#     /items       the same list through a template
+#
+# `/echo` is the control: it carries the framework's floor and no DB or view, so
+# a server that trails on `/api/items` but matches on `/echo` is paying for the
+# work, and one that trails on both is paying for the request.
+ENDPOINTS="${ENDPOINTS:-$ENDPOINT}"
 WARMUP="${WARMUP:-2s}"
 # Passed straight through to every PHP process this script starts. Unset means
 # the host's conf.d, which is the normal case; setting it is how a run excludes
@@ -419,7 +438,10 @@ record_mem() { # arm workers mode phase conc [children]
     local children="${6:-${CHILDREN:-}}"
     local pss rss pids
     read -r pss rss pids <<< "$(mem_sample "${ROOTS[@]}")"
-    printf '%s\t%s\t%s\t%s\t%s\t%.1f\t%.1f\t%s\t%s\n' \
+    # `*` and not a path: a worker's footprint is a property of the configuration,
+    # not of the page measured. Sampling it once per endpoint would write the same
+    # figure four times and invite the reader to compare four identical rows.
+    printf '*\t%s\t%s\t%s\t%s\t%s\t%.1f\t%.1f\t%s\t%s\n' \
         "$arm" "$n" "$mode" "$phase" "${conc:-0}" \
         "$(awk -v k="${pss:-0}" 'BEGIN{printf "%.1f", k/1024}')" \
         "$(awk -v k="${rss:-0}" 'BEGIN{printf "%.1f", k/1024}')" \
@@ -440,10 +462,11 @@ start_bg() { # logfile, then the command
 # Readiness is a 200 on the measured endpoint, not "the port answers": both
 # php-cgi and nginx can accept a connection before the application is reachable,
 # and a 502 arriving mid-cell would be recorded as a throughput number.
-wait_ready() { # port
+wait_ready() { # port [path]
+    local path="${2:-$ENDPOINT}"
     for _ in $(seq 1 240); do
         code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 \
-            "http://127.0.0.1:$1$ENDPOINT" 2>/dev/null)"
+            "http://127.0.0.1:$1$path" 2>/dev/null)"
         [ "$code" = "200" ] && return 0
         sleep 0.25
     done
@@ -452,9 +475,10 @@ wait_ready() { # port
 
 # A 200 is not evidence the right page was served: an nginx `try_files` mistake in
 # this repository's history served the front controller's SOURCE with a happy 200.
-sanity_page() { # port
+sanity_page() { # port [path]
+    local path="${2:-$ENDPOINT}"
     local body marker
-    body="$(curl -sS --max-time 20 "http://127.0.0.1:$1$ENDPOINT" 2>/dev/null)"
+    body="$(curl -sS --max-time 20 "http://127.0.0.1:$1$path" 2>/dev/null)"
     # The marker is a property of the page, not of the harness. `/items` renders
     # a list of items, `/` renders the landing page and `/api/items` renders a JSON
     # array, so the check follows the endpoint rather than insisting on one page's
@@ -465,7 +489,7 @@ sanity_page() { # port
     # because the seeded titles contain the same words. That is luck, not
     # validation: a JSON endpoint that answered with the list's *template* would
     # satisfy it too. It is matched on the JSON shape instead.
-    case "$ENDPOINT" in
+    case "$path" in
         /)              marker="<title>" ;;
         /api/*)         marker='[{"' ;;
         # `/echo` answers the fixed token `bench`. Matching the body exactly is what
@@ -1287,12 +1311,18 @@ assert_arm_shape() { # arm workers mode children
 # ---------------------------------------------------------------------------
 # One cell: wrk for DUR at a fixed concurrency, then the memory sample.
 # ---------------------------------------------------------------------------
-run_cell() { # arm workers mode conc round [threads] [children]
+run_cell() { # arm workers mode conc round [threads] [children] [path]
     local arm="$1" n="$2" mode="$3" conc="$4" round="$5"
     local threads="${6:-$THREADS}"
     local children="${7:-${CHILDREN:-}}"
+    local path="${8:-$ENDPOINT}"
     local port; port="$(port_of "$arm")"
-    local out="$LOG/wrk-$arm-$n-$mode-t$threads-c$conc-r$round.txt"
+    # The path is in the log filename as well as the row: two pages at the same
+    # concurrency would otherwise overwrite each other's raw wrk output, and the
+    # raw file is what a surprising number is checked against.
+    local slug; slug="$(echo "$path" | sed 's|^/||; s|/|_|g')"
+    [ -n "$slug" ] || slug="root"
+    local out="$LOG/wrk-$arm-$n-$mode-t$threads-c$conc-r$round-$slug.txt"
     local rps p50 p99 p999 errs
 
     # `wrk` refuses `-c` below `-t` ("number of connections must be >= threads"),
@@ -1305,7 +1335,7 @@ run_cell() { # arm workers mode conc round [threads] [children]
         threads="$conc"
     fi
 
-    wrk -t"$threads" -c"$conc" -d"$DUR" --latency "http://127.0.0.1:$port$ENDPOINT" \
+    wrk -t"$threads" -c"$conc" -d"$DUR" --latency "http://127.0.0.1:$port$path" \
         > "$out" 2>&1
 
     rps="$(awk '/^Requests\/sec:/{print $2; exit}' "$out")"
@@ -1316,19 +1346,19 @@ run_cell() { # arm workers mode conc round [threads] [children]
     errs="$(grep -cE 'Non-2xx or 3xx responses|Socket errors' "$out" 2>/dev/null)"
 
     if [ -z "$rps" ] || [ -z "$p50" ] || [ -z "$p99" ]; then
-        printf '%s\t%s\t%s\t%s\t%s\t%s\tFAIL\t?\t?\t%s\t%s\t%s\n' \
-            "$arm" "$n" "$mode" "$conc" "$round" "$threads" "$errs" "$children" \
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\tFAIL\t?\t?\t%s\t%s\t%s\n' \
+            "$path" "$arm" "$n" "$mode" "$conc" "$round" "$threads" "$errs" "$children" \
             "$(proc_kind "$arm")" >> "$RESULTS"
-        printf '    %-15s w=%-2s %-3s ch=%-2s t=%-3s c=%-3s r=%s  FAILED (incomplete wrk output)\n' \
-            "$arm" "$n" "$mode" "${children:--}" "$threads" "$conc" "$round"
+        printf '    %-12s %-15s w=%-2s %-3s ch=%-2s t=%-3s c=%-3s r=%s  FAILED (incomplete wrk output)\n' \
+            "$path" "$arm" "$n" "$mode" "${children:--}" "$threads" "$conc" "$round"
         return 1
     fi
 
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-        "$arm" "$n" "$mode" "$conc" "$round" "$threads" "$rps" "$p50" "$p99" "$errs" "$children" \
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        "$path" "$arm" "$n" "$mode" "$conc" "$round" "$threads" "$rps" "$p50" "$p99" "$errs" "$children" \
         "$(proc_kind "$arm")" >> "$RESULTS"
-    printf '    %-15s w=%-2s %-3s ch=%-2s t=%-3s c=%-3s r=%s  %9s rps  p50 %8s  p99 %8s\n' \
-        "$arm" "$n" "$mode" "${children:--}" "$threads" "$conc" "$round" "$rps" "$p50" "$p99"
+    printf '    %-12s %-15s w=%-2s %-3s ch=%-2s t=%-3s c=%-3s r=%s  %9s rps  p50 %8s  p99 %8s\n' \
+        "$path" "$arm" "$n" "$mode" "${children:--}" "$threads" "$conc" "$round" "$rps" "$p50" "$p99"
 }
 
 # ---------------------------------------------------------------------------
@@ -1419,7 +1449,7 @@ fi
     # above as the grid would misread that arm's shape.
     [ -n "$ARM_WORKERS" ] && echo "  arm workers: $ARM_WORKERS"
     echo "  opcache:     $OPCACHE_MODES"
-    echo "  endpoint:    $ENDPOINT"
+    echo "  endpoint:    $ENDPOINTS"
     echo "  concurrency: $CONC   wrk threads: $TLIST   duration: $DUR   rounds: $ROUNDS"
     # The order the cells ran in. A cross-arm ratio is a ratio between two
     # measurements made the same way, and the order is part of the method:
@@ -1505,8 +1535,8 @@ PROBE
 cleanup_probe() { rm -f "$ROOT/public/.bench-ini-probe.php"; }
 trap 'stop_arm; cleanup_probe' EXIT
 
-printf 'arm\tworkers\topcache\tconc\tround\tthreads\trps\tp50\tp99\terrors\tchildren\tproc_kind\n' >> "$RESULTS"
-printf 'arm\tworkers\topcache\tphase\tconc\tpss_mb\trss_mb\tpids\tchildren\n' >> "$MEMFILE"
+printf 'path\tarm\tworkers\topcache\tconc\tround\tthreads\trps\tp50\tp99\terrors\tchildren\tproc_kind\n' >> "$RESULTS"
+printf 'path\tarm\tworkers\topcache\tphase\tconc\tpss_mb\trss_mb\tpids\tchildren\n' >> "$MEMFILE"
 
 # ---------------------------------------------------------------------------
 # The grid.
@@ -1577,19 +1607,32 @@ run_cell_blocked() { # arm n mode children
 
     start_arm "$arm" "$n" "$mode"
 
-    if ! wait_ready "$(port_of "$arm")"; then
-        echo "  NOT MEASURED: never answered 200 on $(port_of "$arm")$ENDPOINT"
-        tail -6 "$LOG/$arm-$n-$mode.log" 2>/dev/null | sed 's/^/    /'
-        echo "SKIP $arm w=$n $mode: not ready" >> "$META"
-        stop_arm
-        return 0
-    fi
-    if ! sanity_page "$(port_of "$arm")"; then
-        echo "  NOT MEASURED: the page did not render"
-        echo "SKIP $arm w=$n $mode: bad page" >> "$META"
-        stop_arm
-        return 0
-    fi
+    # Readiness and the page check are per-endpoint, and they have to happen
+    # before the first measurement of *any* page: a cell whose `/echo` is fine and
+    # whose `/api/items` is a 404 would otherwise spend the whole run recording a
+    # not-found page as a throughput number. The first requested page gates the
+    # arm; every other page is checked at its own warmup, which fails the cell
+    # loudly rather than quietly measuring the wrong body.
+    local path
+    for path in ${ENDPOINTS//,/ }; do
+        if ! wait_ready "$(port_of "$arm")" "$path"; then
+            echo "  NOT MEASURED: never answered 200 on $(port_of "$arm")$path"
+            tail -6 "$LOG/$arm-$n-$mode.log" 2>/dev/null | sed 's/^/    /'
+            echo "SKIP $arm w=$n $mode: not ready on $path" >> "$META"
+            stop_arm
+            return 0
+        fi
+        if ! sanity_page "$(port_of "$arm")" "$path"; then
+            echo "  NOT MEASURED: $path did not render"
+            echo "SKIP $arm w=$n $mode: bad page $path" >> "$META"
+            stop_arm
+            return 0
+        fi
+        # First touch: compiles every file under the ON modes, wakes every worker
+        # under the cold ones. Not part of any measurement.
+        wrk -t"$THREADS" -c"$THREADS" -d"$WARMUP" \
+            "http://127.0.0.1:$(port_of "$arm")$path" >/dev/null 2>&1
+    done
     if ! assert_mode_live "$arm" "$n" "$mode"; then
         echo "  NOT MEASURED: the opcache mode could not be proved"
         stop_arm
@@ -1605,11 +1648,6 @@ run_cell_blocked() { # arm n mode children
     # anything. That is the number a host is sized from.
     record_mem "$arm" "$n" "$mode" boot 0 "$CHILDREN"
 
-    # First touch: compiles every file under the ON modes, wakes every
-    # worker under the cold ones. Not part of any measurement.
-    wrk -t"$THREADS" -c"$THREADS" -d"$WARMUP" \
-        "http://127.0.0.1:$(port_of "$arm")$ENDPOINT" >/dev/null 2>&1
-
     measure_arm_round "$arm" "$n" "$mode" "$children"
     finish_arm "$arm" "$n" "$mode" "$children"
 }
@@ -1619,22 +1657,24 @@ run_cell_blocked() { # arm n mode children
 # cell for its second round WITHOUT restarting the server.
 measure_arm_round() { # arm n mode children
     local arm="$1" n="$2" mode="$3" children="$4"
-    local conc tl threads
-    for conc in ${CONC//,/ }; do
-        for tl in $TLIST; do
-            # `tc` means "one client thread per concurrent request",
-            # the historical harness convention; `tN` (or a bare `N`)
-            # is a fixed count.
-            if [ "$tl" = "tc" ]; then
-                threads="$conc"
-            else
-                threads="${tl#t}"
-            fi
-            # `ROUND_NOW` is the round this invocation measures. The blocked
-            # order runs the rounds inside one cell; the interleaved order
-            # runs one round of every cell before the next, which is the
-            # whole point of the interleaving.
-            run_cell "$arm" "$n" "$mode" "$conc" "$ROUND_NOW" "$threads" "$CHILDREN"
+    local conc tl threads path
+    for path in ${ENDPOINTS//,/ }; do
+        for conc in ${CONC//,/ }; do
+            for tl in $TLIST; do
+                # `tc` means "one client thread per concurrent request",
+                # the historical harness convention; `tN` (or a bare `N`)
+                # is a fixed count.
+                if [ "$tl" = "tc" ]; then
+                    threads="$conc"
+                else
+                    threads="${tl#t}"
+                fi
+                # `ROUND_NOW` is the round this invocation measures. The blocked
+                # order runs the rounds inside one cell; the interleaved order
+                # runs one round of every cell before the next, which is the
+                # whole point of the interleaving.
+                run_cell "$arm" "$n" "$mode" "$conc" "$ROUND_NOW" "$threads" "$CHILDREN" "$path"
+            done
         done
     done
 }
