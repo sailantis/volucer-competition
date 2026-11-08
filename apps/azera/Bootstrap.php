@@ -130,6 +130,9 @@ class Bootstrap
             $r->get('/echo', '::echoAction');
             // ORM endpoints (model hydration)
             $r->get('/items', '::listAction');
+            // GET /items with the identity map removed and nothing else changed:
+            // the single-variable control for /items (see listFastAction).
+            $r->get('/items-fast', '::listFastAction');
             $r->get('/items/{id:int}', '::showAction');
             $r->post('/items', '::createAction');
 

@@ -78,6 +78,57 @@ class BenchController extends Controller
     }
 
     /**
+     * GET /items-fast — GET /items with the identity map removed, and nothing else.
+     *
+     * Identical in every respect to {@see listAction()} except that the page is
+     * fetched with `objects()` instead of `entities()`. Verified byte-identical
+     * output (`scripts/items-fast-compare.php`), so the difference between the two
+     * routes is hydration and only hydration:
+     *
+     *     Item::query()->paginate()->entities()   identity map, load-time snapshot
+     *     Item::query()->paginate()->objects()    plain stdClass rows
+     *
+     * This exists because GET /items-qb is NOT that comparison: it swaps the model
+     * for a literal table name as well, so /items vs /items-qb changes two things
+     * at once (hydration AND model resolution). /items vs /items-fast changes one.
+     * Measured, the model-resolution half /items-qb bundles in is ~1.8 us of a
+     * ~46 us gap, so the two controls agree closely — but only this route states
+     * the single-variable comparison directly.
+     *
+     * Like every other read here it is model-backed, so the Query Builder still
+     * resolves `items` through the model's `source()`; what is skipped is
+     * hydration: no instantiation, no per-column gate, no Heap entry, no snapshot.
+     * The page is read-only, so nothing is lost — see `entities()` vs `objects()`
+     * in the framework: the snapshot is what makes `save()` a targeted UPDATE,
+     * and no read-only page calls it.
+     */
+    public function listFastAction(): Response
+    {
+        $page     = (int) AppContext::instance()->request()->query('page', 1);
+        $pageSize = 20;
+
+        $paginator = Item::query()->paginate($page, $pageSize);
+        $items     = $paginator->objects();
+
+        $html = $this->view()->render('items.list', [
+            'baseUrl'    => '/items-fast',
+            'items'      => $items,
+            'pagination' => [
+                'currentPage'  => $paginator->currentPage(),
+                'lastPage'     => $paginator->lastPage(),
+                'previousPage' => $paginator->previousPage(),
+                'nextPage'     => $paginator->nextPage(),
+                'totalItems'   => $paginator->totalItems(),
+                'firstItem'    => $paginator->firstItem(),
+                'lastItem'     => $paginator->lastItem(),
+                'hasPrevious'  => $paginator->hasPrevious(),
+                'hasNext'      => $paginator->hasNext(),
+            ],
+        ]);
+        return Response::html($html);
+    }
+
+    /**
      * GET /items/{id} — find a single item by id + render single template.
      */
     public function showAction(int $id): Response

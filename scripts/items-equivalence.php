@@ -18,6 +18,7 @@ require __DIR__ . '/../BenchApp.php';
 
 use App\Azera\Models\Item;
 use Azera\AppContext;
+use Azera\Db\Query;
 
 $app = new BenchApp(__DIR__ . '/../data/bench.sqlite');
 $app->bootstrap();
@@ -50,6 +51,14 @@ AppContext::instance()->clearRequestScope();
 
 $p = Item::query()->paginate(1, 20);
 $out['objects (stdClass)'] = page($p, $p->objects(), $view);
+AppContext::instance()->clearRequestScope();
+
+// /items-qb is the app's own raw-Query-Builder route (BenchController::listQbAction):
+// Query::raw()->table('items')->paginate()->objects(), i.e. no model binding at
+// all. It exists in both repos already, so this compares the two ROUTES rather
+// than two rewrites of one route.
+$p = Query::raw()->table('items')->paginate(1, 20);
+$out['/items-qb (real route)'] = page($p, $p->objects(), $view);
 AppContext::instance()->clearRequestScope();
 
 // `assoc()` is deliberately not compared: it yields arrays, and the template
