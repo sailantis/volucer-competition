@@ -214,27 +214,39 @@ ORM and the template.
 
 So the headline should not be "Volucer is 4× faster at serving a page". It is:
 
-> For an application whose bootstrap costs ~300 µs, a cold SAPI spends 70% of its
-> `/echo` CPU — and 11% of a realistic `/items` — rebuilding what it is about to
-> discard. Volucer removes that term, which is why its framed `/echo` lands below
-> bare php-fpm rather than at 4× framed php-fpm.
+> For an application whose bootstrap costs 100–200 µs, a cold SAPI pays it on every
+> request. Volucer pays it once, which is why its framed `/echo` lands *below* bare
+> php-fpm rather than at 4× framed php-fpm — and why the same 4× holds on a
+> realistic page where the boot is a minority of the work.
 
 ### And the caveat that keeps this honest
 
-The 121 µs of filler routes is a *third* of `/echo` but only **11% of a realistic
-page**. Measured inside the same fpm child, with the same build:
+The filler routes are **38% of the framework cost on `/echo` but only ~12% on
+`/items`**, because a realistic page has 700 µs of ORM, SQLite and template work
+that `/echo` does not.
+
+Two independent runs of the phase probe, both with 100 filler routes:
 
 | | `/echo` | `/items` |
 |---|---:|---:|
-| bootstrap | 171 µs | 213 µs |
+| bootstrap (incl. fillers) | 171 µs | 213 µs |
+| of which filler routes | ~121 µs | ~107 µs |
 | dispatch | 55 µs | 698 µs |
-| **total per request** | **247 µs** | **985 µs** |
-| boot as a share of the request | **70%** | **11%** |
+| autoload + entry point | 21 µs | 21 µs |
+| **total, CONC=1 wall clock** | **247 µs** | **985 µs** |
+| **filler share of the request** | **49%** | **11%** |
 
-So `/echo` is a bootstrap benchmark and `/items` is an application benchmark, and
-the two tell different stories. On `/echo` removing the filler routes is worth 30%
-of throughput; on `/items` it is worth about 4%, because 698 µs of ORM, SQLite and
-template work dominates.
+The bootstrap column disagreeing by 42 µs between two runs of the same code is
+worth saying rather than smoothing over: these are single-child, CONC=1 wall-clock
+measurements, and the two runs differ by 25% on that phase. The filler *slope* is
+the robust number — it was measured four ways (route-count sweep in CLI, wire CPU
+with and without fillers, and the phase probe both ways) and landed at 107–128 µs
+every time.
+
+`/echo` is therefore a bootstrap benchmark and `/items` is an application
+benchmark, and the two tell different stories. Removing the filler routes is worth
+31% of throughput on `/echo` (24,656 → 32,351 rps, measured on the wire) and about
+12% on `/items` (from the phase totals, 985 → 878 µs).
 
 **Both are honest.** `/echo` answers "what does the framework cost", `/items`
 answers "what does this page cost", and the reason to publish both is that the
