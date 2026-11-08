@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "fc3ad6fa29ed929558ce924c8e66484a",
+    "content-hash": "4d9d62054165b9781921b5a7bd433624",
     "packages": [
         {
             "name": "google/protobuf",
@@ -605,16 +605,16 @@
         },
         {
             "name": "sailantis/azera-framework",
-            "version": "v0.3.0",
+            "version": "v0.3.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/sailantis/azera-framework.git",
-                "reference": "09b43d901d403106ef0cc32d54fa5b5eef9549af"
+                "reference": "4689d107352b71bcecde91fa303a57f0d0ac007a"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/sailantis/azera-framework/zipball/09b43d901d403106ef0cc32d54fa5b5eef9549af",
-                "reference": "09b43d901d403106ef0cc32d54fa5b5eef9549af",
+                "url": "https://api.github.com/repos/sailantis/azera-framework/zipball/4689d107352b71bcecde91fa303a57f0d0ac007a",
+                "reference": "4689d107352b71bcecde91fa303a57f0d0ac007a",
                 "shasum": ""
             },
             "require": {
@@ -686,20 +686,20 @@
                 "issues": "https://github.com/sailantis/azera-framework/issues",
                 "source": "https://github.com/sailantis/azera-framework"
             },
-            "time": "2026-11-07T20:28:22+00:00"
+            "time": "2026-11-08T15:20:38+00:00"
         },
         {
             "name": "sailantis/clarity-engine",
-            "version": "v0.4.0",
+            "version": "v0.4.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/sailantis/clarity-engine.git",
-                "reference": "97e68ad95ca7b1b89101cc875cebc84a7bf354c8"
+                "reference": "aba351b1cd20f109c85dce9aa0367131dd03ccb7"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/sailantis/clarity-engine/zipball/97e68ad95ca7b1b89101cc875cebc84a7bf354c8",
-                "reference": "97e68ad95ca7b1b89101cc875cebc84a7bf354c8",
+                "url": "https://api.github.com/repos/sailantis/clarity-engine/zipball/aba351b1cd20f109c85dce9aa0367131dd03ccb7",
+                "reference": "aba351b1cd20f109c85dce9aa0367131dd03ccb7",
                 "shasum": ""
             },
             "require": {
@@ -752,7 +752,7 @@
                 "issues": "https://github.com/sailantis/clarity-engine/issues",
                 "source": "https://github.com/sailantis/clarity-engine"
             },
-            "time": "2026-11-07T20:25:00+00:00"
+            "time": "2026-11-08T16:01:41+00:00"
         },
         {
             "name": "sailantis/volucer-worker",
