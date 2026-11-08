@@ -125,6 +125,91 @@ the same `Bootstrap`, so they would benefit identically — but as measured toda
 fpm's cold path is competing with one hand behind its back and so is everything
 else.
 
+## How a route cache handles closures
+
+Short answer: **it never has to, and the one place closures appear is code rather
+than data.** Both halves of that are measured, not assumed.
+
+### A closure cannot be a route handler
+
+`Router::add()` is typed `string|array|null $handler`, and `get()`/`post()` pass
+straight through to it. A closure is rejected by the type system before any caching
+question arises:
+
+```
+TypeError: Azera\Core\Router::get(): Argument #2 ($handler) must be of type
+array|string|null, Closure given
+```
+
+So there is nothing to persist and nothing to special-case. A grep across all four
+repositories (`sailantis-homepage`, `azera-competition`, `volucer-competition`,
+`azera-framework`) finds **zero** closure handlers — which is what a signature that
+forbids them should produce.
+
+### The closures that *do* exist are validators, and they are code
+
+`Router::$types` is initialised in the constructor with five closures:
+
+```
+int, alpha, alnum, uuid, *
+```
+
+and `Router::type($name, callable $validator)` lets an application add more. This is
+the **only** property in the router's state that blocks a naive `var_export` —
+`probe-route-serialisation.php` checks all 12:
+
+| property | types | exportable |
+|---|---|---|
+| `static`, `groups`, `namedRoutes`, `unsortedBuckets`, `autoOptions`, … | arrays/scalars | yes |
+| **`types`** | **array(5) → Closure** | **no** |
+
+`var_export` would emit `\Closure::__set_state(array())`, which fatals on include.
+So the cache **omits `types` entirely and lets the constructor rebuild it** — because
+`new Router()` runs the constructor, and the validators are code, not state.
+
+That is verified, not argued: a cached table with `$types` omitted still answers
+`/items/7` (whose `{id:int}` needs the `int` validator) and still returns **404 for
+`/items/abc`** — the validator came back with the constructor.
+
+### Custom validators are the application's job, and forget them loudly
+
+An app that registers `Router::type('slug', fn(...))` owns that closure. The cache
+records *which* names were custom (the generated file has a
+`// Custom parameter types the application must re-register:` line) and the app has
+to re-register them. Measured if you forget:
+
+```
+no re-register  /blog/ok-slug      THROWS Unknown validator: slug
+no re-register  /blog/BAD-SLUG     THROWS Unknown validator: slug
+re-registered   /blog/ok-slug      MATCH
+re-registered   /blog/BAD-SLUG     no match
+```
+
+It **throws** rather than silently matching everything. That matters: a cache that
+quietly dropped a validation constraint would be a security bug, and this design
+would rather 500.
+
+### The design, then, is fifteen lines of filtering
+
+`scripts/route-cache.php` is the whole thing:
+
+- persist every instance property **except** `types` (code) and `resolvedOverrides`
+  (a per-handler memo worth 0.41 µs once, so persisting it buys nothing and risks a
+  stale triple after a deploy);
+- **refuse to write** if any persisted value still contains a closure or object,
+  naming the property — a cache that silently drops state is worse than one that
+  will not build;
+- emit the route count, the PHP version, and the custom-type list in a header so a
+  stale file is diagnosable from its first six lines;
+- write atomically (`rename`), because a half-written route file picked up mid-deploy
+  is a fatal error;
+- ship `--verify`, which rebuilds the table and compares it to the file property by
+  property, so CI can fail on a stale cache rather than serve one.
+
+The one thing it deliberately does *not* do is guess. If a future Azera release adds
+a property holding an object, the write fails and names it. That is the intended
+behaviour.
+
 ## Finding 2 — `Bootstrap::$wired` is dead code on every SAPI that reuses a process
 
 `apps/azera/Bootstrap.php` memoises the wired container in `private static array
@@ -324,6 +409,8 @@ only one that is free to fix.
 | `probe-boot-cost.php` | total boot cost, phase split, filler-route scaling |
 | `probe-route-cost.php` | per-route registration cost, deferred sort, match scaling |
 | `probe-route-encodings.php` | **the fix**: encoded table vs rebuild, two processes |
+| `probe-route-serialisation.php` | what in router state blocks a cache (only `types`) |
+| `route-cache.php` | the deploy step: `--write` / `--verify` |
 | `probe-route-cache.php` | superseded — measured compilation, not loading |
 | `probe-boot-profile.sh` | framework cost on the wire, as CPU per request |
 | `probe-phases.sh` | per-phase attribution inside a real fpm child |
