@@ -1053,6 +1053,22 @@ cfg_fpm() { # file workers mode socket [tag]
     # decided), so the pool cannot express the OFF mode. The mode is therefore
     # passed to the php-fpm master as `-d`, which the children inherit — verified
     # through a request, per cell, by assert_mode_live.
+    #
+    # `clear_env` defaults to yes, which starts every worker with an EMPTY
+    # environment. That is invisible until something depends on an inherited
+    # variable: `BENCH_BARE` would then reach the volucer arms and not the fpm
+    # ones, so half the run would be bare and half framed while every row claimed
+    # the same configuration. Only the variables a run actually sets are passed
+    # through, so this does not leak the whole shell into the pool.
+    local env_pass="" name value
+    for name in BENCH_BARE; do
+        value="$(printenv "$name" 2>/dev/null || true)"
+        if [ -n "$value" ]; then
+            env_pass="$env_pass
+env[$name] = $value"
+        fi
+    done
+    local FPM_ENV_PASS="clear_env = no$env_pass"
     cat > "$1" <<EOF
 ; php-fpm started directly (-y -F): no systemd service, no pool.d, no sudo, so the
 ; host's own pools are never restarted by this matrix.
@@ -1072,6 +1088,7 @@ php_admin_flag[log_errors] = on
 
 php_admin_value[memory_limit] = 512M
 php_admin_value[date.timezone] = UTC
+${FPM_ENV_PASS}
 EOF
 }
 
