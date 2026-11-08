@@ -107,7 +107,7 @@ def path_of(row):
     return str(row.get("path", "") or "").strip() or "<unrecorded>"
 
 
-PATH_ORDER = ["/echo", "/", "/api/items", "/items"]
+PATH_ORDER = ["/echo", "/", "/api/items", "/items", "/items-fast"]
 
 
 def path_sort(paths):
@@ -127,6 +127,9 @@ PATH_NOTE = {
     "/": "the landing page, rendered through a template.",
     "/api/items": "a JSON list from SQLite through the query builder.",
     "/items": "the same list rendered as a template.",
+    "/items-fast": "the same page as `/items` with the identity map removed: `->objects()` "
+                   "instead of `->entities()`, so the only difference between the two rows is "
+                   "hydration. Byte-identical output, verified.",
 }
 
 
