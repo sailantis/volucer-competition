@@ -47,6 +47,15 @@ results/*.tsv
 !results/matrix85-root/
 !results/matrix85-volucer-modes/
 !results/matrix85-prefork/
+# The multi-endpoint pass: five endpoints in one run on the released packages
+# (clarity v0.4.1, azera-framework v0.3.1), at c=96 only, with
+# `setRevalidateFreq(60)` enabled the way a deployment would. It is the first
+# run that measures `/echo`, `/`, `/api/items`, `/items` and `/items-fast`
+# inside one interleaved grid, so the page-to-page ratios are host drift-free;
+# earlier runs measured one endpoint at a time and cannot be compared to it
+# directly. A published chart that cannot be traced to the rows behind it is a
+# chart nobody can check.
+!results/matrix-0.4.1-reval60/
 # The scale grid: the same eight arms at 16, 32 and 64 serving PHP processes, at
 # c=8, 16, 32 and 64. `run85-scale-items` is the ORM page and `run85-scale-root`
 # is the landing page - one run each, because the harness measures one endpoint

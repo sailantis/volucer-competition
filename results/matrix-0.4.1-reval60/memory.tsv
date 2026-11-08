@@ -1,0 +1,145 @@
+path	arm	workers	opcache	phase	conc	pss_mb	rss_mb	pids	children
+*	volucer-attach	8	on	boot	0	65.5	281.3	10	
+*	volucer-attach	8	on	post	96	68.4	276.8	10	
+*	volucer-attach	16	on	boot	0	74.5	453.2	18	
+*	volucer-attach	16	on	post	96	84.5	492.6	18	
+*	volucer-attach	32	on	boot	0	82.1	713.8	34	
+*	volucer-attach	32	on	post	96	102.9	880.8	34	
+*	volucer-tcp	8	on	boot	0	204.5	458.3	9	
+*	volucer-tcp	8	on	post	96	214.1	467.6	9	
+*	volucer-tcp	16	on	boot	0	348.4	871.6	17	
+*	volucer-tcp	16	on	post	96	374.7	902.9	17	
+*	volucer-tcp	32	on	boot	0	594.8	1652.3	33	
+*	volucer-tcp	32	on	post	96	700.7	1782.9	33	
+*	volucer-fastcgi	8	on	boot	0	186.3	438.7	9	
+*	volucer-fastcgi	8	on	post	96	195.4	448.3	9	
+*	volucer-fastcgi	16	on	boot	0	333.6	858.8	17	
+*	volucer-fastcgi	16	on	post	96	339.1	865.0	17	
+*	volucer-fastcgi	32	on	boot	0	621.2	1697.3	33	
+*	volucer-fastcgi	32	on	post	96	629.7	1706.6	33	
+*	volucer-prefork	1	on	boot	0	61.3	298.3	10	8
+*	volucer-prefork	1	on	post	96	69.3	306.7	10	8
+*	volucer-prefork	1	on	boot	0	67.5	455.7	18	16
+*	volucer-prefork	1	on	post	96	76.5	528.1	18	16
+*	volucer-prefork	1	on	boot	0	69.7	650.1	34	32
+*	volucer-prefork	1	on	post	96	100.1	982.0	34	32
+*	volucer-external	8	on	boot	0	59.0	298.8	10	
+*	volucer-external	8	on	post	96	64.0	304.4	10	
+*	volucer-external	16	on	boot	0	71.4	527.7	18	
+*	volucer-external	16	on	post	96	78.3	535.5	18	
+*	volucer-external	32	on	boot	0	90.4	979.0	34	
+*	volucer-external	32	on	post	96	100.5	990.5	34	
+*	rr	8	on	boot	0	251.9	502.3	9	
+*	rr	8	on	post	96	257.5	508.0	9	
+*	rr	16	on	boot	0	425.8	951.3	17	
+*	rr	16	on	post	96	428.4	953.9	17	
+*	rr	32	on	boot	0	769.8	1852.4	33	
+*	rr	32	on	post	96	779.7	1862.3	33	
+*	frankenphp	8	on	boot	0	123.4	123.4	1	
+*	frankenphp	8	on	post	96	128.6	128.6	1	
+*	frankenphp	16	on	boot	0	137.3	137.3	1	
+*	frankenphp	16	on	post	96	145.4	145.4	1	
+*	frankenphp	32	on	boot	0	153.3	153.3	1	
+*	frankenphp	32	on	post	96	169.5	169.5	1	
+*	fpm	8	on	boot	0	55.1	312.6	14	
+*	fpm	8	on	post	96	56.0	313.9	14	
+*	fpm	16	on	boot	0	64.9	541.4	22	
+*	fpm	16	on	post	96	66.2	543.6	22	
+*	fpm	32	on	boot	0	84.5	1000.7	38	
+*	fpm	32	on	post	96	86.3	1003.0	38	
+*	volucer-attach	16	on	boot	0	73.6	446.1	18	
+*	volucer-attach	16	on	post	96	82.3	481.0	18	
+*	volucer-attach	32	on	boot	0	84.0	716.8	34	
+*	volucer-attach	32	on	post	96	103.8	886.2	34	
+*	volucer-tcp	8	on	boot	0	204.2	458.3	9	
+*	volucer-tcp	8	on	post	96	209.5	463.6	9	
+*	volucer-tcp	16	on	boot	0	348.8	872.3	17	
+*	volucer-tcp	16	on	post	96	376.2	904.3	17	
+*	volucer-tcp	32	on	boot	0	595.1	1652.6	33	
+*	volucer-tcp	32	on	post	96	701.6	1783.3	33	
+*	volucer-fastcgi	8	on	boot	0	186.6	439.1	9	
+*	volucer-fastcgi	8	on	post	96	193.9	446.8	9	
+*	volucer-fastcgi	16	on	boot	0	333.6	859.6	17	
+*	volucer-fastcgi	16	on	post	96	339.7	866.2	17	
+*	volucer-fastcgi	32	on	boot	0	620.8	1696.2	33	
+*	volucer-fastcgi	32	on	post	96	628.7	1705.1	33	
+*	volucer-prefork	1	on	boot	0	63.2	302.0	10	8
+*	volucer-prefork	1	on	post	96	69.8	309.1	10	8
+*	volucer-prefork	1	on	boot	0	67.0	450.1	18	16
+*	volucer-prefork	1	on	post	96	76.4	522.2	18	16
+*	volucer-prefork	1	on	boot	0	68.5	632.8	34	32
+*	volucer-prefork	1	on	post	96	100.5	982.3	34	32
+*	volucer-external	8	on	boot	0	60.0	300.9	10	
+*	volucer-external	8	on	post	96	66.3	307.7	10	
+*	volucer-external	16	on	boot	0	71.4	527.9	18	
+*	volucer-external	16	on	post	96	78.3	535.8	18	
+*	volucer-external	32	on	boot	0	89.7	980.5	34	
+*	volucer-external	32	on	post	96	100.5	991.8	34	
+*	rr	8	on	boot	0	253.8	504.1	9	
+*	rr	8	on	post	96	257.8	508.1	9	
+*	rr	16	on	boot	0	426.9	952.8	17	
+*	rr	16	on	post	96	433.5	959.4	17	
+*	rr	32	on	boot	0	767.5	1849.0	33	
+*	rr	32	on	post	96	770.9	1852.5	33	
+*	frankenphp	8	on	boot	0	123.4	123.4	1	
+*	frankenphp	8	on	post	96	130.9	130.9	1	
+*	frankenphp	16	on	boot	0	135.7	135.7	1	
+*	frankenphp	16	on	post	96	144.6	144.6	1	
+*	frankenphp	32	on	boot	0	152.5	152.6	1	
+*	frankenphp	32	on	post	96	168.3	168.3	1	
+*	fpm	8	on	boot	0	54.9	309.8	14	
+*	fpm	8	on	post	96	56.1	311.4	14	
+*	fpm	16	on	boot	0	65.2	540.7	22	
+*	fpm	16	on	post	96	66.5	542.9	22	
+*	fpm	32	on	boot	0	84.7	999.8	38	
+*	fpm	32	on	post	96	85.9	1001.8	38	
+*	volucer-attach	8	on	boot	0	64.2	278.0	10	
+*	volucer-attach	8	on	post	96	69.2	283.0	10	
+*	volucer-attach	32	on	boot	0	82.8	712.2	34	
+*	volucer-attach	32	on	post	96	101.8	878.2	34	
+*	volucer-tcp	8	on	boot	0	204.2	458.1	9	
+*	volucer-tcp	8	on	post	96	213.0	466.4	9	
+*	volucer-tcp	16	on	boot	0	348.4	871.6	17	
+*	volucer-tcp	16	on	post	96	374.5	902.8	17	
+*	volucer-tcp	32	on	boot	0	594.6	1650.6	33	
+*	volucer-tcp	32	on	post	96	699.7	1780.9	33	
+*	volucer-fastcgi	8	on	boot	0	186.5	438.3	9	
+*	volucer-fastcgi	8	on	post	96	191.7	443.8	9	
+*	volucer-fastcgi	16	on	boot	0	333.4	858.6	17	
+*	volucer-fastcgi	16	on	post	96	339.0	865.0	17	
+*	volucer-fastcgi	32	on	boot	0	620.6	1697.6	33	
+*	volucer-fastcgi	32	on	post	96	629.4	1707.7	33	
+*	volucer-prefork	1	on	boot	0	62.1	300.0	10	8
+*	volucer-prefork	1	on	post	96	71.4	309.7	10	8
+*	volucer-prefork	1	on	boot	0	70.1	498.1	18	16
+*	volucer-prefork	1	on	post	96	77.0	529.1	18	16
+*	volucer-prefork	1	on	boot	0	68.6	649.4	34	32
+*	volucer-prefork	1	on	post	96	100.0	981.4	34	32
+*	volucer-external	8	on	boot	0	59.1	295.8	10	
+*	volucer-external	8	on	post	96	66.6	303.8	10	
+*	volucer-external	16	on	boot	0	71.0	529.1	18	
+*	volucer-external	16	on	post	96	78.3	537.4	18	
+*	volucer-external	32	on	boot	0	90.7	979.7	34	
+*	volucer-external	32	on	post	96	100.8	990.9	34	
+*	rr	8	on	boot	0	252.3	501.8	9	
+*	rr	8	on	post	96	257.3	506.8	9	
+*	rr	16	on	boot	0	425.2	951.4	17	
+*	rr	16	on	post	96	431.5	957.6	17	
+*	rr	32	on	boot	0	767.8	1847.8	33	
+*	rr	32	on	post	96	776.3	1856.2	33	
+*	frankenphp	8	on	boot	0	124.3	124.3	1	
+*	frankenphp	8	on	post	96	132.4	132.4	1	
+*	frankenphp	16	on	boot	0	136.8	136.8	1	
+*	frankenphp	16	on	post	96	142.3	142.3	1	
+*	frankenphp	32	on	boot	0	155.6	155.6	1	
+*	frankenphp	32	on	post	96	167.2	167.2	1	
+*	fpm	8	on	boot	0	55.6	314.0	14	
+*	fpm	8	on	post	96	56.5	315.3	14	
+*	fpm	16	on	boot	0	65.4	541.0	22	
+*	fpm	16	on	post	96	66.5	543.0	22	
+*	fpm	32	on	boot	0	83.9	995.6	38	
+*	fpm	32	on	post	96	85.5	998.8	38	
+*	volucer-attach	8	on	boot	0	65.7	281.5	10	
+*	volucer-attach	8	on	post	96	71.1	286.9	10	
+*	volucer-attach	16	on	boot	0	72.8	451.0	18	
+*	volucer-attach	16	on	post	96	81.8	490.1	18	
