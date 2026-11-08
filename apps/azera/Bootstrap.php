@@ -206,38 +206,40 @@ class Bootstrap
         self::mark('View engine');
 
         // --- Routes ---
-        // `BENCH_ROUTE_CACHE` loads a precompiled table instead of building it.
+        // `BENCH_ROUTE_CACHE` restores a table compiled by `azera routes:cache`
+        // instead of building one, which is the framework feature this benchmark was
+        // used to justify. See docs/framework-cost.md.
         //
-        // This exists to price the fix, not to be the fix: a real implementation
-        // belongs in the framework, behind a `route:cache` deploy step, so every
-        // Azera app gets it. What is measured here is exactly what such a change
-        // would do -- `require` the table, assign the arrays, skip `add()` -- so
-        // the number is an honest bound on what that change is worth.
+        // The shape is the documented contract: restoreIfCached() returns true when it
+        // restored, and the app returns early so the registrations below never run.
+        // Registering *and* restoring would pay both costs -- measured at 636 us
+        // against 110 for a build and 17 for a restore.
         //
-        // Measured: rebuilding costs 148.4 us, `require` + assign costs 3.1 us.
-        // See docs/framework-cost.md.
-        //
-        // Every route-registration block below is guarded on `$cacheHit`, because
-        // assigning the table and then also registering over it would append to
-        // the loaded arrays and silently measure nothing. That mistake was made
-        // once, and it is why the guards are explicit rather than implied by
-        // control flow.
+        // `BENCH_ROUTE_RECORD=1` turns on source recording for the deploy step, which
+        // is the only time it is needed.
         $router = $ctx->router();
-        $routeCache = getenv('BENCH_ROUTE_CACHE');
-        $cacheHit = $routeCache !== false && $routeCache !== '' && is_file($routeCache);
-        if ($cacheHit) {
-            foreach ((require $routeCache) as $prop => $value) {
-                $rp = new \ReflectionProperty(\Azera\Core\Router::class, $prop);
-                $rp->setAccessible(true);
-                $rp->setValue($router, $value);
-            }
-            self::mark('Route cache');
+
+        if (getenv('BENCH_ROUTE_RECORD') === '1') {
+            $router->recordSources(true);
         }
 
-        // Benchmark endpoints (the ones we actually time).
-        // Use the controller() group with a callback so the group stack
-        // is automatically restored afterwards.
-        if (!$cacheHit) {
+        $routeCache = getenv('BENCH_ROUTE_CACHE');
+        if ($routeCache !== false && $routeCache !== ''
+            && $router->restoreIfCached($routeCache)
+        ) {
+            self::mark('Route cache');
+
+            return $ctx;
+        }
+
+        // Every registration below lives inside one cached() block so the table is
+        // entirely attributable to this file. Mixing cached and uncached routes is
+        // refused by the router, because a cache hit would change the winner wherever
+        // two routes tie on specificity -- see RouterStateTest.
+        $router->cached(__FILE__, function (\Azera\Core\Router $router): void {
+            // Benchmark endpoints (the ones we actually time).
+            // Use the controller() group with a callback so the group stack
+            // is automatically restored afterwards.
             $router->controller(BenchController::class, function (\Azera\Core\Router $r) {
                 $r->get('/', '::indexAction');
                 // The framework floor: routed, dispatched, both middlewares, no work after that.
@@ -264,18 +266,15 @@ class Bootstrap
                 $r->get('/items-qb/{id:int}', '::showQbAction');
                 $r->post('/items-qb', '::createQbAction');
             });
-        }
-        self::mark('Bench routes');
 
-        // --- Fill routes ---
-        // 100 dummy routes to simulate a real project's route table.
-        // We never dispatch these — they exist only so the router has a
-        // realistic number of entries to search through on every match.
-        // Mix of static, parametric, grouped, and multi-method routes.
-        if (!$cacheHit) {
+            // --- Fill routes ---
+            // 100 dummy routes to simulate a real project's route table.
+            // We never dispatch these — they exist only so the router has a
+            // realistic number of entries to search through on every match.
+            // Mix of static, parametric, grouped, and multi-method routes.
             self::registerFillerRoutes($router, self::$fillerRoutes);
-        }
-        self::mark('Filler routes');
+        });
+        self::mark('Bench routes, fillers');
 
         // --- Dispatcher + Global Middleware ---
         $dispatcher = $ctx->dispatcher();
@@ -330,9 +329,14 @@ class Bootstrap
         // --- Feature Demo Routes ---
         // Endpoints that exercise the new enterprise features (AOP,
         // events, cache, logging, security).  These don't interfere
-        // with benchmark routes. Guarded on `$cacheHit` for the same reason as
-        // the benchmark routes above: the loaded table already contains them.
-        if (!$cacheHit) {
+        // with benchmark routes. Inside the same cached() block as the benchmark
+        // routes, for the same all-or-nothing reason.
+        $router->cached(__FILE__, function (\Azera\Core\Router $router): void {
+            $dispatcher = AppContext::instance()->dispatcher();
+            $dispatcher->defineMiddlewareGroup('session', [
+                new \Azera\Http\SessionMiddleware(),
+            ]);
+
             $router->controller(\App\Azera\Controllers\FeatureController::class, function (\Azera\Core\Router $r) {
                 $r->get('/features', '::indexAction');
                 $r->get('/features/aop', '::aopAction');
@@ -367,7 +371,7 @@ class Bootstrap
                 $r->get('/api/items/{id:int}', '::showAction');
                 $r->post('/api/items', '::createAction');
             });
-        }
+        });
 
         // Memoize the wired context per dbPath so a later boot in the same
         // process can skip the rebuild. Only reachable from a CLI worker; under
