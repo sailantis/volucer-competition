@@ -108,11 +108,28 @@ class Bootstrap
         }
         $viewsPath = __DIR__ . '/Views';
         // Register the Clarity view engine lazily because not all requests need to render views.
+        //
+        // setRevalidateFreq(60) makes the template cache behave the way the OPcache
+        // in this matrix already behaves. Every arm here runs OPcache with
+        // `opcache.validate_timestamps=0` (see `write_wrappers()` in
+        // scripts/matrix.sh), so PHP files are never re-stat()ed at runtime -- the
+        // matrix deliberately does not pay for that check. Clarity's own freshness
+        // check is not governed by that ini: it stats every dependency on every
+        // render unless told otherwise, which made this app the one place in the
+        // run still verifying its source files per request.
+        //
+        // 60 is the same window php-fpm's php.ini uses on this host
+        // (`opcache.revalidate_freq = 60`), so code and templates now age on the
+        // same schedule. That is the production posture the benchmark is meant to
+        // describe: the deploy path clears both caches, and neither is checked per
+        // request. Verified to be byte-identical output; it changes only how often
+        // the filesystem is consulted.
         $ctx->set(ViewEngine::class, fn() =>
             (new ClarityEngine())
                 ->setExtension('.clarity.html')
                 ->setViewPath($viewsPath)
                 ->setCachePath($cacheDir)
+                ->setRevalidateFreq(60)
                 ->setVars([
                     'locale'   => 'en_US',
                     'platform' => 'desktop',
