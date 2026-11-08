@@ -206,37 +206,65 @@ class Bootstrap
         self::mark('View engine');
 
         // --- Routes ---
+        // `BENCH_ROUTE_CACHE` loads a precompiled table instead of building it.
+        //
+        // This exists to price the fix, not to be the fix: a real implementation
+        // belongs in the framework, behind a `route:cache` deploy step, so every
+        // Azera app gets it. What is measured here is exactly what such a change
+        // would do -- `require` the table, assign the arrays, skip `add()` -- so
+        // the number is an honest bound on what that change is worth.
+        //
+        // Measured: rebuilding costs 148.4 us, `require` + assign costs 3.1 us.
+        // See docs/framework-cost.md.
+        //
+        // Every route-registration block below is guarded on `$cacheHit`, because
+        // assigning the table and then also registering over it would append to
+        // the loaded arrays and silently measure nothing. That mistake was made
+        // once, and it is why the guards are explicit rather than implied by
+        // control flow.
         $router = $ctx->router();
+        $routeCache = getenv('BENCH_ROUTE_CACHE');
+        $cacheHit = $routeCache !== false && $routeCache !== '' && is_file($routeCache);
+        if ($cacheHit) {
+            foreach ((require $routeCache) as $prop => $value) {
+                $rp = new \ReflectionProperty(\Azera\Core\Router::class, $prop);
+                $rp->setAccessible(true);
+                $rp->setValue($router, $value);
+            }
+            self::mark('Route cache');
+        }
 
         // Benchmark endpoints (the ones we actually time).
         // Use the controller() group with a callback so the group stack
         // is automatically restored afterwards.
-        $router->controller(BenchController::class, function (\Azera\Core\Router $r) {
-            $r->get('/', '::indexAction');
-            // The framework floor: routed, dispatched, both middlewares, no work after that.
-            $r->get('/echo', '::echoAction');
-            // ORM endpoints (model hydration)
-            $r->get('/items', '::listAction');
-            // GET /items with the identity map removed and nothing else changed:
-            // the single-variable control for /items (see listFastAction).
-            $r->get('/items-fast', '::listFastAction');
-            $r->get('/items/{id:int}', '::showAction');
-            $r->post('/items', '::createAction');
+        if (!$cacheHit) {
+            $router->controller(BenchController::class, function (\Azera\Core\Router $r) {
+                $r->get('/', '::indexAction');
+                // The framework floor: routed, dispatched, both middlewares, no work after that.
+                $r->get('/echo', '::echoAction');
+                // ORM endpoints (model hydration)
+                $r->get('/items', '::listAction');
+                // GET /items with the identity map removed and nothing else changed:
+                // the single-variable control for /items (see listFastAction).
+                $r->get('/items-fast', '::listFastAction');
+                $r->get('/items/{id:int}', '::showAction');
+                $r->post('/items', '::createAction');
 
-            // New ORM stack endpoints (Model facade over the EM pipeline)
-            // Deactivated (2026-09-05) — the listOrmAction/showOrmAction/
-            // createOrmAction actions stay in BenchController for the next
-            // comparison run; re-enable these three routes to bring the
-            // /items-orm paths back.
-            // $r->get('/items-orm', '::listOrmAction');
-            // $r->get('/items-orm/{id:int}', '::showOrmAction');
-            // $r->post('/items-orm', '::createOrmAction');
+                // New ORM stack endpoints (Model facade over the EM pipeline)
+                // Deactivated (2026-09-05) — the listOrmAction/showOrmAction/
+                // createOrmAction actions stay in BenchController for the next
+                // comparison run; re-enable these three routes to bring the
+                // /items-orm paths back.
+                // $r->get('/items-orm', '::listOrmAction');
+                // $r->get('/items-orm/{id:int}', '::showOrmAction');
+                // $r->post('/items-orm', '::createOrmAction');
 
-            // Query Builder endpoints (no model hydration)
-            $r->get('/items-qb', '::listQbAction');
-            $r->get('/items-qb/{id:int}', '::showQbAction');
-            $r->post('/items-qb', '::createQbAction');
-        });
+                // Query Builder endpoints (no model hydration)
+                $r->get('/items-qb', '::listQbAction');
+                $r->get('/items-qb/{id:int}', '::showQbAction');
+                $r->post('/items-qb', '::createQbAction');
+            });
+        }
         self::mark('Bench routes');
 
         // --- Fill routes ---
@@ -244,7 +272,9 @@ class Bootstrap
         // We never dispatch these — they exist only so the router has a
         // realistic number of entries to search through on every match.
         // Mix of static, parametric, grouped, and multi-method routes.
-        self::registerFillerRoutes($router, self::$fillerRoutes);
+        if (!$cacheHit) {
+            self::registerFillerRoutes($router, self::$fillerRoutes);
+        }
         self::mark('Filler routes');
 
         // --- Dispatcher + Global Middleware ---
@@ -300,41 +330,44 @@ class Bootstrap
         // --- Feature Demo Routes ---
         // Endpoints that exercise the new enterprise features (AOP,
         // events, cache, logging, security).  These don't interfere
-        // with benchmark routes.
-        $router->controller(\App\Azera\Controllers\FeatureController::class, function (\Azera\Core\Router $r) {
-            $r->get('/features', '::indexAction');
-            $r->get('/features/aop', '::aopAction');
-            $r->get('/features/cache', '::cacheAction');
-            $r->get('/features/log', '::logAction');
-            $r->get('/features/retry', '::retryAction');
-            $r->get('/features/db-events', '::dbEventsAction');
-            $r->get('/features/validation', '::validationAction');
-            $r->get('/features/config', '::configAction');
-            $r->get('/features/request-scoped', '::requestScopedAction');
-            $r->get('/features/pipeline', '::pipelineAction');
-            $r->get('/features/events', '::eventsAction');
-            $r->get('/features/rate-limit', '::rateLimitAction');
+        // with benchmark routes. Guarded on `$cacheHit` for the same reason as
+        // the benchmark routes above: the loaded table already contains them.
+        if (!$cacheHit) {
+            $router->controller(\App\Azera\Controllers\FeatureController::class, function (\Azera\Core\Router $r) {
+                $r->get('/features', '::indexAction');
+                $r->get('/features/aop', '::aopAction');
+                $r->get('/features/cache', '::cacheAction');
+                $r->get('/features/log', '::logAction');
+                $r->get('/features/retry', '::retryAction');
+                $r->get('/features/db-events', '::dbEventsAction');
+                $r->get('/features/validation', '::validationAction');
+                $r->get('/features/config', '::configAction');
+                $r->get('/features/request-scoped', '::requestScopedAction');
+                $r->get('/features/pipeline', '::pipelineAction');
+                $r->get('/features/events', '::eventsAction');
+                $r->get('/features/rate-limit', '::rateLimitAction');
 
-            // CSRF demo needs a real session — apply the 'session' group
-            // only to these routes.
-            $r->middleware('session', function () use ($r) {
-                $r->get('/features/security', '::securityAction');
-                $r->post('/features/security', '::securityPostAction');
+                // CSRF demo needs a real session — apply the 'session' group
+                // only to these routes.
+                $r->middleware('session', function () use ($r) {
+                    $r->get('/features/security', '::securityAction');
+                    $r->post('/features/security', '::securityPostAction');
+                });
             });
-        });
 
-        // --- REST API Routes ---
-        // A dedicated JSON API category.  Every framework implements the
-        // same /api/* endpoints so routing + controller + JSON
-        // serialization overhead is compared apples-to-apples.
-        $router->controller(\App\Azera\Controllers\ApiController::class, function (\Azera\Core\Router $r) {
-            $r->get('/api/items', '::indexAction');
-            // /api/items with the model replaced by the literal table: the
-            // single-variable control for /api/items (see indexFastAction).
-            $r->get('/api/items-fast', '::indexFastAction');
-            $r->get('/api/items/{id:int}', '::showAction');
-            $r->post('/api/items', '::createAction');
-        });
+            // --- REST API Routes ---
+            // A dedicated JSON API category.  Every framework implements the
+            // same /api/* endpoints so routing + controller + JSON
+            // serialization overhead is compared apples-to-apples.
+            $router->controller(\App\Azera\Controllers\ApiController::class, function (\Azera\Core\Router $r) {
+                $r->get('/api/items', '::indexAction');
+                // /api/items with the model replaced by the literal table: the
+                // single-variable control for /api/items (see indexFastAction).
+                $r->get('/api/items-fast', '::indexFastAction');
+                $r->get('/api/items/{id:int}', '::showAction');
+                $r->post('/api/items', '::createAction');
+            });
+        }
 
         // Memoize the wired context per dbPath so a later boot in the same
         // process can skip the rebuild. Only reachable from a CLI worker; under

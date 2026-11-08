@@ -87,7 +87,7 @@ pm.max_requests = 0
 catch_workers_output = yes
 clear_env = no
 env[BENCH_BARE] = $2
-env[BENCH_FILLERS] = ${FILLERS:-100}
+env[BENCH_FILLERS] = ${FILLERS:-100}$(if [ -n "${ROUTE_CACHE:-}" ]; then printf '\nenv[BENCH_ROUTE_CACHE] = %s' "$ROUTE_CACHE"; fi)
 php_admin_flag[opcache.enable] = $OC_ENABLE
 php_admin_value[memory_limit] = 512M
 php_admin_value[date.timezone] = UTC

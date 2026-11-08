@@ -39,6 +39,10 @@ Of the 171 µs bootstrap, **121 µs is the 100 filler routes** — 70% of the bo
 31% of everything above bare. Removing them lifts `/echo` from 24,656 to 32,351
 rps and drops framework cost from 322 µs to 194 µs.
 
+Better still: **compiling the table at deploy time takes that 121 µs to ~1 µs**,
+lifting `/echo` from 24,657 to 38,706 rps. [That is the fix, and it is
+measured](#a-compiled-route-table-does-fix-it--my-first-answer-was-wrong).
+
 The answer to "so what is Volucer for?", which is the question that started this, is
 in [the last section](#what-this-means-for-the-benchmark--and-what-volucer-is-for):
 **framed Volucer costs 108.8 µs of CPU per request and bare php-fpm costs 114.6.**
@@ -67,27 +71,59 @@ The cost is `Router::add()`: `parsePattern()` (0.26–0.69 µs) plus the hash in
 and `calculateSpecificity()` walk. Nothing here is pathological; it is simply paid
 ~120 times per request instead of once per deploy.
 
-### A compiled route table does not fix it
+### A compiled route table DOES fix it — my first answer was wrong
 
-The obvious fix — Symfony/Laravel style `route:cache`, `var_export` the compiled
-table to a PHP file and `require` it — was measured and **made things 4× worse**:
+The first version of this document said a route cache would not help, on the
+evidence that `require`ing a `var_export`ed table cost 436 µs against 108 µs to
+rebuild from source. **That was wrong, and the way it was wrong is worth recording
+because it is an easy trap.**
 
-| | median |
-|---|---:|
-| rebuild from source | 107.9 µs |
-| `require` the compiled table + hydrate | 514.0 µs |
-| `require` alone, no hydrate | 435.7 µs |
+The probe wrote the cache file and `require`d it in the same PHP process. OPcache
+declines to cache a file the same process just wrote, and it does so *silently* —
+`require` still succeeds, it just recompiles. So the "cached" arm was recompiling
+61 KB of PHP every iteration and was measuring `zend_compile`, not file loading.
+`opcache_is_script_cached()` reported `NOT cached` and the probe printed that fact
+without treating it as fatal.
 
-The compiled table is 61 KB of PHP. Parsing 61 KB is more expensive than calling
-`add()` 119 times. Symfony's cache wins because its route table is also the
-*compiled matcher* (a regex → handler map it can answer in one `preg_match`),
-whereas `var_export`ing Azera's token arrays saves the construction but not the
-representation. A real fix would have to serialize the *matcher*, not the input to
-it.
+Measured properly — generated in one process, loaded in another, cache state
+asserted before timing:
 
-Equivalence was verified: all 8 probe routes match identically between the source
-table and the compiled one, so this is a performance result, not a correctness
-one.
+| encoding | size | load | + hydrate into a Router |
+|---|---:|---:|---:|
+| `var_export` + `require` | 61.1 KB | **0.1 µs** | **3.1 µs** |
+| `unserialize()` | 24.9 KB | 67.5 µs | 163.1 µs |
+| `igbinary_unserialize()` | 8.7 KB | 38.9 µs | 100.1 µs |
+| `json_decode()` | 13.2 KB | 136.7 µs | — |
+| rebuild from source | — | — | 148.4 µs |
+| build-direct (no `add()`) | — | — | 3.1 µs |
+
+`var_export` wins **because** it is PHP source: OPcache compiles it once and the
+file then costs 0.1 µs to include, where `unserialize` has to rebuild 120 nested
+arrays in C on every request. Loading a cached PHP file is essentially free in a
+way no data format can match — which is the whole reason Symfony and Laravel
+generate PHP rather than serialized blobs.
+
+Boot goes from **110 µs to 10.6 µs**, all 9 probe routes still answer identically,
+and match latency is unchanged at 0.18 µs.
+
+**On the wire**, same server, same concurrency, only the cache differing:
+
+| nginx + php-fpm, `/echo`, c=96 | rps | µs CPU per request |
+|---|---:|---:|
+| rebuild from source | 24,657 | 396.9 |
+| load compiled table | **38,706** | **220.9** |
+| bare (no framework) | 80,945 | 71.5 |
+
+**+57% throughput, and framework cost falls from 325 µs to 150 µs.** That is the
+single largest improvement available anywhere in this investigation, and it is a
+deploy-time change, not a runtime one.
+
+It also reframes the published comparison. Volucer's cold arms
+(`volucer-fastcgi` 21,848, `volucer-external` 25,545, `volucer-prefork` 27,529) are
+currently *below* fpm-with-a-route-cache, because none of them has one. They share
+the same `Bootstrap`, so they would benefit identically — but as measured today,
+fpm's cold path is competing with one hand behind its back and so is everything
+else.
 
 ## Finding 2 — `Bootstrap::$wired` is dead code on every SAPI that reuses a process
 
@@ -270,8 +306,9 @@ because all six frameworks register the same 100 filler routes:
 
 In cost order, all measured:
 
-1. **Rebuild the route table** — 121 µs of the cold boot. A `var_export` cache does
-   *not* fix it (measured 4× worse); serialising the compiled matcher might.
+1. **Rebuild the route table** — 121 µs of the cold boot. Fixed by a compiled
+   table: 121 µs → ~1 µs, worth +57% throughput on the cold path. This is a
+   framework feature (a `route:cache` deploy step), not an app change.
 2. **Re-assert `journal_mode = WAL`** — 61 µs, and idempotent: the mode is stored in
    the file header, so the second connection onwards is re-setting a property that
    cannot have changed. Dropping it takes the cold connect from 112 µs to 24 µs.
@@ -286,7 +323,8 @@ only one that is free to fix.
 |---|---|
 | `probe-boot-cost.php` | total boot cost, phase split, filler-route scaling |
 | `probe-route-cost.php` | per-route registration cost, deferred sort, match scaling |
-| `probe-route-cache.php` | would a compiled table help? (no) |
+| `probe-route-encodings.php` | **the fix**: encoded table vs rebuild, two processes |
+| `probe-route-cache.php` | superseded — measured compilation, not loading |
 | `probe-boot-profile.sh` | framework cost on the wire, as CPU per request |
 | `probe-phases.sh` | per-phase attribution inside a real fpm child |
 | `probe-static.sh` | does a class static survive between requests? (no) |
