@@ -66,12 +66,15 @@ error_log(sprintf(
 ));
 
 $dbPath = __DIR__ . '/data/bench.sqlite';
-if (!file_exists($dbPath)) {
+// Same switch as the cold entry point; read here because this object is built
+// once, before the request loop. See BenchApp::$bare.
+$bare = getenv('BENCH_BARE') === '1';
+if (!$bare && !file_exists($dbPath)) {
     error_log('Database not found. Run: php seed.php');
     exit(1);
 }
 
-$app = new BenchApp($dbPath);
+$app = new BenchApp($dbPath, $bare);
 // The boot the cold arms pay per request, paid once here.
 $app->bootstrap();
 

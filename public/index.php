@@ -18,7 +18,16 @@ declare(strict_types=1);
 $root = dirname(__DIR__);
 $dbPath = $root . '/data/bench.sqlite';
 
-if (!file_exists($dbPath)) {
+// `BENCH_BARE=1` removes the framework from this request entirely, to answer
+// "what does /echo consist of?" -- see the note on BenchApp::$bare. It is read
+// from the environment rather than the query string because the resident arms
+// build BenchApp once, before their loop, so a query flag could not reach them
+// and the two modes would silently disagree.
+$bare = getenv('BENCH_BARE') === '1';
+
+// The bare mode opens no database, so the seed check would fail it for a reason
+// that has nothing to do with the measurement.
+if (!$bare && !file_exists($dbPath)) {
     http_response_code(500);
     echo 'Database not found. Run: php seed.php';
     exit;
@@ -31,7 +40,7 @@ if (!file_exists($dbPath)) {
 require $root . '/vendor/autoload.php';
 require $root . '/BenchApp.php';
 
-$app = new BenchApp($dbPath);
+$app = new BenchApp($dbPath, $bare);
 $app->bootstrap();
 
 $result = $app->dispatch(
