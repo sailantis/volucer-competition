@@ -32,16 +32,80 @@ use Psr\SimpleCache\CacheInterface;
 class Bootstrap
 {
     /**
-     * Wiring memo — static so it survives the fresh AppContext a
-     * worker-mode re-bootstrap would otherwise create. The route table is
-     * static data (like CI4's RouteCollection service): re-registering
-     * ~120 routes on every warm recycle cost ~0.38 ms of pure rebuild.
+     * Wiring memo, so a boot in a process that already has one can skip
+     * rebuilding the container and the 120-entry route table.
      * Keyed by dbPath so separate contexts (different databases) never
      * share a table.
+     *
+     * This works in a long-lived CLI process and does NOT work under php-fpm.
+     * With OPcache on, the class entry lives in shared memory, so PHP restores
+     * mutable statics to their compile-time defaults at the start of every
+     * request: measured with one fpm child and five sequential requests
+     * (`scripts/probe-static.sh`), the same pid sees the same static reset
+     * every time. So on fpm this is empty by the time it is read, and
+     * `boot()` pays the full ~170 us per request.
+     *
+     * In a CLI worker (volucer's model) it does work: first boot ~6.9 ms once
+     * the autoloader is warm, then 0.45-2.5 us per re-bootstrap.
+     *
+     * The "~0.38 ms of pure rebuild" this originally claimed to save was
+     * measured under the CLI, where the memo hits. The rebuild is real, but it
+     * is ~120 us, and on fpm the memo never avoids it. See
+     * `docs/framework-cost.md`.
      *
      * @var array<string, AppContext>
      */
     private static array $wired = [];
+
+    /**
+     * How many filler routes to register. A property rather than a literal
+     * because the count is a benchmark *input*, not a fact about the app:
+     * `scripts/probe-boot-cost.php` varies it to separate per-route cost from
+     * everything else the boot does. 100 is what every published run used.
+     */
+    public static int $fillerRoutes = 100;
+
+    /**
+     * Boot phase timings, filled in when {@see self::profile()} is called.
+     *
+     * `boot()` is one 2 ms block in the profile and every statement about why
+     * it costs that is a guess until the block is split. This is a nullable
+     * array checked once per section, so leaving it null costs nothing on the
+     * hot path -- which matters, because `boot()` is measured.
+     *
+     * @var array<string, float>|null  phase name => microseconds
+     */
+    public static ?array $profile = null;
+    private static int $profileAt = 0;
+
+    /**
+     * Close a boot phase and file its elapsed time under `$label`.
+     *
+     * Called at the *end* of each section so the label names the work that
+     * just finished. A no-op unless {@see self::$profile} was initialised, and
+     * a single null test when it was not, so `boot()` costs the same either way.
+     */
+    private static function mark(string $label): void
+    {
+        if (self::$profile === null) {
+            return;
+        }
+        $now = hrtime(true);
+        self::$profile[$label] = (self::$profile[$label] ?? 0.0) + ($now - self::$profileAt) / 1000.0;
+        self::$profileAt = $now;
+    }
+
+    /**
+     * Record phase timings for the next boot into {@see self::$profile}.
+     * Returns the previous setting so a caller can restore it.
+     */
+    public static function profile(?array $initial = []): ?array
+    {
+        $old = self::$profile;
+        self::$profile = $initial;
+        self::$profileAt = hrtime(true);
+        return $old;
+    }
 
     /**
      * Forget the wiring memo — the next boot() rebuilds everything (fresh
@@ -57,11 +121,14 @@ class Bootstrap
 
     public static function boot(string $dbPath): AppContext
     {
+        self::mark('start');
         $ctx = self::$wired[$dbPath] ?? null;
 
         if ($ctx !== null) {
-            // Worker-mode re-bootstrap: the singleton AppContext already
-            // carries the fully wired route table, dispatcher and services.
+            // A re-bootstrap in a process that already has a wired context.
+            // This branch is reachable from a CLI worker (volucer's model) and
+            // is effectively dead under php-fpm, where the static above is reset
+            // between requests -- see the note on self::$wired.
             // Request-scoped state was reset by clearRequestScope() after
             // the previous request (the RequestScoped contract) — nothing
             // to rebuild here beyond handing back the same context.
@@ -75,6 +142,7 @@ class Bootstrap
 
         // Reset benchmark state for cold-mode reproducibility
         \App\Azera\Middleware\RequestContextMiddleware::reset();
+        self::mark('AppContext');
 
         // --- Database (SQLite) ---
         // Use a factory so we can configure PRAGMAs right after connecting.
@@ -96,6 +164,7 @@ class Bootstrap
 
         // Tell the Item model to use the default role
         //Item::setDefaultRole('default');
+        self::mark('Database factory');
 
         // --- Views (Clarity) ---
         // Register a deferred factory on the container instead of calling
@@ -134,6 +203,7 @@ class Bootstrap
                     'locale'   => 'en_US',
                     'platform' => 'desktop',
                 ]));
+        self::mark('View engine');
 
         // --- Routes ---
         $router = $ctx->router();
@@ -167,13 +237,15 @@ class Bootstrap
             $r->get('/items-qb/{id:int}', '::showQbAction');
             $r->post('/items-qb', '::createQbAction');
         });
+        self::mark('Bench routes');
 
         // --- Fill routes ---
         // 100 dummy routes to simulate a real project's route table.
         // We never dispatch these — they exist only so the router has a
         // realistic number of entries to search through on every match.
         // Mix of static, parametric, grouped, and multi-method routes.
-        self::registerFillerRoutes($router, 100);
+        self::registerFillerRoutes($router, self::$fillerRoutes);
+        self::mark('Filler routes');
 
         // --- Dispatcher + Global Middleware ---
         $dispatcher = $ctx->dispatcher();
@@ -188,9 +260,11 @@ class Bootstrap
         // per-request overhead that all full-stack frameworks pay.
         $dispatcher->addMiddleware(new \App\Azera\Middleware\SecurityHeadersMiddleware());
         $dispatcher->addMiddleware(new \App\Azera\Middleware\RequestContextMiddleware());
+        self::mark('Dispatcher + middleware');
 
         // --- Enterprise Infrastructure (PSR-3/14/16 + AOP) ---
         self::registerEnterpriseServices($ctx);
+        self::mark('Enterprise services');
 
         // --- FeatureService (autowired so AOP proxy is generated) ---
         // Registered as a class string (no factory) so AppContext::build()
@@ -262,11 +336,11 @@ class Bootstrap
             $r->post('/api/items', '::createAction');
         });
 
-        // Memoize the wired context per dbPath so a worker-mode re-bootstrap
-        // (same process, same database) can skip straight to the request
-        // loop. CI4 parity: its RouteCollection service also loads once per
-        // process; request-scoped state resets via clearRequestScope().
+        // Memoize the wired context per dbPath so a later boot in the same
+        // process can skip the rebuild. Only reachable from a CLI worker; under
+        // php-fpm the static is reset before this line could ever be read.
         self::$wired[$dbPath] = $ctx;
+        self::mark('Feature routes');
 
         return $ctx;
     }

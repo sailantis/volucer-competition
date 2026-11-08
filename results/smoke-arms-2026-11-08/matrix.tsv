@@ -1,0 +1,193 @@
+path	arm	workers	opcache	conc	round	threads	rps	p50	p99	errors	children	proc_kind
+/echo	volucer-attach	8	on	96	1	12	61533.33	1.56ms	5.98ms	0		connections
+/echo	volucer-attach	8	on	144	1	12	58953.06	2.45ms	9.57ms	0		connections
+/echo	volucer-attach	8	on	192	1	12	61521.36	3.13ms	12.82ms	0		connections
+/	volucer-attach	8	on	96	1	12	51289.95	1.86ms	7.29ms	0		connections
+/	volucer-attach	8	on	144	1	12	48960.21	2.96ms	11.55ms	0		connections
+/	volucer-attach	8	on	192	1	12	48053.92	4.03ms	15.93ms	0		connections
+/api/items	volucer-attach	8	on	96	1	12	43846.29	2.20ms	7.91ms	0		connections
+/api/items	volucer-attach	8	on	144	1	12	42670.12	3.40ms	12.68ms	0		connections
+/api/items	volucer-attach	8	on	192	1	12	43488.96	4.47ms	17.10ms	0		connections
+/items	volucer-attach	8	on	96	1	12	26011.49	3.69ms	12.52ms	0		connections
+/items	volucer-attach	8	on	144	1	12	26322.73	5.49ms	19.24ms	0		connections
+/items	volucer-attach	8	on	192	1	12	25755.25	7.47ms	26.30ms	0		connections
+/echo	volucer-attach	32	on	96	1	12	109541.61	823.00us	2.25ms	0		connections
+/echo	volucer-attach	32	on	144	1	12	111248.64	1.24ms	3.14ms	0		connections
+/echo	volucer-attach	32	on	192	1	12	110235.24	1.69ms	4.34ms	0		connections
+/	volucer-attach	32	on	96	1	12	86922.13	1.04ms	2.69ms	0		connections
+/	volucer-attach	32	on	144	1	12	88417.38	1.56ms	3.96ms	0		connections
+/	volucer-attach	32	on	192	1	12	87962.73	2.11ms	5.60ms	0		connections
+/api/items	volucer-attach	32	on	96	1	12	72680.85	1.25ms	3.09ms	0		connections
+/api/items	volucer-attach	32	on	144	1	12	73475.69	1.89ms	4.83ms	0		connections
+/api/items	volucer-attach	32	on	192	1	12	73260.62	2.54ms	6.94ms	0		connections
+/items	volucer-attach	32	on	96	1	12	38873.59	2.38ms	5.22ms	0		connections
+/items	volucer-attach	32	on	144	1	12	39021.57	3.61ms	8.53ms	0		connections
+/items	volucer-attach	32	on	192	1	12	38700.88	4.90ms	12.41ms	0		connections
+/echo	volucer-tcp	8	on	96	1	12	54609.89	1.76ms	6.53ms	0		processes
+/echo	volucer-tcp	8	on	144	1	12	55296.90	2.61ms	10.12ms	0		processes
+/echo	volucer-tcp	8	on	192	1	12	54414.80	3.55ms	13.98ms	0		processes
+/	volucer-tcp	8	on	96	1	12	45870.94	2.06ms	9.98ms	0		processes
+/	volucer-tcp	8	on	144	1	12	46215.24	3.12ms	11.95ms	0		processes
+/	volucer-tcp	8	on	192	1	12	44753.42	4.34ms	16.71ms	0		processes
+/api/items	volucer-tcp	8	on	96	1	12	40281.49	2.37ms	8.68ms	0		processes
+/api/items	volucer-tcp	8	on	144	1	12	40002.23	3.61ms	13.00ms	0		processes
+/api/items	volucer-tcp	8	on	192	1	12	39960.21	4.79ms	18.25ms	0		processes
+/items	volucer-tcp	8	on	96	1	12	23770.98	4.02ms	13.22ms	0		processes
+/items	volucer-tcp	8	on	144	1	12	24084.50	5.84ms	29.09ms	0		processes
+/items	volucer-tcp	8	on	192	1	12	24102.09	7.86ms	28.69ms	0		processes
+/echo	volucer-tcp	32	on	96	1	12	86702.02	1.04ms	2.98ms	0		processes
+/echo	volucer-tcp	32	on	144	1	12	88660.97	1.57ms	3.96ms	0		processes
+/echo	volucer-tcp	32	on	192	1	12	88680.58	2.10ms	5.53ms	0		processes
+/	volucer-tcp	32	on	96	1	12	68127.35	1.33ms	3.56ms	0		processes
+/	volucer-tcp	32	on	144	1	12	68913.80	2.02ms	5.08ms	0		processes
+/	volucer-tcp	32	on	192	1	12	68063.47	2.76ms	7.26ms	0		processes
+/api/items	volucer-tcp	32	on	96	1	12	53235.64	1.71ms	4.40ms	0		processes
+/api/items	volucer-tcp	32	on	144	1	12	53092.70	2.63ms	6.51ms	0		processes
+/api/items	volucer-tcp	32	on	192	1	12	53473.57	3.52ms	9.30ms	0		processes
+/items	volucer-tcp	32	on	96	1	12	30379.90	3.06ms	6.62ms	0		processes
+/items	volucer-tcp	32	on	144	1	12	30199.60	4.68ms	10.89ms	0		processes
+/items	volucer-tcp	32	on	192	1	12	30136.38	6.28ms	15.73ms	0		processes
+/echo	volucer-fastcgi	8	on	96	1	12	17937.53	5.21ms	40.54ms	0		processes
+/echo	volucer-fastcgi	8	on	144	1	12	17819.31	7.99ms	42.60ms	0		processes
+/echo	volucer-fastcgi	8	on	192	1	12	17670.32	10.49ms	56.80ms	0		processes
+/	volucer-fastcgi	8	on	96	1	12	14648.74	6.24ms	40.82ms	0		processes
+/	volucer-fastcgi	8	on	144	1	12	15074.74	9.65ms	51.54ms	0		processes
+/	volucer-fastcgi	8	on	192	1	12	14823.30	12.32ms	74.02ms	0		processes
+/api/items	volucer-fastcgi	8	on	96	1	12	7982.03	11.56ms	61.36ms	0		processes
+/api/items	volucer-fastcgi	8	on	144	1	12	8068.07	15.44ms	97.07ms	0		processes
+/api/items	volucer-fastcgi	8	on	192	1	12	8013.39	22.33ms	99.62ms	0		processes
+/items	volucer-fastcgi	8	on	96	1	12	6521.80	14.15ms	68.08ms	0		processes
+/items	volucer-fastcgi	8	on	144	1	12	6501.28	21.74ms	88.84ms	0		processes
+/items	volucer-fastcgi	8	on	192	1	12	6567.11	29.32ms	105.86ms	0		processes
+/echo	volucer-fastcgi	32	on	96	1	12	21494.48	3.37ms	26.72ms	0		processes
+/echo	volucer-fastcgi	32	on	144	1	12	21785.29	5.26ms	40.91ms	0		processes
+/echo	volucer-fastcgi	32	on	192	1	12	21931.42	7.21ms	50.29ms	0		processes
+/	volucer-fastcgi	32	on	96	1	12	18171.54	3.95ms	35.32ms	0		processes
+/	volucer-fastcgi	32	on	144	1	12	18031.97	6.36ms	50.06ms	0		processes
+/	volucer-fastcgi	32	on	192	1	12	18470.17	8.76ms	68.76ms	0		processes
+/api/items	volucer-fastcgi	32	on	96	1	12	10811.46	7.34ms	45.54ms	0		processes
+/api/items	volucer-fastcgi	32	on	144	1	12	10775.68	10.95ms	94.28ms	0		processes
+/api/items	volucer-fastcgi	32	on	192	1	12	10920.06	15.77ms	85.50ms	0		processes
+/items	volucer-fastcgi	32	on	96	1	12	8220.58	8.90ms	87.51ms	0		processes
+/items	volucer-fastcgi	32	on	144	1	12	8266.00	14.84ms	108.94ms	0		processes
+/items	volucer-fastcgi	32	on	192	1	12	8620.61	19.85ms	112.90ms	0		processes
+/echo	volucer-prefork	1	on	96	1	12	18984.17	4.99ms	14.66ms	0	8	slots+children
+/echo	volucer-prefork	1	on	144	1	12	18398.22	7.67ms	22.86ms	0	8	slots+children
+/echo	volucer-prefork	1	on	192	1	12	18499.02	10.22ms	30.92ms	0	8	slots+children
+/	volucer-prefork	1	on	96	1	12	15534.25	6.10ms	17.86ms	0	8	slots+children
+/	volucer-prefork	1	on	144	1	12	15533.92	9.14ms	27.36ms	0	8	slots+children
+/	volucer-prefork	1	on	192	1	12	15622.59	12.22ms	36.91ms	0	8	slots+children
+/api/items	volucer-prefork	1	on	96	1	12	8219.49	11.60ms	33.18ms	0	8	slots+children
+/api/items	volucer-prefork	1	on	144	1	12	8274.12	17.30ms	47.08ms	0	8	slots+children
+/api/items	volucer-prefork	1	on	192	1	12	8244.04	23.21ms	68.18ms	0	8	slots+children
+/items	volucer-prefork	1	on	96	1	12	6596.94	14.48ms	39.79ms	0	8	slots+children
+/items	volucer-prefork	1	on	144	1	12	6621.46	21.73ms	60.56ms	0	8	slots+children
+/items	volucer-prefork	1	on	192	1	12	6574.38	29.08ms	82.31ms	0	8	slots+children
+/echo	volucer-prefork	1	on	96	1	12	27404.12	3.43ms	6.95ms	0	32	slots+children
+/echo	volucer-prefork	1	on	144	1	12	27601.28	5.12ms	11.51ms	0	32	slots+children
+/echo	volucer-prefork	1	on	192	1	12	26972.87	7.04ms	17.01ms	0	32	slots+children
+/	volucer-prefork	1	on	96	1	12	22758.52	4.12ms	8.37ms	0	32	slots+children
+/	volucer-prefork	1	on	144	1	12	22460.02	6.31ms	14.06ms	0	32	slots+children
+/	volucer-prefork	1	on	192	1	12	22669.19	8.31ms	19.77ms	0	32	slots+children
+/api/items	volucer-prefork	1	on	96	1	12	12716.60	7.43ms	14.77ms	0	32	slots+children
+/api/items	volucer-prefork	1	on	144	1	12	12663.83	11.21ms	25.32ms	0	32	slots+children
+/api/items	volucer-prefork	1	on	192	1	12	12630.40	15.08ms	33.19ms	0	32	slots+children
+/items	volucer-prefork	1	on	96	1	12	9956.80	9.51ms	19.00ms	0	32	slots+children
+/items	volucer-prefork	1	on	144	1	12	10077.28	14.15ms	28.45ms	0	32	slots+children
+/items	volucer-prefork	1	on	192	1	12	10000.47	19.03ms	38.84ms	0	32	slots+children
+/echo	volucer-external	8	on	96	1	12	19739.33	5.33ms	11.39ms	0		fpm-children
+/echo	volucer-external	8	on	144	1	12	19948.16	7.98ms	16.95ms	0		fpm-children
+/echo	volucer-external	8	on	192	1	12	19311.22	11.00ms	23.10ms	0		fpm-children
+/	volucer-external	8	on	96	1	12	16115.75	6.53ms	14.34ms	0		fpm-children
+/	volucer-external	8	on	144	1	12	16242.50	9.86ms	21.22ms	0		fpm-children
+/	volucer-external	8	on	192	1	12	16323.98	12.91ms	27.97ms	0		fpm-children
+/api/items	volucer-external	8	on	96	1	12	8173.89	13.37ms	31.07ms	0		fpm-children
+/api/items	volucer-external	8	on	144	1	12	8279.28	20.39ms	46.89ms	0		fpm-children
+/api/items	volucer-external	8	on	192	1	12	8223.96	28.85ms	63.51ms	0		fpm-children
+/items	volucer-external	8	on	96	1	12	6639.58	17.28ms	47.06ms	0		fpm-children
+/items	volucer-external	8	on	144	1	12	6678.76	28.05ms	66.95ms	0		fpm-children
+/items	volucer-external	8	on	192	1	12	6640.65	36.98ms	88.77ms	0		fpm-children
+/echo	volucer-external	32	on	96	1	12	25186.93	4.54ms	7.21ms	0		fpm-children
+/echo	volucer-external	32	on	144	1	12	25190.86	7.65ms	10.84ms	0		fpm-children
+/echo	volucer-external	32	on	192	1	12	25027.27	10.85ms	14.42ms	0		fpm-children
+/	volucer-external	32	on	96	1	12	20787.14	5.53ms	8.46ms	0		fpm-children
+/	volucer-external	32	on	144	1	12	20751.19	9.23ms	12.74ms	0		fpm-children
+/	volucer-external	32	on	192	1	12	20844.44	12.83ms	17.07ms	0		fpm-children
+/api/items	volucer-external	32	on	96	1	12	12435.50	9.54ms	13.69ms	0		fpm-children
+/api/items	volucer-external	32	on	144	1	12	12361.16	15.77ms	20.59ms	0		fpm-children
+/api/items	volucer-external	32	on	192	1	12	12411.00	21.74ms	27.07ms	0		fpm-children
+/items	volucer-external	32	on	96	1	12	9749.53	12.21ms	17.71ms	0		fpm-children
+/items	volucer-external	32	on	144	1	12	9765.06	19.83ms	26.75ms	0		fpm-children
+/items	volucer-external	32	on	192	1	12	9778.56	26.66ms	34.34ms	0		fpm-children
+/echo	rr	8	on	96	1	12	52538.90	1.75ms	3.01ms	0		processes
+/echo	rr	8	on	144	1	12	53024.35	2.62ms	4.11ms	0		processes
+/echo	rr	8	on	192	1	12	52606.63	3.53ms	5.28ms	0		processes
+/	rr	8	on	96	1	12	41425.76	2.20ms	3.62ms	0		processes
+/	rr	8	on	144	1	12	41178.81	3.35ms	5.11ms	0		processes
+/	rr	8	on	192	1	12	41144.50	4.51ms	6.43ms	0		processes
+/api/items	rr	8	on	96	1	12	37832.13	2.45ms	3.82ms	0		processes
+/api/items	rr	8	on	144	1	12	37991.47	3.68ms	5.41ms	0		processes
+/api/items	rr	8	on	192	1	12	37721.05	4.98ms	6.93ms	0		processes
+/items	rr	8	on	96	1	12	21544.19	4.38ms	6.16ms	0		processes
+/items	rr	8	on	144	1	12	21922.01	6.49ms	8.62ms	0		processes
+/items	rr	8	on	192	1	12	21929.09	8.66ms	11.39ms	0		processes
+/echo	rr	32	on	96	1	12	74137.62	1.16ms	3.60ms	0		processes
+/echo	rr	32	on	144	1	12	75574.40	1.72ms	4.78ms	0		processes
+/echo	rr	32	on	192	1	12	75276.59	2.32ms	5.31ms	0		processes
+/	rr	32	on	96	1	12	52196.26	1.67ms	4.51ms	0		processes
+/	rr	32	on	144	1	12	51868.17	2.54ms	5.83ms	0		processes
+/	rr	32	on	192	1	12	52051.34	3.42ms	6.71ms	0		processes
+/api/items	rr	32	on	96	1	12	45851.41	1.96ms	4.65ms	0		processes
+/api/items	rr	32	on	144	1	12	45366.50	2.98ms	6.05ms	0		processes
+/api/items	rr	32	on	192	1	12	45531.93	4.02ms	7.11ms	0		processes
+/items	rr	32	on	96	1	12	25068.43	3.65ms	7.66ms	0		processes
+/items	rr	32	on	144	1	12	24868.01	5.56ms	9.52ms	0		processes
+/items	rr	32	on	192	1	12	25041.29	7.45ms	11.35ms	0		processes
+/echo	frankenphp	8	on	96	1	12	72334.92	1.18ms	4.33ms	0		threads
+/echo	frankenphp	8	on	144	1	12	74339.59	1.73ms	5.88ms	0		threads
+/echo	frankenphp	8	on	192	1	12	76696.95	2.27ms	7.44ms	0		threads
+/	frankenphp	8	on	96	1	12	29198.37	3.09ms	5.52ms	0		threads
+/	frankenphp	8	on	144	1	12	29605.19	4.66ms	7.32ms	0		threads
+/	frankenphp	8	on	192	1	12	29756.89	6.21ms	9.22ms	0		threads
+/api/items	frankenphp	8	on	96	1	12	60313.00	1.38ms	4.95ms	0		threads
+/api/items	frankenphp	8	on	144	1	12	62084.73	2.06ms	6.64ms	0		threads
+/api/items	frankenphp	8	on	192	1	12	63679.38	2.72ms	7.99ms	0		threads
+/items	frankenphp	8	on	96	1	12	21730.14	4.24ms	6.68ms	0		threads
+/items	frankenphp	8	on	144	1	12	21985.41	6.34ms	9.23ms	0		threads
+/items	frankenphp	8	on	192	1	12	21862.54	8.56ms	11.60ms	0		threads
+/echo	frankenphp	32	on	96	1	12	42202.84	2.05ms	6.14ms	0		threads
+/echo	frankenphp	32	on	144	1	12	42799.82	3.09ms	7.37ms	0		threads
+/echo	frankenphp	32	on	192	1	12	43238.50	4.14ms	8.59ms	0		threads
+/	frankenphp	32	on	96	1	12	22997.18	3.82ms	10.47ms	0		threads
+/	frankenphp	32	on	144	1	12	22840.13	5.88ms	12.76ms	0		threads
+/	frankenphp	32	on	192	1	12	22777.10	8.01ms	14.99ms	0		threads
+/api/items	frankenphp	32	on	96	1	12	32257.95	2.70ms	7.61ms	0		threads
+/api/items	frankenphp	32	on	144	1	12	33402.91	4.02ms	9.26ms	0		threads
+/api/items	frankenphp	32	on	192	1	12	33782.85	5.37ms	10.77ms	0		threads
+/items	frankenphp	32	on	96	1	12	14819.97	5.93ms	15.67ms	0		threads
+/items	frankenphp	32	on	144	1	12	14812.55	9.13ms	18.95ms	0		threads
+/items	frankenphp	32	on	192	1	12	14675.36	12.50ms	22.38ms	0		threads
+/echo	fpm	8	on	96	1	12	21158.80	4.48ms	5.65ms	0		fpm-children
+/echo	fpm	8	on	144	1	12	21307.27	6.71ms	8.22ms	0		fpm-children
+/echo	fpm	8	on	192	1	12	21462.85	8.87ms	10.74ms	0		fpm-children
+/	fpm	8	on	96	1	12	16188.91	5.89ms	7.14ms	0		fpm-children
+/	fpm	8	on	144	1	12	16136.03	8.86ms	10.75ms	0		fpm-children
+/	fpm	8	on	192	1	12	15775.71	12.16ms	14.38ms	0		fpm-children
+/api/items	fpm	8	on	96	1	12	8089.76	11.77ms	13.98ms	0		fpm-children
+/api/items	fpm	8	on	144	1	12	7919.80	18.09ms	21.10ms	0		fpm-children
+/api/items	fpm	8	on	192	1	12	8024.87	23.85ms	27.14ms	0		fpm-children
+/items	fpm	8	on	96	1	12	6559.29	14.57ms	17.02ms	0		fpm-children
+/items	fpm	8	on	144	1	12	6594.82	21.76ms	24.91ms	0		fpm-children
+/items	fpm	8	on	192	1	12	6568.66	29.20ms	32.91ms	0		fpm-children
+/echo	fpm	32	on	96	1	12	26897.92	3.45ms	5.55ms	0		fpm-children
+/echo	fpm	32	on	144	1	12	27227.11	5.17ms	7.35ms	0		fpm-children
+/echo	fpm	32	on	192	1	12	26701.12	7.09ms	9.55ms	0		fpm-children
+/	fpm	32	on	96	1	12	21713.18	4.31ms	6.55ms	0		fpm-children
+/	fpm	32	on	144	1	12	21280.54	6.65ms	9.29ms	0		fpm-children
+/	fpm	32	on	192	1	12	21221.14	8.92ms	11.68ms	0		fpm-children
+/api/items	fpm	32	on	96	1	12	12247.08	7.64ms	11.06ms	0		fpm-children
+/api/items	fpm	32	on	144	1	12	12206.81	11.64ms	14.91ms	0		fpm-children
+/api/items	fpm	32	on	192	1	12	11948.08	15.89ms	19.67ms	0		fpm-children
+/items	fpm	32	on	96	1	12	9518.02	9.85ms	14.14ms	0		fpm-children
+/items	fpm	32	on	144	1	12	9630.97	14.75ms	18.60ms	0		fpm-children
+/items	fpm	32	on	192	1	12	9678.43	19.62ms	23.77ms	0		fpm-children

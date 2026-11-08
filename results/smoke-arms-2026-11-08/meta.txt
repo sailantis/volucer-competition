@@ -1,0 +1,24 @@
+=== worker x opcache x concurrency matrix ===
+  host:        12 cores, 7910 MB
+  kernel:      Linux 6.8.0-139-generic
+  php:         PHP 8.5.11 (cli) (built: Sep 24 2026 13:49:29) (NTS)
+  php-cgi:     PHP 8.5.11 (cgi-fcgi) (built: Sep 24 2026 13:49:29) (NTS)
+  php-fpm:     PHP 8.5.11 (fpm-fcgi) (built: Sep 24 2026 13:49:29) (NTS)
+  nginx:       nginx version: nginx/1.24.0 (Ubuntu) (worker_processes 4)
+  volucer:     volucer 0.6.0
+  volucer ref: 132f560
+  roadrunner:  rr version 3.0.1 (build time: 2026-10-21T19:34:12+0000, go1.27.3), OS: linux, arch: amd64
+  frankenphp:  FrankenPHP v1.13.4 PHP 8.5.12 Caddy v2.11.8 h1:E2pv1BoZ5bJaWqFkU6QvLa21iGAX8bDzlEQG4dDQ/Vc=
+  app:         /home/competition/volucer-competition
+  app ref:     e47ab63
+  arms:        volucer-attach,volucer-tcp,volucer-fastcgi,volucer-prefork,volucer-external,rr,frankenphp,fpm
+  workers:     8,32
+  arm workers: volucer-prefork=1
+  opcache:     on
+  endpoint:    /echo,/,/api/items,/items
+  concurrency: 96,144,192   wrk threads: 12   duration: 10s   rounds: 1
+  order:       interleaved (rotating across rounds)
+  ini scan:    /home/competition/jit-on (PHP_INI_SCAN_DIR overridden)
+  opcache on: cli wrapper active=1, cgi wrapper active=1
+  interpreter: 8.5.11 xdebug=0 psr=0 (/usr/bin/php)
+  interpreter: 8.5.11 xdebug=0 psr=0 (/usr/bin/php-cgi)
