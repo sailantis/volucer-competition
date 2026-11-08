@@ -1480,10 +1480,38 @@ run_cell() { # arm workers mode conc round [threads] [children] [path]
         threads="$conc"
     fi
 
-    wrk -t"$threads" -c"$conc" -d"$DUR" --latency "http://127.0.0.1:$port$path" \
-        > "$out" 2>&1
+    # A cell that records **zero requests** is not a measurement of anything, and
+    # it must not become a row.
+    #
+    # Measured, in the 8/16/32 x 4-endpoint run: 18 of 108 `frankenphp` cells
+    # reported `0 requests in 10.01s` with `Socket errors: connect 0, read 0,
+    # write 0, timeout 0` and no non-2xx and no server-side error. The
+    # connections were made and never served, which is a warmup gap rather than a
+    # slow server -- and it clustered in the first round after a start, which is
+    # exactly the burst `WARMUP` exists to absorb. It understated the arm's *best*
+    # case, because this arm's optimum on a 12-core box is w=8 (its `num` is worker
+    # threads, and 32 threads oversubscribe).
+    #
+    # Retried rather than dropped: a missing row silently narrows the sample and
+    # a recorded 0 silently biases a median. A retry that also records 0 still
+    # fails the cell loudly.
+    local attempt
+    for attempt in 1 2 3; do
+        wrk -t"$threads" -c"$conc" -d"$DUR" --latency "http://127.0.0.1:$port$path" \
+            > "$out" 2>&1
 
-    rps="$(awk '/^Requests\/sec:/{print $2; exit}' "$out")"
+        rps="$(awk '/^Requests\/sec:/{print $2; exit}' "$out")"
+        # `wrk` prints `Requests/sec: 0.00` and also `0 requests in 10.01s`; the
+        # second is the unambiguous one.
+        local served
+        served="$(awk '/^[[:space:]]*[0-9]+ requests in/{print $1; exit}' "$out")"
+        [ -n "$served" ] && [ "$served" = "0" ] || break
+        printf '    %-12s %-15s w=%-2s %-3s ch=%-2s t=%-3s c=%-3s r=%s  0 requests, retry %s/3\n' \
+            "$path" "$arm" "$n" "$mode" "${children:--}" "$threads" "$conc" "$round" "$attempt" \
+            | tee -a "$META"
+        sleep 3
+    done
+
     p50="$(awk '/^[[:space:]]+50%/{print $2; exit}' "$out")"
     p99="$(awk '/^[[:space:]]+99%/{print $2; exit}' "$out")"
     # A bounded pool converts a latency tail into a throughput number by shedding,
