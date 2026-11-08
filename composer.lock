@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "01bedc6850f466a07d4f5b8ef1c6f8ab",
+    "content-hash": "fc3ad6fa29ed929558ce924c8e66484a",
     "packages": [
         {
             "name": "google/protobuf",
@@ -756,16 +756,16 @@
         },
         {
             "name": "sailantis/volucer-worker",
-            "version": "v0.4.0",
+            "version": "v0.4.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/sailantis/volucer-php-sdk.git",
-                "reference": "a0c1578e226356805db0c1ef61201001861c0448"
+                "reference": "eb05fb47fa18fc02542274a812a1c8e8cd06041f"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/sailantis/volucer-php-sdk/zipball/a0c1578e226356805db0c1ef61201001861c0448",
-                "reference": "a0c1578e226356805db0c1ef61201001861c0448",
+                "url": "https://api.github.com/repos/sailantis/volucer-php-sdk/zipball/eb05fb47fa18fc02542274a812a1c8e8cd06041f",
+                "reference": "eb05fb47fa18fc02542274a812a1c8e8cd06041f",
                 "shasum": ""
             },
             "require": {
@@ -809,7 +809,7 @@
                 "issues": "https://github.com/sailantis/volucer-php-sdk/issues",
                 "source": "https://github.com/sailantis/volucer-php-sdk"
             },
-            "time": "2026-11-07T20:29:22+00:00"
+            "time": "2026-11-08T00:54:43+00:00"
         },
         {
             "name": "spiral/roadrunner",

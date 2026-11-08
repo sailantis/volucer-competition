@@ -9,7 +9,7 @@
     "ext-pdo": "*",
     "sailantis/azera-framework": "v0.3.0",
     "sailantis/clarity-engine": "v0.4.0",
-    "sailantis/volucer-worker": "v0.4.0",
+    "sailantis/volucer-worker": "v0.4.1",
     "spiral/roadrunner-worker": "^3.5",
     "spiral/roadrunner-http": "^3.5",
     "nyholm/psr7": "^1.8"
