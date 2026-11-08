@@ -1,0 +1,25 @@
+path	arm	workers	opcache	conc	round	threads	rps	p50	p99	errors	children	proc_kind
+/echo	volucer-attach	8	on	96	1	12	66557.53	1.44ms	5.56ms	0		connections
+/echo	volucer-attach	32	on	96	1	12	120120.30	741.00us	2.17ms	0		connections
+/echo	rr	8	on	96	1	12	56718.97	1.62ms	2.80ms	0		processes
+/echo	rr	32	on	96	1	12	85892.13	0.97ms	3.53ms	0		processes
+/echo	frankenphp	8	on	96	1	12	47983.53	1.02ms	4.13ms	0		threads
+/echo	frankenphp	32	on	96	1	12	52922.67	1.62ms	5.24ms	0		threads
+/echo	fpm	8	on	96	1	12	71927.27	1.31ms	1.83ms	0		fpm-children
+/echo	fpm	32	on	96	1	12	104697.75	839.00us	2.23ms	0		fpm-children
+/echo	volucer-attach	32	on	96	2	12	122314.04	736.00us	2.00ms	0		connections
+/echo	rr	8	on	96	2	12	56495.10	1.63ms	2.83ms	0		processes
+/echo	rr	32	on	96	2	12	85161.40	0.98ms	3.54ms	0		processes
+/echo	frankenphp	8	on	96	2	12	78605.78	1.10ms	4.12ms	0		threads
+/echo	frankenphp	32	on	96	2	12	52584.51	1.63ms	5.28ms	0		threads
+/echo	fpm	8	on	96	2	12	71766.11	1.31ms	1.81ms	0		fpm-children
+/echo	fpm	32	on	96	2	12	103105.37	0.85ms	2.28ms	0		fpm-children
+/echo	volucer-attach	8	on	96	2	12	67361.31	1.43ms	5.56ms	0		connections
+/echo	rr	8	on	96	3	12	56000.15	1.64ms	2.84ms	0		processes
+/echo	rr	32	on	96	3	12	85868.51	0.97ms	3.49ms	0		processes
+/echo	frankenphp	8	on	96	3	12	79495.25	1.09ms	4.07ms	0		threads
+/echo	frankenphp	32	on	96	3	12	53006.89	1.62ms	5.21ms	0		threads
+/echo	fpm	8	on	96	3	12	71024.78	1.32ms	1.89ms	0		fpm-children
+/echo	fpm	32	on	96	3	12	104979.93	838.00us	2.20ms	0		fpm-children
+/echo	volucer-attach	8	on	96	3	12	67576.19	1.42ms	5.50ms	0		connections
+/echo	volucer-attach	32	on	96	3	12	121089.17	741.00us	2.11ms	0		connections
