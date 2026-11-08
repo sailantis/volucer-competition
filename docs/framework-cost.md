@@ -194,20 +194,58 @@ That is the answer to "if fpm is so fast bare, what is Volucer for?":
   bookkeeping. The 4× in the framed comparison comes almost entirely from paying
   bootstrap 27,946 times a second instead of once.
 
+And it is not an artefact of `/echo` being a bootstrap benchmark. On the realistic
+page the same ranking holds, with the same ~4× spread:
+
+| arm, `/items`, c=96 | rps | µs of CPU per request |
+|---|---:|---:|
+| volucer-attach w=32 | 41,521 | **289.0** |
+| volucer-tcp w=32 | 32,728 | 366.7 |
+| RoadRunner 3.0.1 w=32 | 26,188 | 458.2 |
+| FrankenPHP w=8 | 22,377 | 536.3 |
+| *volucer-prefork w=1 ch=32* | *10,082* | *1,190.3* |
+| *volucer-external w=32* | *9,915* | *1,210.3* |
+| nginx+php-fpm w=32 | 9,867 | **1,216.1** |
+
+289 µs against 1,216 µs. The absolute gap is four times larger than on `/echo`
+(927 µs vs 320 µs) because each of the four cold arms pays the whole bootstrap
+*plus* the connection, the ORM and the template, while the warm arm pays only the
+ORM and the template.
+
 So the headline should not be "Volucer is 4× faster at serving a page". It is:
 
-> For an application whose bootstrap costs ~300 µs, a cold SAPI spends 73% of its
-> CPU rebuilding what it is about to discard. Volucer removes that term, which is
-> why it lands where bare php-fpm does rather than where framed php-fpm does.
+> For an application whose bootstrap costs ~300 µs, a cold SAPI spends 70% of its
+> `/echo` CPU — and 11% of a realistic `/items` — rebuilding what it is about to
+> discard. Volucer removes that term, which is why its framed `/echo` lands below
+> bare php-fpm rather than at 4× framed php-fpm.
 
 ### And the caveat that keeps this honest
 
-This application boots in the mid-hundreds of microseconds because it registers 120
-routes, wires a container, and opens a SQLite connection — for every request on the
-cold arms. An application with 12 routes and no container would show a much smaller
-gap, and one that preloads its container would show none. **The measured quantity
-is cold-start cost, and the matrix is a fair measurement of it** precisely because
-all six frameworks register the same 100 filler routes:
+The 121 µs of filler routes is a *third* of `/echo` but only **11% of a realistic
+page**. Measured inside the same fpm child, with the same build:
+
+| | `/echo` | `/items` |
+|---|---:|---:|
+| bootstrap | 171 µs | 213 µs |
+| dispatch | 55 µs | 698 µs |
+| **total per request** | **247 µs** | **985 µs** |
+| boot as a share of the request | **70%** | **11%** |
+
+So `/echo` is a bootstrap benchmark and `/items` is an application benchmark, and
+the two tell different stories. On `/echo` removing the filler routes is worth 30%
+of throughput; on `/items` it is worth about 4%, because 698 µs of ORM, SQLite and
+template work dominates.
+
+**Both are honest.** `/echo` answers "what does the framework cost", `/items`
+answers "what does this page cost", and the reason to publish both is that the
+first number is not a prediction of the second. Quoting the 4× from `/echo` as
+though it described page serving would be wrong; so would quoting `/items` alone
+and concluding that boot does not matter.
+
+An application with 12 routes and no container would show a much smaller gap
+entirely, and one that preloads its container would show none. **The measured
+quantity is cold-start cost**, and the matrix is a fair measurement of it precisely
+because all six frameworks register the same 100 filler routes:
 
 - CakePHP, CodeIgniter, Laravel, Symfony and Spiral each have an explicit
   "route-table size parity" block in `azera-competition`.

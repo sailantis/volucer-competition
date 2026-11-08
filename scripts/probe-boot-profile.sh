@@ -28,6 +28,10 @@ WORKERS="${WORKERS:-32}"
 CONC="${CONC:-96}"
 THREADS="${THREADS:-12}"
 DUR="${DUR:-10s}"
+# The path to measure. /echo prices the framework floor; /items prices a real page,
+# where the DB work can be large enough to hide the boot. The two answer different
+# questions and the gap between them is the point of measuring both.
+PATH_RUN="${PATH_RUN:-/echo}"
 PERF="${PERF:-0}"
 # The matrix supplies JIT through PHP_INI_SCAN_DIR, not through `-d`, because
 # `opcache.jit` is read by the extension at startup and a pool-level
@@ -171,7 +175,7 @@ run_variant() { # name bare
     # did not inherit BENCH_BARE would look like a framed run with a slightly
     # different number, and there would be no error to notice.
     local body
-    body="$(curl -s --max-time 5 "http://127.0.0.1:$((PORT + 1))/echo")"
+    body="$(curl -s --max-time 5 "http://127.0.0.1:$((PORT + 1))$PATH_RUN" | head -c 40)"
     local want='bench' got_bare=no
     [ "$body" = "bench" ] && got_bare=yes
     # Both modes answer 'bench' on /echo -- that is the point -- so probe the
@@ -190,11 +194,11 @@ run_variant() { # name bare
         # cannot distort a CPU measurement.
         local expect="phase"
     fi
-    printf '  %-8s workers=%s conc=%s  GET /items -> %s  GET /echo -> %s\n' \
-        "$name" "$WORKERS" "$CONC" "$items" "$body"
+    printf '  %-8s workers=%s conc=%s  GET %s -> %s   GET /items -> %s\n' \
+        "$name" "$WORKERS" "$CONC" "$PATH_RUN" "${body:0:24}" "$items"
     # Warm up so the first-touch page faults and the autoloader lookups are not
     # charged to the measurement, which is what the matrix's WARMUP does too.
-    wrk -t"$THREADS" -c"$CONC" -d3s --latency "http://127.0.0.1:$((PORT + 1))/echo" > /dev/null 2>&1
+    wrk -t"$THREADS" -c"$CONC" -d3s --latency "http://127.0.0.1:$((PORT + 1))$PATH_RUN" > /dev/null 2>&1
 
     local t0 t1 c0 c1
     t0=$(date +%s%N)
@@ -206,10 +210,10 @@ run_variant() { # name bare
             > "$D/perf-$name.log" 2>&1 &
         local perf_bg=$!
         sleep 0.3
-        wrk -t"$THREADS" -c"$CONC" -d"$DUR" --latency "http://127.0.0.1:$((PORT + 1))/echo" > "$D/wrk-$name.txt" 2>&1
+        wrk -t"$THREADS" -c"$CONC" -d"$DUR" --latency "http://127.0.0.1:$((PORT + 1))$PATH_RUN" > "$D/wrk-$name.txt" 2>&1
         wait "$perf_bg" 2>/dev/null
     else
-        wrk -t"$THREADS" -c"$CONC" -d"$DUR" --latency "http://127.0.0.1:$((PORT + 1))/echo" > "$D/wrk-$name.txt" 2>&1
+        wrk -t"$THREADS" -c"$CONC" -d"$DUR" --latency "http://127.0.0.1:$((PORT + 1))$PATH_RUN" > "$D/wrk-$name.txt" 2>&1
     fi
 
     c1=$(child_ticks)
