@@ -17,6 +17,7 @@ namespace App\Azera\Controllers;
 
 use App\Azera\Models\Item;
 use Azera\Core\Controller;
+use Azera\Db\Query;
 use Azera\Http\Response;
 
 class ApiController extends Controller
@@ -27,6 +28,36 @@ class ApiController extends Controller
     public function indexAction(): Response
     {
         $items = Item::query()->orderBy('id', 'asc')->limit(20)->select();
+
+        return Response::json($items->toArray());
+    }
+
+    /**
+     * GET /api/items-fast — GET /api/items with the model replaced by the literal table.
+     *
+     * The JSON counterpart of `/items-fast`. It is a much smaller control than that
+     * one, because `indexAction()` already calls `select()`, whose `toArray()` is
+     * `ResultSet::fetchAllAssoc()` — i.e. `PDO::FETCH_ASSOC`. So `/api/items` hands the
+     * serializer **associative arrays**, never entities: no instantiation, no
+     * identity map, no snapshot. The expensive shape is already absent.
+     *
+     * What `indexAction()` still does is resolve the model: the model-backed builder
+     * asks `Item::source()` for the table and builds its column list from metadata,
+     * where `Query::raw()->table('items')` names the table literally. That is the only
+     * difference between the two routes, and it is small — measured at ~1.7 us of a
+     * ~24 us request (`scripts/api-fast-compare.php`), against the ~48 us that
+     * dropping hydration is worth on the HTML route.
+     *
+     * Verified byte-identical JSON (`scripts/api-fast-compare.php`), so the two routes
+     * differ only in how they name the table.
+     *
+     * For context on why the gap is so much smaller here: measured per row, an assoc
+     * array costs 1.21 us, a stdClass 1.39 us, and a hydrated entity 3.84 us
+     * (`scripts/data-shapes.php`). `/api/items` picked the cheapest shape on its own.
+     */
+    public function indexFastAction(): Response
+    {
+        $items = Query::raw()->table('items')->orderBy('id', 'asc')->limit(20)->select();
 
         return Response::json($items->toArray());
     }

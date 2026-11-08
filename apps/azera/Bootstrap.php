@@ -238,6 +238,9 @@ class Bootstrap
         // serialization overhead is compared apples-to-apples.
         $router->controller(\App\Azera\Controllers\ApiController::class, function (\Azera\Core\Router $r) {
             $r->get('/api/items', '::indexAction');
+            // /api/items with the model replaced by the literal table: the
+            // single-variable control for /api/items (see indexFastAction).
+            $r->get('/api/items-fast', '::indexFastAction');
             $r->get('/api/items/{id:int}', '::showAction');
             $r->post('/api/items', '::createAction');
         });
