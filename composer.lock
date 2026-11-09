@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "a7cae90d42345db002ded224b4012919",
+    "content-hash": "45ff1559879d030f1c4d8f7f22098ed3",
     "packages": [
         {
             "name": "google/protobuf",
@@ -606,16 +606,10 @@
         {
             "name": "sailantis/azera-framework",
             "version": "dev-main",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/sailantis/azera-framework.git",
-                "reference": "9ac91e9773046e20b2e926641d4d7ff01a5d1563"
-            },
             "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/sailantis/azera-framework/zipball/9ac91e9773046e20b2e926641d4d7ff01a5d1563",
-                "reference": "9ac91e9773046e20b2e926641d4d7ff01a5d1563",
-                "shasum": ""
+                "type": "path",
+                "url": "../azera-framework",
+                "reference": "dab5ec42f4d9ace6584e4dde212709e8eb3d8392"
             },
             "require": {
                 "ext-mbstring": "*",
@@ -640,7 +634,6 @@
                 "ext-mongodb": "PHP driver for MongoDB document persistence (Azera\\Orm\\Storage\\MongoStore)",
                 "mongodb/mongodb": "Required for MongoDB document persistence (Azera\\Orm\\Storage\\MongoStore) — install together with the ext-mongodb PHP extension. Optional: only tests/MongoLiveTest.php needs the real package; all other Mongo tests run against an in-memory fake"
             },
-            "default-branch": true,
             "bin": [
                 "bin/azera"
             ],
@@ -687,7 +680,10 @@
                 "issues": "https://github.com/sailantis/azera-framework/issues",
                 "source": "https://github.com/sailantis/azera-framework"
             },
-            "time": "2026-11-09T02:09:58+00:00"
+            "transport-options": {
+                "symlink": false,
+                "relative": true
+            }
         },
         {
             "name": "sailantis/clarity-engine",

@@ -206,14 +206,12 @@ class Bootstrap
         self::mark('View engine');
 
         // --- Routes ---
-        // `BENCH_ROUTE_CACHE=<path>` turns on the framework route cache and says where
-        // the compiled table lives; `BENCH_ROUTE_CACHE=off` (or leaving it unset) keeps
-        // it off, which is the cold arm this benchmark measures against.
-        //
-        // The cache is now self-sufficient: the router writes the table itself on the
-        // first read after the sources change, so no separate `routes:cache` call is
-        // needed. `BENCH_ROUTE_WARM=1` additionally forces a compile up front, which is
-        // what a deploy hook would do.
+        // The cached() declarations below are what turn the framework route cache on,
+        // and the router writes the table itself on the first read after the sources
+        // change -- no separate `routes:cache` call is needed. `BENCH_ROUTE_CACHE`
+        // chooses *where* it lives; `BENCH_ROUTE_CACHE=off` opts out entirely, which is
+        // the cold arm this benchmark measures against. `BENCH_ROUTE_WARM=1`
+        // additionally forces a compile up front, which is what a deploy hook would do.
         //
         // Every registration below lives inside a cached() block, so the table is
         // entirely attributable to a file. A route registered outside one is refused by
@@ -222,8 +220,10 @@ class Bootstrap
         $router     = $ctx->router();
         $routeCache = getenv('BENCH_ROUTE_CACHE');
 
-        if ($routeCache !== false && $routeCache !== '' && $routeCache !== 'off') {
-            $router->enableCache($routeCache);
+        if ($routeCache === 'off') {
+            $router->disableCache();
+        } elseif ($routeCache !== false && $routeCache !== '') {
+            $router->setCachePath($routeCache);
         }
 
         $router->cached(__FILE__, function (\Azera\Core\Router $router): void {
@@ -373,7 +373,7 @@ class Bootstrap
         // A deploy-hook equivalent: compile the table now instead of leaving it for the
         // first request. Only meaningful with the cache enabled, and only here, after
         // every cached() unit has been declared.
-        if ($router->cachePath() !== null && getenv('BENCH_ROUTE_WARM') === '1') {
+        if (getenv('BENCH_ROUTE_WARM') === '1' && $router->cachePath() !== null) {
             $router->compileCache();
             self::mark('Route cache warm');
         }

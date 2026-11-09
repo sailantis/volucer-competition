@@ -192,9 +192,10 @@ would rather 500.
 ### The design, then, is fifteen lines of filtering
 
 **Superseded.** The prototype this section describes (`scripts/route-cache.php`) has
-been replaced by the framework feature in `Azera\Core\Router`: `enableCache($path)` plus
-`cached($files, $closure)`. The script is gone; the framework does the same job with
-sources *declared* rather than inferred, writes on a miss, and needs no deploy step.
+been replaced by the framework feature in `Azera\Core\Router`: declare the routes inside
+`cached($files, $closure)`, which is what turns the cache on, and optionally point it
+somewhere with `setCachePath($path)`. The script is gone; the framework does the same job
+with sources *declared* rather than inferred, writes on a miss, and needs no deploy step.
 
 The design that survived is the same in spirit, and the three rules below are why the
 prototype was worth writing:
