@@ -1529,6 +1529,13 @@ run_cell() { # arm workers mode conc round [threads] [children] [path]
         sleep 3
     done
 
+    # A bounded pool converts a latency tail into a throughput number by shedding,
+    # which looks exactly like the fix working. Record it rather than assume not.
+    #
+    # Counted before the zero-check below, because the FAIL row that check writes
+    # records this column too -- and `set -u` makes reading it first fatal.
+    errs="$(grep -cE 'Non-2xx or 3xx responses|Socket errors' "$out" 2>/dev/null)"
+
     # The loop above retries a zero, but exhausting the retries used to fall
     # through to the row writer with `Requests/sec: 0.00` still in `$rps` -- so an
     # all-retries-failed cell was recorded as a *measurement of zero* rather than
@@ -1551,9 +1558,6 @@ run_cell() { # arm workers mode conc round [threads] [children] [path]
 
     p50="$(awk '/^[[:space:]]+50%/{print $2; exit}' "$out")"
     p99="$(awk '/^[[:space:]]+99%/{print $2; exit}' "$out")"
-    # A bounded pool converts a latency tail into a throughput number by shedding,
-    # which looks exactly like the fix working. Record it rather than assume not.
-    errs="$(grep -cE 'Non-2xx or 3xx responses|Socket errors' "$out" 2>/dev/null)"
 
     if [ -z "$rps" ] || [ -z "$p50" ] || [ -z "$p99" ]; then
         printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\tFAIL\t?\t?\t%s\t%s\t%s\n' \
