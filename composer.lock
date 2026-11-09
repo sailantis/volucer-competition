@@ -609,12 +609,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/sailantis/azera-framework.git",
-                "reference": "7735338db4e543f8bdb6dff2f3bfcc6437e2d9ba"
+                "reference": "6bf1c6d2506749d906dc0dbeb8fafedf0066788d"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/sailantis/azera-framework/zipball/7735338db4e543f8bdb6dff2f3bfcc6437e2d9ba",
-                "reference": "7735338db4e543f8bdb6dff2f3bfcc6437e2d9ba",
+                "url": "https://api.github.com/repos/sailantis/azera-framework/zipball/6bf1c6d2506749d906dc0dbeb8fafedf0066788d",
+                "reference": "6bf1c6d2506749d906dc0dbeb8fafedf0066788d",
                 "shasum": ""
             },
             "require": {
