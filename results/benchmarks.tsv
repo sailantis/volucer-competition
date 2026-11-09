@@ -1,0 +1,28 @@
+# Which committed run feeds which published destination.
+#
+# One row per published output. The generator reads this file; nothing in
+# scripts/bench-report.py names a run directory, an endpoint or a page any more.
+# That is the point: the choice of data source was previously three string
+# constants scattered through the generator plus nineteen test assertions, so
+# re-pointing a page meant editing code in several places and finding out
+# afterwards which page silently changed.
+#
+# Columns, tab separated. `#` starts a comment, blank lines are ignored, and the
+# header row is the first non-comment line.
+#
+#   destination  which published output this row configures. One of:
+#                  docs       the volucer documentation page (12-BENCHMARKS.md)
+#                  homepage   the two-or-more charts the Sailantis landing page embeds
+#   run          the directory under results/ holding matrix.tsv and memory.tsv
+#   endpoints    the pages the destination draws, comma separated, in reading
+#                order. Use `*` for "whatever the run measured". A destination
+#                that pools rows (docs) must name exactly one, because it keys
+#                every figure on arm/workers/opcache/conc and a second endpoint
+#                would satisfy that key for a different amount of work.
+#   mode         the opcache mode the rows must carry (`on`) — the run's own
+#                column, so a JIT-on and a JIT-off pass cannot be mixed.
+#   required     whether a missing run is an error (`yes`) or a skip (`no`).
+#   note         why this run, for the next person who is tempted to re-point it
+destination	run	endpoints	mode	required	note
+docs	run85-scale-items-2	/items	on	yes	Single-endpoint pass, so the pooled medians describe one page. Second pass of the scale grid: the first carried a volucer-worker decline that did not reproduce.
+homepage	matrix-jit-5r	/items-fast,/echo	on	yes	The current grid on the configuration that is actually deployed. Reports /items-fast (the ORM page without the identity map) and /echo (a constant handler), so the front-end and framework costs are separable.

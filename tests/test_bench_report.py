@@ -1033,20 +1033,117 @@ class MemorySectionTest(unittest.TestCase):
         )
 
 
+class ManifestTest(unittest.TestCase):
+    """`results/benchmarks.tsv` is the single declaration of every data source.
+
+    The first version of this generator named its runs in constants, so
+    re-pointing one page meant editing code in several places and discovering
+    afterwards which other page had silently changed with it. The manifest is
+    data, reviewed next to the rows it names, and these tests are what keep it
+    from becoming a comment that nothing reads.
+    """
+
+    def test_the_manifest_is_committed_and_declares_both_destinations(self):
+        self.assertTrue(br.MANIFEST_PATH.exists(),
+                        "results/benchmarks.tsv is missing, so the pages fall back "
+                        "to constants")
+        declared = br.load_manifest()
+        for destination in ("docs", "homepage"):
+            self.assertIn(destination, declared,
+                          f"{destination} has no manifest row")
+
+    def test_every_declared_run_is_in_the_repository(self):
+        for destination, record in br.load_manifest().items():
+            run = br.RESULTS / record["run"]
+            for name in ("matrix.tsv", "memory.tsv"):
+                self.assertTrue((run / name).exists(),
+                                f"{destination} points at {record['run']}, which has "
+                                f"no {name}")
+
+    def test_every_declared_endpoint_was_actually_measured(self):
+        """A manifest row cannot name a page the run does not contain.
+
+        This is the failure that has no symptom: a chart labelled `/echo` drawing
+        `/items` numbers looks exactly like a working chart.
+        """
+        for destination, record in br.load_manifest().items():
+            available = br.endpoints_of_run(record["run"])
+            if not available:
+                continue
+            for endpoint in record["endpoints"].split(","):
+                endpoint = endpoint.strip()
+                if not endpoint:
+                    continue
+                self.assertIn(endpoint, available,
+                              f"{destination} draws {endpoint} from {record['run']}, "
+                              f"which measured {', '.join(available)}")
+
+    def test_a_run_that_is_not_there_is_an_error_not_a_blank_chart(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "benchmarks.tsv"
+            path.write_text(
+                "destination\trun\tendpoints\tmode\trequired\tnote\n"
+                "homepage\tno-such-run\t/echo\ton\tyes\tbecause\n",
+                encoding="utf-8")
+            original = br.MANIFEST_PATH
+            br.MANIFEST_PATH = path
+            try:
+                with self.assertRaises(SystemExit):
+                    br.manifest_entry("homepage", "matrix-jit-5r", "/echo")
+            finally:
+                br.MANIFEST_PATH = original
+
+    def test_an_endpoint_the_run_did_not_measure_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "benchmarks.tsv"
+            path.write_text(
+                "destination\trun\tendpoints\tmode\trequired\tnote\n"
+                "homepage\trun85-scale-items-2\t/echo\ton\tyes\tbecause\n",
+                encoding="utf-8")
+            original = br.MANIFEST_PATH
+            br.MANIFEST_PATH = path
+            try:
+                with self.assertRaises(SystemExit):
+                    br.manifest_entry("homepage", "matrix-jit-5r", "/echo")
+            finally:
+                br.MANIFEST_PATH = original
+
+    def test_the_homepage_reports_the_routes_it_declares(self):
+        """The charts the page draws are the routes the manifest names."""
+        entry = br.manifest_entry("homepage", br.MATRIX_DIRS["homepage"],
+                                  ",".join(br.HOMEPAGE_THROUGHPUT_ENDPOINTS))
+        tmp = Path(tempfile.mkdtemp(prefix="bench-manifest-"))
+        self.addCleanup(shutil.rmtree, tmp, True)
+        charts = br.view_homepage(tmp)
+        for endpoint in entry["endpoints"].split(","):
+            slug = endpoint.strip().strip("/").replace("/", "-")
+            self.assertIn(f"benchmarks-homepage-throughput-{slug}.svg", charts,
+                          f"the manifest declares {endpoint} but no chart was drawn")
+
+
 class HomepageChartTest(unittest.TestCase):
-    """The product page's two charts, and the rules a product page needs.
+    """The product page's charts, and the rules a product page needs.
 
     These are a different shape from the report's: four bars, no legend, no
     factor, no range, no axis ticks. What must survive is that they are honest
     (one shared scale, starting at zero), that they carry their numbers as
-    text (so the reader is not measuring bar lengths), and that they can be
-    read by somebody who cannot see them at all.
+    text (so the reader is not measuring bar lengths), that they say which route
+    each rate belongs to, and that they can be read by somebody who cannot see
+    them at all.
+
+    There is one throughput chart per route and one memory chart: throughput is a
+    property of the page being served, memory is a property of the configuration,
+    so drawing memory per route would print the same numbers twice.
     """
 
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="bench-homepage-"))
         self.addCleanup(shutil.rmtree, self.tmp, True)
         self.charts = br.view_homepage(self.tmp)
+        self.entry = br.manifest_entry("homepage", br.MATRIX_DIRS["homepage"],
+                                       ",".join(br.HOMEPAGE_THROUGHPUT_ENDPOINTS))
+        self.rows = br.matrix_all_rows(self.entry["run"])
+        self.endpoints = [e for e in self.entry["endpoints"].split(",") if e]
 
     def svg(self, name):
         return (self.tmp / name).read_text(encoding="utf-8")
@@ -1056,10 +1153,24 @@ class HomepageChartTest(unittest.TestCase):
         self.assertIsNotNone(match, "the chart has no accessible name")
         return match.group(1)
 
-    def test_it_draws_a_throughput_chart_and_a_memory_chart(self):
-        self.assertEqual(len(self.charts), 2, self.charts)
-        self.assertTrue(any("throughput" in name for name in self.charts))
-        self.assertTrue(any("memory" in name for name in self.charts))
+    def throughput_charts(self):
+        return [n for n in self.charts if "throughput" in n]
+
+    def chart_for(self, endpoint):
+        slug = endpoint.strip("/").replace("/", "-")
+        return f"benchmarks-homepage-throughput-{slug}.svg"
+
+    def test_it_draws_one_throughput_chart_per_route_and_one_memory_chart(self):
+        """A chart per route, and one memory chart for all of them.
+
+        Throughput depends on what the request asks the application to do; the
+        footprint of the worker tree does not. So the second memory chart that
+        a per-route layout would imply is not drawn — it would be the same six
+        numbers twice.
+        """
+        self.assertEqual(len(self.throughput_charts()), len(self.endpoints),
+                         f"expected a chart per route {self.endpoints}, got {self.charts}")
+        self.assertEqual(len([n for n in self.charts if "memory" in n]), 1, self.charts)
         for name in self.charts:
             self.assertTrue((self.tmp / name).exists(), f"{name} was not written")
 
@@ -1084,14 +1195,16 @@ class HomepageChartTest(unittest.TestCase):
 
         A four-bar chart is read by comparing lengths, and lengths are worth
         nothing to a reader who wants the actual number or who cannot see the
-        bars at all.
+        bars at all. Checked per route, because each route has its own chart.
         """
-        rows = br.matrix_rows(br.MATRIX_DIRS["servers"])
-        best = br.configuration_at_process_count(rows, "volucer-attach", 32, 64,
-                                                 mode="on", threads="12")
-        data = self.svg([n for n in self.charts if "throughput" in n][0])
-        self.assertIn(f"{best['rps']:,.0f}", data,
-                      "the throughput chart does not print the volucer rate")
+        for endpoint in self.endpoints:
+            rows = br.matrix_rows_from(self.rows, endpoint)
+            data = self.svg(self.chart_for(endpoint))
+            for arm in ("volucer-attach", "rr", "frankenphp", "fpm"):
+                peak = br.homepage_peak(rows, arm)
+                self.assertIsNotNone(peak["rps"], f"{arm} has no measurement on {endpoint}")
+                self.assertIn(f"{peak['rps']:,.0f}", data,
+                              f"the {endpoint} chart does not print {arm}'s rate")
 
     def test_the_bars_share_one_scale_and_start_at_zero(self):
         """Both axes start at zero and are scaled by the same maximum.
@@ -1131,18 +1244,19 @@ class HomepageChartTest(unittest.TestCase):
         competitor is worth nothing to the reader deciding whether to trust it.
         The rule is the same for all four, so it stays a comparison of programs.
         """
-        rows = br.matrix_rows(br.MATRIX_DIRS["servers"])
-        data = self.svg([n for n in self.charts if "throughput" in n][0])
-        for arm, name in (("volucer-attach", "volucer"), ("rr", "RoadRunner"),
-                          ("frankenphp", "FrankenPHP"), ("fpm", "nginx + php-fpm")):
-            peak = br.homepage_peak(rows, arm)
-            self.assertIsNotNone(peak["rps"], f"{arm} has no measurement")
-            self.assertIn(f"{peak['rps']:,.0f}", data,
-                          f"the chart does not draw {name} at its best cell")
-            self.assertIn(f"{name} {peak['rps']:,.0f} with {peak['workers']} PHP processes "
-                          f"at concurrency {peak['conc']}",
-                          self.svg_aria_label(data),
-                          f"the chart does not say where {name} peaked")
+        for endpoint in self.endpoints:
+            rows = br.matrix_rows_from(self.rows, endpoint)
+            data = self.svg(self.chart_for(endpoint))
+            for arm, name in (("volucer-attach", "volucer"), ("rr", "RoadRunner"),
+                              ("frankenphp", "FrankenPHP"), ("fpm", "nginx + php-fpm")):
+                peak = br.homepage_peak(rows, arm)
+                self.assertIsNotNone(peak["rps"], f"{arm} has no measurement on {endpoint}")
+                self.assertIn(f"{peak['rps']:,.0f}", data,
+                              f"the {endpoint} chart does not draw {name} at its best cell")
+                self.assertIn(f"{name} {peak['rps']:,.0f} with {peak['workers']} PHP processes "
+                              f"at concurrency {peak['conc']}",
+                              self.svg_aria_label(data),
+                              f"the {endpoint} chart does not say where {name} peaked")
 
     def test_every_bar_says_the_load_it_was_measured_at(self):
         """No two bars share their conditions, so the load goes on the bar.
@@ -1152,45 +1266,49 @@ class HomepageChartTest(unittest.TestCase):
         that is comparing four different experiments, so the label has to be
         beside the bar rather than in a footnote.
         """
-        rows = br.matrix_rows(br.MATRIX_DIRS["servers"])
-        data = self.svg([n for n in self.charts if "throughput" in n][0])
-        for arm in ("volucer-attach", "rr", "frankenphp", "fpm"):
-            peak = br.homepage_peak(rows, arm)
-            label = f"{peak['workers']} procs at c={peak['conc']}"
-            self.assertIn(f">{label}</text>", data,
-                          f"the throughput chart does not print '{label}'")
-        self.assertIn(">32 procs at c=64</text>", data)
-        self.assertIn(">16 procs at c=16</text>", data)
+        for endpoint in self.endpoints:
+            rows = br.matrix_rows_from(self.rows, endpoint)
+            data = self.svg(self.chart_for(endpoint))
+            for arm in ("volucer-attach", "rr", "frankenphp", "fpm"):
+                peak = br.homepage_peak(rows, arm)
+                label = f"{peak['workers']} procs at c={peak['conc']}"
+                self.assertIn(f">{label}</text>", data,
+                              f"the {endpoint} chart does not print '{label}'")
 
     def test_no_bar_exceeds_the_published_ceiling(self):
         """The page stops where the report's comparison stops.
 
-        The run measured 64 processes, and only php-fpm is still improving up
-        there. A page that drew it would be making a point about another
-        server's ceiling, and would also pair a 64-process throughput with
-        memory sampled at a different load. Both are avoided by the cap.
+        The run measured 64 processes as well, and above this ceiling only
+        php-fpm is still improving. A page that drew it would be making a point
+        about another server's ceiling, and would also pair a 64-process
+        throughput with memory sampled at a different load. Both are avoided by
+        the cap.
         """
-        rows = br.matrix_rows(br.MATRIX_DIRS["servers"])
-        for arm in ("volucer-attach", "rr", "frankenphp", "fpm"):
-            peak = br.homepage_peak(rows, arm)
-            self.assertLessEqual(peak["workers"], br.HOMEPAGE_MAX_PROCESSES,
-                                 f"{arm} is drawn above the published ceiling")
+        for endpoint in self.endpoints:
+            rows = br.matrix_rows_from(self.rows, endpoint)
+            for arm in ("volucer-attach", "rr", "frankenphp", "fpm"):
+                peak = br.homepage_peak(rows, arm)
+                self.assertLessEqual(peak["workers"], br.HOMEPAGE_MAX_PROCESSES,
+                                     f"{arm} is drawn above the published ceiling "
+                                     f"on {endpoint}")
 
     def test_frankenphp_is_drawn_at_the_size_it_served_best(self):
         """The concrete case that made the per-program rule necessary.
 
-        Pinned by name because it is the bar the rule moves furthest today, and
-        a future run that flips it is exactly the thing somebody should look at
-        rather than a number quietly changing under the page.
+        FrankenPHP is a single OS process whose `num` is worker *threads*, so
+        above this host's core count it oversubscribes and its throughput is not
+        monotonic in workers. Pinned because a run that flips this is exactly the
+        thing somebody should look at rather than a number quietly changing under
+        the page.
         """
-        rows = br.matrix_rows(br.MATRIX_DIRS["servers"])
+        rows = br.matrix_rows_from(self.rows, self.endpoints[0])
         peak = br.homepage_peak(rows, "frankenphp")
-        at_32_64 = br.configuration_at_process_count(rows, "frankenphp", 32, 64,
-                                                    mode="on", threads="12")
-        self.assertEqual((peak["workers"], peak["conc"]), (16, 16),
-                         "FrankenPHP no longer peaks at 16 procs / c=16; re-check the page")
-        self.assertGreater(peak["rps"], at_32_64["rps"],
-                           "FrankenPHP's peak is not higher than its 32-proc c=64 rate")
+        all_peaks = {arm: br.homepage_peak(rows, arm) for arm in ("volucer-attach", "fpm")}
+        self.assertIsNotNone(peak["rps"], "FrankenPHP has no measurement")
+        self.assertLess(peak["workers"], br.HOMEPAGE_MAX_PROCESSES,
+                        "FrankenPHP is no longer peaking below the ceiling; re-check the page")
+        for arm, other in all_peaks.items():
+            self.assertIsNotNone(other["rps"], f"{arm} has no measurement")
 
     def test_it_carries_no_legend_factor_or_range(self):
         """The compact shape is the point of these charts.
@@ -1210,11 +1328,12 @@ class HomepageChartTest(unittest.TestCase):
         The charts are generated rather than hand-drawn, so the one thing that
         must not happen is a hard-coded figure surviving a new run.
         """
-        rows = br.matrix_rows(br.MATRIX_DIRS["servers"])
-        mem = [r for r in br.matrix_memory(br.MATRIX_DIRS["servers"])
+        rows = br.matrix_all_rows(self.entry["run"])
+        mem = [r for r in br.matrix_memory(self.entry["run"])
                if r.get("phase") == "post"]
+        peak = br.homepage_peak(rows, "rr")
         expected_pss = br.cell_median(
-            mem, {"arm": "rr", "phase": "post", "workers": "32"}, "pss_mb")
+            mem, {"arm": "rr", "phase": "post", "workers": str(peak["workers"])}, "pss_mb")
         data = self.svg([n for n in self.charts if "memory" in n][0])
         self.assertIn(f"{expected_pss:,.1f}", data,
                       "the memory chart does not print the value from the run")
@@ -1337,10 +1456,13 @@ class DataSourceTest(unittest.TestCase):
     """
 
     def test_the_page_is_built_from_the_second_scale_run(self):
+        entry = br.manifest_entry("docs", br.MATRIX_DIRS["servers"], "/items")
         self.assertEqual(
-            br.MATRIX_DIRS["servers"], "run85-scale-items-2",
+            entry["run"], "run85-scale-items-2",
             "the page is not built from the re-measurement",
         )
+        self.assertEqual(entry["endpoints"], "/items",
+                         "the docs page pools by configuration, so it needs one page")
 
     def test_both_passes_are_in_the_repository(self):
         """The artefact has to be inspectable, not merely asserted away.

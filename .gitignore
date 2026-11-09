@@ -23,6 +23,9 @@ data/
 # the pass is cheap enough to re-run on any host it would be compared against.
 results/*.tsv
 !results/raw.tsv
+# The manifest of which run feeds which published destination. It is an input to
+# the report generator, not harness output, so it is tracked like composer.lock.
+!results/benchmarks.tsv
 # A superseded sweep is kept, not deleted: the report quotes ratios that only a
 # later build can be compared against, and a comparison needs both sides.
 !results/raw-*.tsv

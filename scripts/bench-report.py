@@ -197,7 +197,105 @@ def median_or_none(values: list[float]) -> float | None:
 MATRIX_DIRS = {
     "servers": "run85-scale-items-2",
     "servers_root": "run85-scale-root",
+    "homepage": "matrix-jit-5r",
 }
+
+# The declaration of which run feeds which published destination.
+#
+# Everything a published output needs to know about its data source lives here
+# rather than in a constant, because the choice is a *decision about data* that
+# has to be reviewable next to the data. The first version of this file named a
+# run in three constants and nineteen test assertions, so re-pointing one page
+# meant editing code in several places and discovering afterwards which other
+# page had silently changed with it.
+MANIFEST_PATH = RESULTS / "benchmarks.tsv"
+
+MANIFEST_COLUMNS = ("destination", "run", "endpoints", "mode", "required", "note")
+
+
+def load_manifest(path: Path | None = None) -> dict[str, dict]:
+    """Read `results/benchmarks.tsv` into one dict per destination.
+
+    The file is the source of truth for which run a page is built from. It is
+    kept in the results tree rather than beside the generator so that the
+    declaration travels with the rows it points at: a run cannot be deleted
+    without the manifest row that names it becoming obviously stale.
+
+    A missing file falls back to `MATRIX_DIRS`, so a checkout that predates the
+    manifest still generates. That fallback is what lets the manifest be adopted
+    without re-running anything.
+    """
+    path = path or MANIFEST_PATH
+    if not path.exists():
+        return {}
+
+    rows: dict[str, dict] = {}
+    header: list[str] | None = None
+    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        cells = [cell.strip() for cell in line.split("\t")]
+        if header is None:
+            header = cells
+            continue
+        if len(cells) < len(MANIFEST_COLUMNS):
+            raise SystemExit(
+                f"{path}:{number}: expected {len(MANIFEST_COLUMNS)} tab-separated "
+                f"columns ({', '.join(MANIFEST_COLUMNS)}), got {len(cells)}"
+            )
+        record = dict(zip(header, cells))
+        destination = record.get("destination", "")
+        if not destination:
+            raise SystemExit(f"{path}:{number}: no destination")
+        if destination in rows:
+            raise SystemExit(f"{path}:{number}: {destination} is declared twice")
+        rows[destination] = record
+    return rows
+
+
+def manifest_entry(destination: str, default_run: str,
+                   default_endpoints: str) -> dict:
+    """One destination's data source: from the manifest, or the given fallback.
+
+    Validates the three things that silently produce a wrong chart: a run that is
+    not in the repository, a pooled destination naming several endpoints, and a
+    run that does not contain an endpoint the destination draws.
+    """
+    declared = load_manifest().get(destination)
+    if declared is None:
+        return {
+            "destination": destination,
+            "run": default_run,
+            "endpoints": default_endpoints,
+            "mode": "on",
+            "required": "yes",
+            "note": "fallback: results/benchmarks.tsv does not declare this destination",
+        }
+
+    endpoints = [e for e in declared["endpoints"].split(",") if e.strip()]
+    declared["endpoints"] = ",".join(endpoints)
+
+    run_dir = RESULTS / declared["run"]
+    if declared.get("required", "yes") == "yes" and not (
+            (run_dir / "matrix.tsv").exists() and (run_dir / "memory.tsv").exists()):
+        raise SystemExit(
+            f"results/benchmarks.tsv points {destination} at {declared['run']}, "
+            f"but {run_dir} is missing matrix.tsv or memory.tsv"
+        )
+
+    # `endpoints_of_run` reads meta.txt first, so a single-endpoint run is checked
+    # against the page it actually measured rather than accepted for any name.
+    available = endpoints_of_run(declared["run"])
+    if available:
+        missing = [e for e in endpoints if e not in available]
+        if missing:
+            raise SystemExit(
+                f"results/benchmarks.tsv points {destination} at {declared['run']}, "
+                f"but that run measured {', '.join(available)} and not "
+                f"{', '.join(missing)}"
+            )
+    return declared
 
 # The arms of the server comparison, in the order a page reads them.
 #
@@ -612,12 +710,100 @@ def _guard_single_path(path, rows: list[dict]) -> list[dict]:
     return rows
 
 
-def matrix_rows(directory: str) -> list[dict]:
-    """The matrix rows of one run, or an empty list."""
+def matrix_rows(directory: str, endpoint: str | None = None) -> list[dict]:
+    """The matrix rows of one run, or an empty list.
+
+    A run may measure one page or several. Without ``endpoint`` the rows are
+    guarded to a single page, because every pooled figure in this module keys on
+    ``arm/workers/opcache/conc`` and a multi-endpoint run would satisfy that key
+    for four *different* pages — the median would then describe no page at all.
+
+    The product page does not pool: it reads one page by name, so it passes
+    ``endpoint`` and gets exactly those rows.
+    """
     path = RESULTS / directory / "matrix.tsv"
     if not path.exists():
         return []
-    return _guard_single_path(path, read_dict_tsv(path))
+    rows = read_dict_tsv(path)
+    if endpoint is None:
+        return _guard_single_path(path, rows)
+    return _rows_for_endpoint(rows, endpoint)
+
+
+def matrix_all_rows(directory: str) -> list[dict]:
+    """Every row of a run, including a run that measured several pages.
+
+    Unlike `matrix_rows()`, this does not pool and therefore does not refuse a
+    multi-endpoint run. It is for callers that split by page themselves — the
+    product page does, and so does `endpoints_in()` — so the guard lives in the
+    function that actually pools rather than in the file reader.
+    """
+    path = RESULTS / directory / "matrix.tsv"
+    if not path.exists():
+        return []
+    return read_dict_tsv(path)
+
+
+def matrix_rows_from(rows: list[dict], endpoint: str) -> list[dict]:
+    """One page's rows out of an already-loaded run.
+
+    The same selection `matrix_rows()` does, but for a caller that has the rows in
+    hand — the product page, and the tests that describe it. Refuses a name the
+    run does not contain, because a chart labelled with a route it did not measure
+    is wrong in a way nothing in the output shows.
+    """
+    return _rows_for_endpoint(rows, endpoint)
+
+
+def endpoints_in(rows: list[dict]) -> list[str]:
+    """The pages a run measured, or an empty list if it measured one unnamed page.
+
+    An empty result means the rows carry no ``path`` column at all, which is what
+    a single-endpoint run looks like. That is not the same as "no data", and the
+    caller has to treat the two differently, so it is reported rather than hidden.
+    """
+    paths = {str(r.get("path", "") or "").strip() for r in rows}
+    paths.discard("")
+    paths.discard("*")
+    return sorted(paths)
+
+
+def endpoints_of_run(directory: str) -> list[str]:
+    """The pages a run measured, including a run whose rows carry no ``path``.
+
+    A single-endpoint run has no ``path`` column, so the rows cannot say which
+    page they are. `meta.txt` can: the harness writes the endpoint list it ran.
+    Reading it here is what keeps a manifest row from pointing a destination at
+    the wrong page silently — without this, `/echo` on a path-less run would be
+    accepted and the chart would draw `/items` numbers under an `/echo` label.
+    """
+    recorded = load_meta(directory).get("endpoint", "")
+    if recorded:
+        pages = [p.strip() for p in recorded.split(",") if p.strip()]
+        if pages:
+            return pages
+    return endpoints_in(matrix_all_rows(directory))
+
+
+def _rows_for_endpoint(rows: list[dict], endpoint: str) -> list[dict]:
+    """The rows of one page, refusing a name the run does not contain.
+
+    Failing loudly is the point: a run that measured ``/items`` in an earlier
+    configuration and ``/items-fast`` in this one would otherwise render a chart
+    labelled with the wrong page, and nothing in the output would show it.
+    """
+    available = endpoints_in(rows)
+    if not available:
+        # A single-endpoint run has no path column; it is whatever it is.
+        return rows
+    selected = [r for r in rows if str(r.get("path", "") or "").strip() == endpoint]
+    if not selected:
+        raise SystemExit(
+            f"the run measured {', '.join(available)} but the product page needs "
+            f"{endpoint}. Pass --homepage-endpoint=<one of the above> to say which "
+            "page the charts are about."
+        )
+    return selected
 
 
 def matrix_memory(directory: str) -> list[dict]:
@@ -964,7 +1150,7 @@ def view_benchmarks(out_dir: Path) -> dict:
     files: list[str] = []
     lines: list[str] = []
 
-    directory = MATRIX_DIRS["servers"]
+    directory = manifest_entry("docs", MATRIX_DIRS["servers"], "/items")["run"]
     rows = matrix_rows(directory)
     if not rows:
         return {"pages": 0, "files": []}
@@ -1484,7 +1670,7 @@ def view_memory(rows: list[dict], meta: dict, stamp: str, arms: list[str],
     lines: list[str] = []
     charts: list[str] = []
 
-    mem_rows = matrix_memory(MATRIX_DIRS["servers"])
+    mem_rows = matrix_memory(manifest_entry("docs", MATRIX_DIRS["servers"], "/items")["run"])
     post = [r for r in mem_rows if r.get("phase") == "post"]
     if not post:
         return {"lines": lines, "files": charts}
@@ -1679,13 +1865,39 @@ def view_memory(rows: list[dict], meta: dict, stamp: str, arms: list[str],
 
 # The largest process count the product page draws.
 #
-# The run measured 64 as well, and the published report leaves that tier out of
-# its throughput comparison: it is the tier where volucer's cold path stops
-# gaining, so it says nothing about a volucer deployment. The landing page
-# follows the same ceiling, which also keeps a bar from being drawn at a size
-# the page's own report does not compare. Above it, only php-fpm still improves,
-# and a fact about another server's ceiling is not a reason to draw four bars.
+# The landing page follows the same ceiling as the published report, which also
+# keeps a bar from being drawn at a size the page's own report does not compare.
+# Above it, only php-fpm still improves, and a fact about another server's ceiling
+# is not a reason to draw four bars.
 HOMEPAGE_MAX_PROCESSES = 32
+
+# The page the charts are a statement about, when the caller does not say.
+#
+# `/items-fast` is the cheapest route that still boots the framework container, so
+# it is the page where a deployment model's cost shows.
+HOMEPAGE_ENDPOINT = "/items-fast"
+
+# The pages the product page's throughput charts are about, in reading order.
+#
+# `/echo` is the server with nothing left to do — a constant handler through the
+# full HTTP path — so it is the floor a deployment model is judged against.
+# `/items-fast` is `/items` with the identity map removed and nothing else changed
+# (`listFastAction`), so it serves the same view from the same query and is the
+# cheapest route that still boots the framework container. Together they say what
+# the front-end costs and what the framework costs on top of it.
+#
+# Memory is drawn once, not once per page: a worker's footprint is a property of
+# the configuration rather than of the request, which is why the harness records it
+# with path `*`.
+HOMEPAGE_THROUGHPUT_ENDPOINTS: tuple[str, ...] = ("/items-fast", "/echo")
+
+# The endpoint each page-level name resolves to. Both `/items` and `/items-fast`
+# describe the same served page, so a run that measured either can drive the chart.
+HOMEPAGE_ENDPOINTS: dict[str, str] = {
+    "/items": "the ORM page",
+    "/items-fast": "the ORM page, with the identity map removed",
+    "/echo": "a constant handler through the full HTTP path",
+}
 
 # The product page's bar colours as (light theme, dark theme). The volucer blue is
 # the brand's; the other three keep the report's hues, lifted on a dark card.
@@ -1695,6 +1907,77 @@ HOMEPAGE_COLOURS = {
     "frankenphp": ("#a855f7", "#c084fc"),
     "fpm": ("#64748b", "#94a3b8"),
 }
+
+
+# Set by `--homepage-endpoint` so the charts can be told which page a run is
+# about without threading a parameter through every helper the view calls.
+_HOMEPAGE_ENDPOINT_OVERRIDE: str | None = None
+
+# The caption facts from the most recent `view_homepage()`, so the caller can
+# render the prose beside the charts from the same run the bars came from.
+_HOMEPAGE_CAPTION: dict = {}
+
+
+def homepage_endpoint() -> str:
+    """The page the product page's charts are about, when one has to be chosen.
+
+    Overridable per invocation, because which page a run measured is a property of
+    the run, not of this module. The run itself comes from `results/benchmarks.tsv`,
+    so pointing the charts at a new grid is a one-line change to data rather than an
+    edit here.
+    """
+    return _HOMEPAGE_ENDPOINT_OVERRIDE or HOMEPAGE_ENDPOINT
+
+
+def homepage_provenance(directory: str) -> dict[str, str]:
+    """The host, load and repeat count the charts' numbers were measured under.
+
+    Read from the run's own `meta.txt` rather than typed into the page, for the
+    same reason `load_provenance()` reads `results/report.md`: a constant is a
+    second copy of the facts, and the second copy is the one that goes stale.
+    The landing page's caption is the one place a reader is told what kind of
+    machine the bars are a fact about, so it cannot describe a previous host.
+    """
+    meta = load_meta(directory)
+    host = meta.get("host", "")
+    kernel = meta.get("kernel", "")
+
+    memory_mb = ""
+    for token in host.split():
+        if token.isdigit() and int(token) >= 512:
+            memory_mb = token
+            break
+
+    concurrency = meta.get("concurrency", "")
+    duration = ""
+    rounds = ""
+    threads = ""
+    tokens = concurrency.split()
+    for index, part in enumerate(tokens):
+        part = part.strip()
+        if part.startswith("duration:") or part.startswith("rounds:"):
+            # The token carries the colon, so the value is the next one.
+            inline = part.split(":", 1)[1].strip()
+            value = inline or (tokens[index + 1] if index + 1 < len(tokens) else "")
+            if part.startswith("duration:"):
+                duration = value
+            else:
+                rounds = value
+        elif part.endswith("threads:"):
+            threads = tokens[index - 1] if index else ""
+
+    return {
+        "host": host,
+        "kernel": kernel,
+        "cores": host.split()[0] if host else "",
+        "memory_mb": memory_mb,
+        "duration": duration,
+        "rounds": rounds,
+        "threads": threads,
+        "concurrency": concurrency.split("wrk")[0].strip().rstrip("wrk").strip(),
+        "jit": "on" if "jit" in meta.get("ini scan", "") else "off",
+        "endpoint": homepage_endpoint(),
+    }
 
 
 def view_homepage(out_dir: Path) -> list[str]:
@@ -1735,72 +2018,207 @@ def view_homepage(out_dir: Path) -> list[str]:
     compares at. The run measured further, but only php-fpm is still faster up
     there, so a bar drawn at 64 would be a fact about another server's ceiling
     rather than about the comparison this page is making.
+
+    The run may have measured several pages; the charts are about one, named by
+    `HOMEPAGE_ENDPOINT`. Pooling them is what the guard on `matrix_rows()`
+    refuses, and selecting one by name is what makes a multi-endpoint run
+    publishable at all.
     """
-    directory = MATRIX_DIRS["servers"]
-    rows = matrix_rows(directory)
+    directory = manifest_entry("homepage", MATRIX_DIRS["homepage"],
+                               ",".join(HOMEPAGE_THROUGHPUT_ENDPOINTS))["run"]
+    all_rows = matrix_all_rows(directory)
     mem_rows = [r for r in matrix_memory(directory) if r.get("phase") == "post"]
-    if not rows or not mem_rows:
+    if not all_rows or not mem_rows:
         return []
 
     # The four programs, in the order the page reads them: the one the page is
     # about, then the three it is measured against.
     arms = ["volucer-attach", "rr", "frankenphp", "fpm"]
 
-    throughput: dict[str, float] = {}
+    available = endpoints_in(all_rows)
+    endpoints = [e for e in HOMEPAGE_THROUGHPUT_ENDPOINTS if not available or e in available]
+    if not endpoints:
+        raise SystemExit(
+            f"the run measured {', '.join(available)} but the product page needs one of "
+            f"{', '.join(HOMEPAGE_THROUGHPUT_ENDPOINTS)}. Pass "
+            "--homepage-endpoint=<name> to choose."
+        )
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    charts: list[str] = []
+    provenance = homepage_provenance(directory)
+    sampled_at = _memory_sample_concurrency(mem_rows, directory)
+
+    _HOMEPAGE_CAPTION.clear()
+    _HOMEPAGE_CAPTION.update({
+        "host": provenance["host"],
+        "cores": provenance["cores"],
+        "memory_mb": provenance["memory_mb"],
+        "kernel": provenance["kernel"],
+        "duration": provenance["duration"],
+        "rounds": provenance["rounds"],
+        "threads": provenance["threads"],
+        "jit": provenance["jit"],
+        "sampled_at": sampled_at or "",
+        "endpoints": {},
+        "memory": {},
+    })
+
+    # One throughput chart per page. A run that measured two pages gets two charts
+    # rather than one pooled one: pooling is precisely what `matrix_rows()` refuses,
+    # because a median across different amounts of work describes no page.
+    for endpoint in endpoints:
+        rows = _rows_for_endpoint(all_rows, endpoint)
+        throughput: dict[str, float] = {}
+        shapes: dict[str, dict] = {}
+        for arm in arms:
+            peak = homepage_peak(rows, arm)
+            if peak["rps"] is None:
+                continue
+            throughput[arm] = peak["rps"]
+            shapes[arm] = peak
+
+        present = [arm for arm in arms if arm in throughput]
+        if len(present) < 2:
+            continue
+
+        categories = [SERVER_ARMS[arm][0] for arm in present]
+        slug = endpoint.strip("/").replace("/", "-")
+        name = f"benchmarks-homepage-throughput-{slug}.svg"
+        write(out_dir / name, compact_bars(
+            categories=categories,
+            values=[throughput[arm] for arm in present],
+            colours=[HOMEPAGE_COLOURS[arm] for arm in present],
+            title=f"Requests per second — {endpoint}",
+            value_format=lambda value: f"{value:,.0f}",
+            caption="higher is better",
+            sublabels=[f"{shapes[arm]['workers']} procs at c={shapes[arm]['conc']}"
+                       for arm in present],
+            aria_label=rate_label(categories, [throughput[arm] for arm in present],
+                                  [shapes[arm] for arm in present],
+                                  endpoint=endpoint),
+        ))
+        charts.append(name)
+        _HOMEPAGE_CAPTION["endpoints"][endpoint] = {
+            "chart": name,
+            "throughput": {SERVER_ARMS[arm][0]: throughput[arm] for arm in present},
+            "shapes": {SERVER_ARMS[arm][0]: shapes[arm] for arm in present},
+        }
+
+    # Memory is drawn once. It is a property of the configuration, not of the
+    # request, so the harness records it once per cell with path `*` and splitting
+    # it by page would draw the same numbers twice.
     memory: dict[str, float] = {}
-    shapes: dict[str, dict] = {}
+    mem_shapes: dict[str, dict] = {}
     for arm in arms:
-        peak = homepage_peak(rows, arm)
+        peak = homepage_peak(all_rows, arm)
         if peak["rps"] is None:
             continue
-        throughput[arm] = peak["rps"]
-        shapes[arm] = peak
-
         key = {"arm": arm, "phase": "post", "workers": str(peak["workers"])}
         pss = cell_median(mem_rows, key, "pss_mb")
         if pss is not None:
             memory[arm] = pss
+            mem_shapes[arm] = peak
 
-    present = [arm for arm in arms if arm in throughput and arm in memory]
-    if len(present) < 2:
-        return []
-
-    categories = [SERVER_ARMS[arm][0] for arm in present]
-    colours = [HOMEPAGE_COLOURS[arm] for arm in present]
-
-    out_dir.mkdir(parents=True, exist_ok=True)
-    charts: list[str] = []
-
-    rate = "benchmarks-homepage-throughput.svg"
-    write(out_dir / rate, compact_bars(
-        categories=categories,
-        values=[throughput[arm] for arm in present],
-        colours=colours,
-        title="Requests per second",
-        value_format=lambda value: f"{value:,.0f}",
-        caption="higher is better",
-        sublabels=[f"{shapes[arm]['workers']} procs at c={shapes[arm]['conc']}"
-                   for arm in present],
-        aria_label=rate_label(categories, [throughput[arm] for arm in present],
-                              [shapes[arm] for arm in present]),
-    ))
-    charts.append(rate)
-
-    cost = "benchmarks-homepage-memory.svg"
-    write(out_dir / cost, compact_bars(
-        categories=categories,
-        values=[memory[arm] for arm in present],
-        colours=colours,
-        title="Proportional memory, MiB",
-        value_format=lambda value: f"{value:,.1f}",
-        caption="lower is better",
-        sublabels=[f"{shapes[arm]['workers']} procs" for arm in present],
-        aria_label=memory_label(categories, [memory[arm] for arm in present],
-                                [shapes[arm] for arm in present]),
-    ))
-    charts.append(cost)
+    present = [arm for arm in arms if arm in memory]
+    if len(present) >= 2:
+        categories = [SERVER_ARMS[arm][0] for arm in present]
+        cost = "benchmarks-homepage-memory.svg"
+        write(out_dir / cost, compact_bars(
+            categories=categories,
+            values=[memory[arm] for arm in present],
+            colours=[HOMEPAGE_COLOURS[arm] for arm in present],
+            title="Proportional memory, MiB",
+            value_format=lambda value: f"{value:,.1f}",
+            caption="lower is better",
+            sublabels=[f"{mem_shapes[arm]['workers']} procs" for arm in present],
+            aria_label=memory_label(categories, [memory[arm] for arm in present],
+                                    [mem_shapes[arm] for arm in present],
+                                    conc=sampled_at),
+        ))
+        charts.append(cost)
+        _HOMEPAGE_CAPTION["memory"] = {
+            "chart": cost,
+            "values": {SERVER_ARMS[arm][0]: memory[arm] for arm in present},
+            "shapes": {SERVER_ARMS[arm][0]: mem_shapes[arm] for arm in present},
+        }
 
     return charts
+
+
+def _memory_sample_concurrency(mem_rows: list[dict], directory: str) -> str:
+    """The load the memory figures were sampled after.
+
+    Read from the rows rather than assumed to be 64: the harness samples after
+    the most demanding pass it ran, and a run that stops at 96 would otherwise
+    have a caption claiming a level it never measured.
+    """
+    levels = set()
+    for row in mem_rows:
+        conc = str(row.get("conc", "") or "").strip()
+        if conc.isdigit() and int(conc) > 0:
+            levels.add(int(conc))
+    if levels:
+        return str(max(levels))
+    recorded = load_meta(directory).get("concurrency", "")
+    numbers = [int(n) for n in re.findall(r"\d+", recorded.split("wrk")[0])]
+    return str(max(numbers)) if numbers else ""
+
+
+def homepage_caption() -> dict:
+    """The caption facts for the product page, from the last `view_homepage()`.
+
+    The page's caption is text beside the charts, so it is not written by the
+    chart renderer. It is still *read from the run* rather than typed into the
+    template — the host, the load and the repeat count all come from `meta.txt`,
+    because the one thing that must not happen is a caption describing the host
+    a previous run was measured on.
+    """
+    return dict(_HOMEPAGE_CAPTION)
+
+
+def homepage_caption_lines() -> list[str]:
+    """The caption, as the sentences the product page should print.
+
+    Each sentence names one fact and where it came from, so a reader can tell
+    which pages the bars are about, on what machine, at what load, and with which
+    interpreter optimization — the four things that make a rate comparable.
+    """
+    facts = homepage_caption()
+    if not facts:
+        return ["no caption: run --homepage first"]
+
+    lines: list[str] = []
+
+    endpoints = list(facts.get("endpoints", {}))
+    if endpoints:
+        described = ", ".join(
+            f"{route} ({HOMEPAGE_ENDPOINTS.get(route, 'unnamed')})" for route in endpoints
+        )
+        lines.append(f"All servers served the same routes: {described}.")
+
+    rounds = facts.get("rounds", "")
+    duration = facts.get("duration", "")
+    load = f"Median of {rounds} {duration} runs" if rounds and duration else "Median"
+    cores = facts.get("cores", "")
+    memory = facts.get("memory_mb", "")
+    host = (f"a {cores}-vcore VM with {int(memory):,} MB RAM"
+            if cores and memory else "")
+    ceiling = HOMEPAGE_MAX_PROCESSES
+    conditions = ", ".join(x for x in (host, f"up to {ceiling} PHP processes") if x)
+    lines.append(f"{load}, interleaved on {conditions}." if conditions else f"{load}, interleaved.")
+
+    if facts.get("jit") == "on":
+        lines.append("OPcache and the JIT are enabled.")
+    else:
+        lines.append("OPcache is enabled; the JIT is off.")
+
+    sampled = facts.get("sampled_at", "")
+    tail = f" after the concurrency-{sampled} pass" if sampled else ""
+    lines.append("Each bar shows the load and process count at which it was measured. "
+                 f"Memory is the proportional set size of the full process tree, "
+                 f"sampled{tail}.")
+    return lines
 
 
 def homepage_peak(rows: list[dict], arm: str, mode: str = "on") -> dict:
@@ -1816,6 +2234,9 @@ def homepage_peak(rows: list[dict], arm: str, mode: str = "on") -> dict:
 
     Cells above `HOMEPAGE_MAX_PROCESSES` are not considered, so the page never
     draws a deployment larger than the one the report compares.
+
+    ``rows`` is already narrowed to one page by the caller, so a multi-endpoint
+    run is a valid input here as long as it was split first.
     """
     cells: set[tuple[int, int]] = set()
     for row in rows:
@@ -1842,36 +2263,43 @@ def homepage_peak(rows: list[dict], arm: str, mode: str = "on") -> dict:
     return best
 
 
-def rate_label(names: list[str], values: list[float], shapes: list[dict]) -> str:
+def rate_label(names: list[str], values: list[float], shapes: list[dict],
+               endpoint: str | None = None) -> str:
     """The alternative text for the throughput chart: every bar, as a sentence.
 
     A reader who cannot see the bars has to be told the numbers they carry,
     because the numbers are the entire content of the figure. The load and the
     process count are printed per bar, because no two bars were measured under
-    the same conditions.
+    the same conditions. The route is named because a rate with no page beside
+    it cannot be compared with a rate from somewhere else.
     """
     parts = ", ".join(
         f"{name} {value:,.0f} with {shape['workers']} PHP processes at "
         f"concurrency {shape['conc']}"
         for name, value, shape in zip(names, values, shapes)
     )
-    return (f"Each server at its best measured load and process count. "
+    subject = f"serving GET {endpoint}. " if endpoint else ""
+    return (f"Each server at its best measured load and process count, {subject}"
             f"Requests per second: {parts}.")
 
 
-def memory_label(names: list[str], values: list[float], shapes: list[dict]) -> str:
+def memory_label(names: list[str], values: list[float], shapes: list[dict],
+                 conc: str | None = None) -> str:
     """The alternative text for the memory chart.
 
-    Memory is sampled only after the concurrency-64 pass, so the figure is the
-    same process count as the bar above it but not necessarily the same load.
-    Saying "at concurrency 64" here is what keeps that honest.
+    Memory is sampled once after the run's most demanding pass, so the figure is
+    the same process count as the bar above it but not necessarily the same load.
+    Naming that load is what keeps the two charts from being read as one.
     """
     parts = ", ".join(
         f"{name} {value:,.1f} with {shape['workers']} PHP processes"
         for name, value, shape in zip(names, values, shapes)
     )
-    return (f"Proportional memory in MiB, sampled after the concurrency 64 run, "
-            f"for each server's fastest process count: {parts}.")
+    if conc:
+        return (f"Proportional memory in MiB, sampled after the concurrency {conc} "
+                f"pass, for each server's fastest process count: {parts}.")
+    return (f"Proportional memory in MiB, sampled after the run's most demanding "
+            f"pass, for each server's fastest process count: {parts}.")
 
 
 def build_homepage(target: str) -> list[str]:
@@ -1879,7 +2307,9 @@ def build_homepage(target: str) -> list[str]:
     directory = Path(target)
     charts = view_homepage(directory)
     if not charts:
-        return [f"no chart written: no result files under {MATRIX_DIRS['servers']}"]
+        run = manifest_entry("homepage", MATRIX_DIRS["homepage"],
+                             ",".join(HOMEPAGE_THROUGHPUT_ENDPOINTS))["run"]
+        return [f"no chart written: no result files under results/{run}"]
     return [f"wrote {directory / chart}" for chart in charts]
 
 
@@ -2035,8 +2465,18 @@ def main() -> int:
     parser.add_argument("--publish", default=None)
     parser.add_argument("--homepage", default=None,
                         help="Write the product page's two compact charts here.")
+    parser.add_argument("--homepage-endpoint", default=None,
+                        help="The page the product-page charts are about, for a run "
+                             "that measured more than one. Defaults to "
+                             f"{HOMEPAGE_ENDPOINT}.")
+    parser.add_argument("--homepage-caption", action="store_true",
+                        help="Print the product page's caption, read from the run.")
     parser.add_argument("--list", action="store_true")
     args = parser.parse_args()
+
+    if args.homepage_endpoint:
+        global _HOMEPAGE_ENDPOINT_OVERRIDE
+        _HOMEPAGE_ENDPOINT_OVERRIDE = args.homepage_endpoint
 
     if args.list:
         print("Views:")
@@ -2046,6 +2486,15 @@ def main() -> int:
 
     if args.homepage:
         for line in build_homepage(args.homepage):
+            print(line)
+        if args.homepage_caption:
+            for line in homepage_caption_lines():
+                print(line)
+        return 0
+
+    if args.homepage_caption:
+        view_homepage(Path(args.out).resolve())
+        for line in homepage_caption_lines():
             print(line)
         return 0
 
