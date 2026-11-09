@@ -1121,6 +1121,50 @@ class ManifestTest(unittest.TestCase):
                           f"the manifest declares {endpoint} but no chart was drawn")
 
 
+class EndpointDescriptionTest(unittest.TestCase):
+    """`results/endpoints.tsv` says what each route measures.
+
+    The caption used to describe a route from a Python constant, which is a second
+    copy of a fact about the application. It is data now: adding a route is a row,
+    and the caption cannot drift from what the route does without the file
+    changing with it.
+    """
+
+    def test_every_route_the_destinations_draw_has_a_summary(self):
+        """A route a page draws has to be describable, or the caption cannot say."""
+        described = br.load_endpoints()
+        self.assertTrue(described, "results/endpoints.tsv is missing or empty")
+        for destination, record in br.load_manifest().items():
+            for endpoint in record["endpoints"].split(","):
+                endpoint = endpoint.strip()
+                if not endpoint or endpoint == "*":
+                    continue
+                self.assertIn(endpoint, described,
+                              f"{destination} draws {endpoint}, which has no summary "
+                              f"in results/endpoints.tsv")
+
+    def test_the_summaries_read_as_a_parenthesis(self):
+        """The summary is interpolated mid-sentence, so it must not punctuate."""
+        for endpoint, summary in br.load_endpoints().items():
+            self.assertFalse(summary.endswith("."),
+                             f"{endpoint}'s summary ends with a period, and it is "
+                             f"printed inside a sentence")
+            self.assertTrue(summary[0].islower(),
+                            f"{endpoint}'s summary starts with a capital, and it is "
+                            f"printed mid-sentence")
+
+    def test_the_caption_uses_the_data_and_not_a_constant(self):
+        tmp = Path(tempfile.mkdtemp(prefix="bench-caption-"))
+        self.addCleanup(shutil.rmtree, tmp, True)
+        br.view_homepage(tmp)
+        text = " ".join(br.homepage_caption_lines())
+        for endpoint in br.homepage_caption().get("endpoints", {}):
+            summary = br.endpoint_summary(endpoint)
+            if summary:
+                self.assertIn(summary, text,
+                              f"the caption does not describe {endpoint}")
+
+
 class HomepageChartTest(unittest.TestCase):
     """The product page's charts, and the rules a product page needs.
 

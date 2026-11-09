@@ -27,6 +27,7 @@ import argparse
 import os
 import statistics
 import sys
+import tempfile
 from collections import defaultdict
 from pathlib import Path
 
@@ -1873,31 +1874,63 @@ HOMEPAGE_MAX_PROCESSES = 32
 
 # The page the charts are a statement about, when the caller does not say.
 #
-# `/items-fast` is the cheapest route that still boots the framework container, so
-# it is the page where a deployment model's cost shows.
-HOMEPAGE_ENDPOINT = "/items-fast"
+# `/echo` is the whole HTTP path with a constant handler, which is the least
+# confounding number for comparing servers: nothing the application does can
+# explain a difference. It is what a reader expects on a benchmark chart.
+HOMEPAGE_ENDPOINT = "/echo"
 
-# The pages the product page's throughput charts are about, in reading order.
+# The pages the product page draws, when `results/benchmarks.tsv` does not say.
 #
-# `/echo` is the server with nothing left to do — a constant handler through the
-# full HTTP path — so it is the floor a deployment model is judged against.
+# `/echo` is the server with nothing left to do: a constant handler through the
+# full HTTP path, so it is the floor a deployment model is judged against.
 # `/items-fast` is `/items` with the identity map removed and nothing else changed
-# (`listFastAction`), so it serves the same view from the same query and is the
-# cheapest route that still boots the framework container. Together they say what
-# the front-end costs and what the framework costs on top of it.
+# (`listFastAction`), so it serves the same view from the same query and shows what
+# the framework costs on top of that floor. Both are useful together, but the
+# landing page shows one number per server, so it draws the floor.
 #
 # Memory is drawn once, not once per page: a worker's footprint is a property of
 # the configuration rather than of the request, which is why the harness records it
 # with path `*`.
-HOMEPAGE_THROUGHPUT_ENDPOINTS: tuple[str, ...] = ("/items-fast", "/echo")
+HOMEPAGE_THROUGHPUT_ENDPOINTS: tuple[str, ...] = ("/echo",)
 
-# The endpoint each page-level name resolves to. Both `/items` and `/items-fast`
-# describe the same served page, so a run that measured either can drive the chart.
-HOMEPAGE_ENDPOINTS: dict[str, str] = {
-    "/items": "the ORM page",
-    "/items-fast": "the ORM page, with the identity map removed",
-    "/echo": "a constant handler through the full HTTP path",
-}
+# What each measured endpoint is, so a caption can describe a route without the
+# description living in code. Read from `results/endpoints.tsv`.
+ENDPOINTS_PATH = RESULTS / "endpoints.tsv"
+
+
+def load_endpoints(path: Path | None = None) -> dict[str, str]:
+    """Read `results/endpoints.tsv` into `{endpoint: summary}`.
+
+    The summaries are data rather than constants because they describe the
+    application, not the report: a new route is a row here, and adding one does
+    not mean editing Python. A missing file yields an empty map, and callers fall
+    back to naming the bare route rather than inventing a description.
+    """
+    path = path or ENDPOINTS_PATH
+    if not path.exists():
+        return {}
+
+    summaries: dict[str, str] = {}
+    header: list[str] | None = None
+    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        cells = [cell.strip() for cell in line.split("\t")]
+        if header is None:
+            header = cells
+            continue
+        if len(cells) < 2:
+            raise SystemExit(
+                f"{path}:{number}: expected 'endpoint' and 'summary' separated by a tab"
+            )
+        summaries[cells[0]] = cells[1]
+    return summaries
+
+
+def endpoint_summary(endpoint: str) -> str:
+    """One clause describing an endpoint, or empty if the data does not say."""
+    return load_endpoints().get(endpoint, "")
 
 # The product page's bar colours as (light theme, dark theme). The volucer blue is
 # the brand's; the other three keep the report's hues, lifted on a dark card.
@@ -2101,6 +2134,7 @@ def view_homepage(out_dir: Path) -> list[str]:
         charts.append(name)
         _HOMEPAGE_CAPTION["endpoints"][endpoint] = {
             "chart": name,
+            "endpoint": endpoint,
             "throughput": {SERVER_ARMS[arm][0]: throughput[arm] for arm in present},
             "shapes": {SERVER_ARMS[arm][0]: shapes[arm] for arm in present},
         }
@@ -2181,7 +2215,7 @@ def homepage_caption_lines() -> list[str]:
     """The caption, as the sentences the product page should print.
 
     Each sentence names one fact and where it came from, so a reader can tell
-    which pages the bars are about, on what machine, at what load, and with which
+    which page the bars are about, on what machine, at what load, and with which
     interpreter optimization — the four things that make a rate comparable.
     """
     facts = homepage_caption()
@@ -2193,9 +2227,11 @@ def homepage_caption_lines() -> list[str]:
     endpoints = list(facts.get("endpoints", {}))
     if endpoints:
         described = ", ".join(
-            f"{route} ({HOMEPAGE_ENDPOINTS.get(route, 'unnamed')})" for route in endpoints
+            f"{route} ({endpoint_summary(route)})" if endpoint_summary(route) else route
+            for route in endpoints
         )
-        lines.append(f"All servers served the same routes: {described}.")
+        subject = "route" if len(endpoints) == 1 else "routes"
+        lines.append(f"All servers served the same {subject}: {described}.")
 
     rounds = facts.get("rounds", "")
     duration = facts.get("duration", "")
@@ -2219,6 +2255,85 @@ def homepage_caption_lines() -> list[str]:
                  f"Memory is the proportional set size of the full process tree, "
                  f"sampled{tail}.")
     return lines
+
+
+def homepage_caption_partial(chart_prefix: str = "/assets/images/volucer/benchmarks") -> str:
+    """The benchmark section's prose, as a Clarity partial the homepage includes.
+
+    The prose beside the charts is generated for the same reason the charts are:
+    every sentence here states a number or a condition that belongs to the run
+    (which route, which host, how many rounds, which interpreter optimization), and
+    a sentence typed into a template is a copy that survives the run it describes.
+
+    The alt text is generated too, and for a sharper reason: it is the only
+    description a reader using a screen reader has of the figure, so it has to be
+    the same numbers the bars carry rather than a transcription of them.
+    """
+    facts = homepage_caption()
+    if not facts:
+        raise SystemExit("no caption available: run --homepage first")
+
+    endpoints = facts.get("endpoints", {})
+    memory = facts.get("memory", {})
+    intro = " ".join(homepage_caption_lines()[:1])
+
+    images: list[str] = []
+    for endpoint, data in endpoints.items():
+        name = data["chart"]
+        label = _svg_aria_label(data)
+        images.append(
+            f'      <div class="col-md-6">\n'
+            f'        <img src="{chart_prefix}/{name}"\n'
+            f'          class="img-fluid w-100"\n'
+            f'          alt="{_html(label)}"/>\n'
+            f'      </div>'
+        )
+    if memory:
+        images.append(
+            f'      <div class="col-md-6">\n'
+            f'        <img src="{chart_prefix}/{memory["chart"]}"\n'
+            f'          class="img-fluid w-100"\n'
+            f'          alt="{_html(_memory_aria_label(memory))}"/>\n'
+            f'      </div>'
+        )
+
+    trailing = " ".join(homepage_caption_lines()[1:])
+
+    return (
+        f"{{# Generated by volucer-competition scripts/bench-report.py --homepage-partial. #}}\n"
+        f"{{# Do not edit: the numbers and conditions come from the run. #}}\n"
+        f'      <p class="text-center text-muted mb-4 pb-2 mx-auto" style="max-width: 700px;">\n'
+        f"        {_html(intro)}\n"
+        f"      </p>\n"
+        f'      <div class="row g-4 justify-content-center">\n'
+        + "\n".join(images) + "\n"
+        f"      </div>\n"
+        f'      <p class="text-center text-muted small mt-4 mb-0">\n'
+        f"        {_html(trailing)}\n"
+        f"      </p>\n"
+    )
+
+
+def _html(text: str) -> str:
+    """Escape for an HTML attribute or text node, leaving the sentence readable."""
+    return (text.replace("&", "&amp;").replace("<", "&lt;")
+                .replace(">", "&gt;").replace('"', "&quot;"))
+
+
+def _svg_aria_label(data: dict) -> str:
+    """The accessible name of a chart, rebuilt from the same facts it was drawn from."""
+    names = list(data["throughput"])
+    values = list(data["throughput"].values())
+    shapes = [data["shapes"][name] for name in names]
+    return rate_label(names, values, shapes, endpoint=data.get("endpoint"))
+
+
+def _memory_aria_label(memory: dict) -> str:
+    names = list(memory["values"])
+    values = list(memory["values"].values())
+    shapes = [memory["shapes"][name] for name in names]
+    return memory_label(names, values, shapes,
+                        conc=homepage_caption().get("sampled_at", ""))
 
 
 def homepage_peak(rows: list[dict], arm: str, mode: str = "on") -> dict:
@@ -2471,6 +2586,9 @@ def main() -> int:
                              f"{HOMEPAGE_ENDPOINT}.")
     parser.add_argument("--homepage-caption", action="store_true",
                         help="Print the product page's caption, read from the run.")
+    parser.add_argument("--homepage-partial", default=None,
+                        help="Write the product page's benchmark section as a Clarity "
+                             "partial, with the charts' alt text, into this file.")
     parser.add_argument("--list", action="store_true")
     args = parser.parse_args()
 
@@ -2482,6 +2600,20 @@ def main() -> int:
         print("Views:")
         for key, view in VIEWS.items():
             print(f"  {key:<12} {view['description']}")
+        return 0
+
+    if args.homepage_partial:
+        target = Path(args.homepage_partial).resolve()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        # The partial carries prose and alt text, not the images themselves, so the
+        # charts are drawn into a scratch directory only to populate the caption
+        # facts from the same run.
+        with tempfile.TemporaryDirectory(prefix="bench-partial-") as scratch:
+            view_homepage(Path(scratch))
+            text = homepage_caption_partial(chart_prefix=args.homepage or
+                                            "/assets/images/volucer/benchmarks")
+        target.write_text(text, encoding="utf-8")
+        print(f"wrote {target}")
         return 0
 
     if args.homepage:

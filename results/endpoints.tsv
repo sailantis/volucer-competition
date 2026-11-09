@@ -1,0 +1,19 @@
+# What each measured endpoint is, in one place.
+#
+# The generator prints these beside a rate; without them the caption would have to
+# describe a route in code, and a description typed into a Python constant is a
+# second copy of a fact that belongs with the data. The route set is defined by
+# `apps/azera/Bootstrap.php`; this file says what each one measures.
+#
+# Columns, tab separated. `#` starts a comment and blank lines are ignored.
+#
+#   endpoint  the route path exactly as `matrix.sh` recorded it in the run rows
+#   summary   one clause, lowercase, no trailing period: it is interpolated into
+#             the sentence "All servers served the same routes: <endpoint>
+#             (<summary>)." so it has to read as a parenthesis.
+endpoint	summary
+/echo	a constant handler through the full HTTP path
+/	the landing page, rendered by a template with no database access
+/items-fast	the ORM page with the identity map removed: one SQLite query, rendered by a template
+/items	the ORM page: one SQLite query through the ORM's identity map, rendered by a template
+/api/items	the ORM page serialized straight to JSON, with no template

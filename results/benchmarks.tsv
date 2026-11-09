@@ -12,7 +12,7 @@
 #
 #   destination  which published output this row configures. One of:
 #                  docs       the volucer documentation page (12-BENCHMARKS.md)
-#                  homepage   the two-or-more charts the Sailantis landing page embeds
+#                  homepage   the charts the Sailantis landing page embeds
 #   run          the directory under results/ holding matrix.tsv and memory.tsv
 #   endpoints    the pages the destination draws, comma separated, in reading
 #                order. Use `*` for "whatever the run measured". A destination
@@ -23,6 +23,8 @@
 #                column, so a JIT-on and a JIT-off pass cannot be mixed.
 #   required     whether a missing run is an error (`yes`) or a skip (`no`).
 #   note         why this run, for the next person who is tempted to re-point it
+#
+# What each endpoint *measures* is `results/endpoints.tsv`, not a comment here.
 destination	run	endpoints	mode	required	note
 docs	run85-scale-items-2	/items	on	yes	Single-endpoint pass, so the pooled medians describe one page. Second pass of the scale grid: the first carried a volucer-worker decline that did not reproduce.
-homepage	matrix-jit-5r	/items-fast,/echo	on	yes	The current grid on the configuration that is actually deployed. Reports /items-fast (the ORM page without the identity map) and /echo (a constant handler), so the front-end and framework costs are separable.
+homepage	matrix-jit-5r	/echo	on	yes	The current grid on the configuration that is actually deployed. Draws /echo: the whole HTTP path with a constant handler, which is the like-for-like number a reader comparing servers expects.
