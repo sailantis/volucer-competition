@@ -16,13 +16,6 @@
   },
   "repositories": [
     {
-      "type": "path",
-      "url": "../azera-framework",
-      "options": {
-        "symlink": false
-      }
-    },
-    {
       "type": "vcs",
       "url": "https://github.com/sailantis/azera-framework.git",
       "no-api": true
