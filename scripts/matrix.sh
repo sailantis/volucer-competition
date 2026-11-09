@@ -1529,6 +1529,26 @@ run_cell() { # arm workers mode conc round [threads] [children] [path]
         sleep 3
     done
 
+    # The loop above retries a zero, but exhausting the retries used to fall
+    # through to the row writer with `Requests/sec: 0.00` still in `$rps` -- so an
+    # all-retries-failed cell was recorded as a *measurement of zero* rather than
+    # as a failure. Measured in the 8/16/32 run: two such rows
+    # (`/echo frankenphp w=16 c=64 r=1`, `/items frankenphp w=32 c=32 r=3`) reached
+    # matrix.tsv with `0.00` and `0.00us` latencies, and the report's
+    # `rps != "FAIL"` filter let them into the median.
+    #
+    # A third of a three-round cell at 0 pulls the median down wherever it lands,
+    # and it is not a number any server produced. It has to become a FAIL row, so
+    # that the report names the cell as failed instead of averaging a stall into it.
+    if [ -n "$served" ] && [ "$served" = "0" ]; then
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\tFAIL\t?\t?\t%s\t%s\t%s\n' \
+            "$path" "$arm" "$n" "$mode" "$conc" "$round" "$threads" "$errs" "$children" \
+            "$(proc_kind "$arm")" >> "$RESULTS"
+        printf '    %-12s %-15s w=%-2s %-3s ch=%-2s t=%-3s c=%-3s r=%s  FAILED (0 requests after 3 attempts)\n' \
+            "$path" "$arm" "$n" "$mode" "${children:--}" "$threads" "$conc" "$round"
+        return 1
+    fi
+
     p50="$(awk '/^[[:space:]]+50%/{print $2; exit}' "$out")"
     p99="$(awk '/^[[:space:]]+99%/{print $2; exit}' "$out")"
     # A bounded pool converts a latency tail into a throughput number by shedding,
