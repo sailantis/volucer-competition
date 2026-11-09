@@ -206,36 +206,26 @@ class Bootstrap
         self::mark('View engine');
 
         // --- Routes ---
-        // `BENCH_ROUTE_CACHE` restores a table compiled by `azera routes:cache`
-        // instead of building one, which is the framework feature this benchmark was
-        // used to justify. See docs/framework-cost.md.
+        // `BENCH_ROUTE_CACHE=<path>` turns on the framework route cache and says where
+        // the compiled table lives; `BENCH_ROUTE_CACHE=off` (or leaving it unset) keeps
+        // it off, which is the cold arm this benchmark measures against.
         //
-        // The shape is the documented contract: restoreIfCached() returns true when it
-        // restored, and the app returns early so the registrations below never run.
-        // Registering *and* restoring would pay both costs -- measured at 636 us
-        // against 110 for a build and 17 for a restore.
+        // The cache is now self-sufficient: the router writes the table itself on the
+        // first read after the sources change, so no separate `routes:cache` call is
+        // needed. `BENCH_ROUTE_WARM=1` additionally forces a compile up front, which is
+        // what a deploy hook would do.
         //
-        // `BENCH_ROUTE_RECORD=1` turns on source recording for the deploy step, which
-        // is the only time it is needed.
-        $router = $ctx->router();
-
-        if (getenv('BENCH_ROUTE_RECORD') === '1') {
-            $router->recordSources(true);
-        }
-
+        // Every registration below lives inside a cached() block, so the table is
+        // entirely attributable to a file. A route registered outside one is refused by
+        // the router, because a cache hit would change the winner wherever two routes
+        // tie on specificity -- see RouterStateTest.
+        $router     = $ctx->router();
         $routeCache = getenv('BENCH_ROUTE_CACHE');
-        if ($routeCache !== false && $routeCache !== ''
-            && $router->restoreIfCached($routeCache)
-        ) {
-            self::mark('Route cache');
 
-            return $ctx;
+        if ($routeCache !== false && $routeCache !== '' && $routeCache !== 'off') {
+            $router->enableCache($routeCache);
         }
 
-        // Every registration below lives inside one cached() block so the table is
-        // entirely attributable to this file. Mixing cached and uncached routes is
-        // refused by the router, because a cache hit would change the winner wherever
-        // two routes tie on specificity -- see RouterStateTest.
         $router->cached(__FILE__, function (\Azera\Core\Router $router): void {
             // Benchmark endpoints (the ones we actually time).
             // Use the controller() group with a callback so the group stack
@@ -329,8 +319,9 @@ class Bootstrap
         // --- Feature Demo Routes ---
         // Endpoints that exercise the new enterprise features (AOP,
         // events, cache, logging, security).  These don't interfere
-        // with benchmark routes. Inside the same cached() block as the benchmark
-        // routes, for the same all-or-nothing reason.
+        // with benchmark routes. They are a second cached() unit, both because a
+        // unit is the natural granularity for a source file and because a table must
+        // be entirely attributable to cached() blocks -- see RouterStateTest.
         $router->cached(__FILE__, function (\Azera\Core\Router $router): void {
             $dispatcher = AppContext::instance()->dispatcher();
             $dispatcher->defineMiddlewareGroup('session', [
@@ -378,6 +369,14 @@ class Bootstrap
         // php-fpm the static is reset before this line could ever be read.
         self::$wired[$dbPath] = $ctx;
         self::mark('Feature routes');
+
+        // A deploy-hook equivalent: compile the table now instead of leaving it for the
+        // first request. Only meaningful with the cache enabled, and only here, after
+        // every cached() unit has been declared.
+        if ($router->cachePath() !== null && getenv('BENCH_ROUTE_WARM') === '1') {
+            $router->compileCache();
+            self::mark('Route cache warm');
+        }
 
         return $ctx;
     }

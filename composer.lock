@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "4d9d62054165b9781921b5a7bd433624",
+    "content-hash": "a7cae90d42345db002ded224b4012919",
     "packages": [
         {
             "name": "google/protobuf",
@@ -605,16 +605,16 @@
         },
         {
             "name": "sailantis/azera-framework",
-            "version": "v0.3.1",
+            "version": "dev-main",
             "source": {
                 "type": "git",
                 "url": "https://github.com/sailantis/azera-framework.git",
-                "reference": "4689d107352b71bcecde91fa303a57f0d0ac007a"
+                "reference": "7735338db4e543f8bdb6dff2f3bfcc6437e2d9ba"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/sailantis/azera-framework/zipball/4689d107352b71bcecde91fa303a57f0d0ac007a",
-                "reference": "4689d107352b71bcecde91fa303a57f0d0ac007a",
+                "url": "https://api.github.com/repos/sailantis/azera-framework/zipball/7735338db4e543f8bdb6dff2f3bfcc6437e2d9ba",
+                "reference": "7735338db4e543f8bdb6dff2f3bfcc6437e2d9ba",
                 "shasum": ""
             },
             "require": {
@@ -640,6 +640,7 @@
                 "ext-mongodb": "PHP driver for MongoDB document persistence (Azera\\Orm\\Storage\\MongoStore)",
                 "mongodb/mongodb": "Required for MongoDB document persistence (Azera\\Orm\\Storage\\MongoStore) — install together with the ext-mongodb PHP extension. Optional: only tests/MongoLiveTest.php needs the real package; all other Mongo tests run against an in-memory fake"
             },
+            "default-branch": true,
             "bin": [
                 "bin/azera"
             ],
@@ -686,7 +687,7 @@
                 "issues": "https://github.com/sailantis/azera-framework/issues",
                 "source": "https://github.com/sailantis/azera-framework"
             },
-            "time": "2026-11-08T15:20:38+00:00"
+            "time": "2026-11-09T01:59:35+00:00"
         },
         {
             "name": "sailantis/clarity-engine",
@@ -1130,7 +1131,9 @@
     "packages-dev": [],
     "aliases": [],
     "minimum-stability": "dev",
-    "stability-flags": {},
+    "stability-flags": {
+        "sailantis/azera-framework": 20
+    },
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {

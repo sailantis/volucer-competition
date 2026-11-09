@@ -54,7 +54,4 @@ hdr "9. The connection is the surprise: which PRAGMA costs 60 us"
 "$PHPBIN" scripts/probe-db-connect.php
 "$PHPBIN" scripts/probe-db-first-statement.php
 
-hdr "10. Would a compiled route table help? (no -- measured)"
-"$PHPBIN" scripts/probe-route-cache.php
-
 printf '\n\nDone. Raw artifacts: /tmp/{boot-profile,phases,static-probe}\n'

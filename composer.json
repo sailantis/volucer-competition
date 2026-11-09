@@ -7,7 +7,7 @@
     "php": ">=8.2",
     "ext-mbstring": "*",
     "ext-pdo": "*",
-    "sailantis/azera-framework": "v0.3.1",
+    "sailantis/azera-framework": "dev-main",
     "sailantis/clarity-engine": "v0.4.1",
     "sailantis/volucer-worker": "v0.4.1",
     "spiral/roadrunner-worker": "^3.5",

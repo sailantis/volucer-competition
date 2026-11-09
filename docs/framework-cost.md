@@ -191,7 +191,13 @@ would rather 500.
 
 ### The design, then, is fifteen lines of filtering
 
-`scripts/route-cache.php` is the whole thing:
+**Superseded.** The prototype this section describes (`scripts/route-cache.php`) has
+been replaced by the framework feature in `Azera\Core\Router`: `enableCache($path)` plus
+`cached($files, $closure)`. The script is gone; the framework does the same job with
+sources *declared* rather than inferred, writes on a miss, and needs no deploy step.
+
+The design that survived is the same in spirit, and the three rules below are why the
+prototype was worth writing:
 
 - persist every instance property **except** `types` (code) and `resolvedOverrides`
   (a per-handler memo worth 0.41 µs once, so persisting it buys nothing and risks a
@@ -202,13 +208,41 @@ would rather 500.
 - emit the route count, the PHP version, and the custom-type list in a header so a
   stale file is diagnosable from its first six lines;
 - write atomically (`rename`), because a half-written route file picked up mid-deploy
-  is a fatal error;
-- ship `--verify`, which rebuilds the table and compares it to the file property by
-  property, so CI can fail on a stale cache rather than serve one.
+  is a fatal error.
+
+`--verify` is gone on purpose. With write-on-miss a stale table rebuilds itself on the
+next read, so comparing against a rebuilt one has no failure left to report; the check
+worth keeping is `azera routes:status --strict`.
 
 The one thing it deliberately does *not* do is guess. If a future Azera release adds
 a property holding an object, the write fails and names it. That is the intended
 behaviour.
+
+### What the framework version actually costs
+
+Measured on the VM (PHP 8.5, shared OPcache) with the real 119-route benchmark table,
+in-process, after the classes are warm:
+
+| | |
+|---|---|
+| `require` + `restoreState()`, 500 runs | 0.4 µs median |
+| build 9 benchmark routes from their units, 300 runs | 14.2 µs median (1.58 µs per route) |
+
+So the cache is not a constant win, it is a win proportional to the table. A worker
+whose process already holds the table pays nothing either way; the saving lands on the
+cold path, which is the one this benchmark exists to measure.
+
+The first `require` in a process that has not compiled the file costs a full compile:
+0.44 ms for 120 routes, 1.6 ms at 500, 7.2 ms at 2000. Under php-fpm that is once per
+worker unless the table is already in the FPM master's shared OPcache — a restart or an
+`opcache_reset()` makes every worker pay it once. That is why a deploy should run
+`routes:cache` first, and why the benchmark harness should warm the table before a run
+rather than let the first measured request pay the compile.
+
+One environment trap worth recording: Windows and some CLI builds have no shared
+OPcache, so a `require` there recompiles every time (1.7 ms for 86 KB) and the cache looks
+*slower* than the build. Always check `opcache_is_script_cached()` before believing a
+local timing.
 
 ## Finding 2 — `Bootstrap::$wired` is dead code on every SAPI that reuses a process
 
@@ -410,8 +444,6 @@ only one that is free to fix.
 | `probe-route-cost.php` | per-route registration cost, deferred sort, match scaling |
 | `probe-route-encodings.php` | **the fix**: encoded table vs rebuild, two processes |
 | `probe-route-serialisation.php` | what in router state blocks a cache (only `types`) |
-| `route-cache.php` | the deploy step: `--write` / `--verify` |
-| `probe-route-cache.php` | superseded — measured compilation, not loading |
 | `probe-boot-profile.sh` | framework cost on the wire, as CPU per request |
 | `probe-phases.sh` | per-phase attribution inside a real fpm child |
 | `probe-static.sh` | does a class static survive between requests? (no) |
