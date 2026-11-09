@@ -18,15 +18,11 @@ data/
 
 # Harness output. A published run's raw per-repeat data is a deliverable and is
 # committed (`results/raw.tsv`); everything else a run produces is per-host and
-# per-run scratch.
-#
-# The crossover and latency passes are also named deliverables: they are the two
-# passes that answer questions the sweep cannot, so their raw rows are kept alongside
-# the sweep's rather than treated as scratch.
+# per-run scratch. The crossover and latency passes are scratch for that reason:
+# they answer "what does one request cost", the answer is quoted in the prose, and
+# the pass is cheap enough to re-run on any host it would be compared against.
 results/*.tsv
 !results/raw.tsv
-!results/crossover.tsv
-!results/latency.tsv
 # A superseded sweep is kept, not deleted: the report quotes ratios that only a
 # later build can be compared against, and a comparison needs both sides.
 !results/raw-*.tsv
@@ -38,24 +34,12 @@ results/*.tsv
 # generated from these exact rows. `matrix85-opcache` is the 8.5 pass that measured
 # opcache on and off and the wrk thread count as a variable; `matrix85` is the
 # later pass on the same interpreter that adds the unix-socket and prefork arms on
-# the `/items` endpoint; `matrix85-root` is the same grid on the landing page;
-# `matrix85-volucer-modes` is one server in five shapes; `matrix85-prefork` is the
-# cold path against php-fpm at an equal number of serving processes. A published
-# chart that cannot be traced to the rows behind it is a chart nobody can check.
+# the `/items` endpoint; `matrix85-volucer-modes` is one server in five shapes.
+# A published chart that cannot be traced to the rows behind it is a chart nobody
+# can check.
 !results/matrix85/
 !results/matrix85-opcache/
-!results/matrix85-root/
 !results/matrix85-volucer-modes/
-!results/matrix85-prefork/
-# The multi-endpoint pass: five endpoints in one run on the released packages
-# (clarity v0.4.1, azera-framework v0.3.1), at c=96 only, with
-# `setRevalidateFreq(60)` enabled the way a deployment would. It is the first
-# run that measures `/echo`, `/`, `/api/items`, `/items` and `/items-fast`
-# inside one interleaved grid, so the page-to-page ratios are host drift-free;
-# earlier runs measured one endpoint at a time and cannot be compared to it
-# directly. A published chart that cannot be traced to the rows behind it is a
-# chart nobody can check.
-!results/matrix-0.4.1-reval60/
 # The scale grid: the same eight arms at 16, 32 and 64 serving PHP processes, at
 # c=8, 16, 32 and 64. `run85-scale-items` is the ORM page and `run85-scale-root`
 # is the landing page - one run each, because the harness measures one endpoint
@@ -63,6 +47,7 @@ results/*.tsv
 # published pages are generated from these exact rows, and a chart that cannot
 # be traced to the rows behind it is a chart nobody can check.
 !results/run85-scale-items/
+!results/run85-scale-items-2/
 !results/run85-scale-root/
 # The generated report tree is a build output, not a deliverable: it is
 # reproduced by `scripts/bench-report.py` from the rows above, and the pages it

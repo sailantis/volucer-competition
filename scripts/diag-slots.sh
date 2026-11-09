@@ -17,8 +17,8 @@
 #      be scheduled on cores the server is already using. That is a measurement
 #      artifact that would chase a phantom fix in the wrong process.
 #
-# `diag-cell.sh` cannot separate them: it attributes CPU per process, and both
-# candidates cost CPU on the same box. This separates them by holding concurrency
+# Attributing CPU per process cannot separate them: both candidates cost CPU on the
+# same box. This separates them by holding concurrency
 # fixed and varying *only* the thread count, which changes nothing on the server side
 # at all. The server sees c=32 connections either way.
 #

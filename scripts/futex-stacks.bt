@@ -1,6 +1,0 @@
-// futex op breakdown on the runtime threads: op 0 = WAIT (park), op 1 = WAKE.
-tracepoint:syscalls:sys_enter_futex
-/comm == "tokio-rt-worker"/
-{
-    @op[args->op] = count();
-}

@@ -197,8 +197,6 @@ def median_or_none(values: list[float]) -> float | None:
 MATRIX_DIRS = {
     "servers": "run85-scale-items-2",
     "servers_root": "run85-scale-root",
-    "modes": "matrix85-volucer-modes",
-    "prefork": "matrix85-prefork",
 }
 
 # The arms of the server comparison, in the order a page reads them.

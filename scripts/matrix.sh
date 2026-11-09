@@ -1100,8 +1100,8 @@ daemon off;
 # The front end's own parallelism, and it is NOT a detail when this arm is
 # compared with a volucer one. nginx serving FastCGI is an event loop per worker;
 # volucer is one thread group. Leaving nginx at 4 while volucer runs 12 compares
-# 4 event loops against 12 and calls the result "nginx vs volucer", which is what
-# probe-nginx-vs-volucer.sh's own NGINX_WORKERS knob exists to prevent.
+# 4 event loops against 12 and calls the result "nginx vs volucer", which is the
+# mistake this knob exists to prevent.
 #
 # Default kept at 4 because that is what every published table was measured with,
 # and changing it silently would make those incomparable. Override it to match the
