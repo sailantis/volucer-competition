@@ -609,12 +609,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/sailantis/azera-framework.git",
-                "reference": "6bf1c6d2506749d906dc0dbeb8fafedf0066788d"
+                "reference": "9ac91e9773046e20b2e926641d4d7ff01a5d1563"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/sailantis/azera-framework/zipball/6bf1c6d2506749d906dc0dbeb8fafedf0066788d",
-                "reference": "6bf1c6d2506749d906dc0dbeb8fafedf0066788d",
+                "url": "https://api.github.com/repos/sailantis/azera-framework/zipball/9ac91e9773046e20b2e926641d4d7ff01a5d1563",
+                "reference": "9ac91e9773046e20b2e926641d4d7ff01a5d1563",
                 "shasum": ""
             },
             "require": {
@@ -687,7 +687,7 @@
                 "issues": "https://github.com/sailantis/azera-framework/issues",
                 "source": "https://github.com/sailantis/azera-framework"
             },
-            "time": "2026-11-09T01:59:35+00:00"
+            "time": "2026-11-09T02:09:58+00:00"
         },
         {
             "name": "sailantis/clarity-engine",
